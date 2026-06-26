@@ -1,0 +1,8 @@
+{% if package_repos -%}
+repos:
+{% for repo in package_repos -%}
+  - {{ path_join('..', '..', 'package-repos', repo.name) }}
+{% endfor -%}
+{%- else -%}
+repos: []
+{% endif -%}

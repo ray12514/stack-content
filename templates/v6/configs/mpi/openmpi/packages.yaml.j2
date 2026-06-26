@@ -1,0 +1,24 @@
+# Rendered for {{ profile.system.name }} / site OpenMPI externals
+packages:
+  all:
+    providers:
+      mpi:
+        - openmpi
+  openmpi:
+    buildable: false
+    externals:
+{% for mpi in profile.mpi or [] %}
+{% if mpi.name == "openmpi" %}
+      - spec: "openmpi@{{ mpi.version }}{% if mpi.compiler %} %{{ mpi.compiler }}{% endif %}"
+        prefix: {{ mpi.prefix }}
+{% set modules = mpi.get("modules") or [] %}
+{% if modules %}
+        modules:
+{% for module in modules %}
+          - {{ module }}
+{% endfor %}
+{% else %}
+        modules: []
+{% endif %}
+{% endif %}
+{% endfor %}

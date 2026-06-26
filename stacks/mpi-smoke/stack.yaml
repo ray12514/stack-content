@@ -1,0 +1,20 @@
+schema_version: 1
+name: mpi-smoke
+profile_contract: { schema_version: 1 }
+templates: { set: v6 }
+spack: { version: ">=1.1.1,<1.2" }
+builds:
+  - name: mpi
+    kind: mpi
+    specs: [osu-micro-benchmarks]
+externals:
+  compilers: prefer_platform
+  mpi: build_all
+  openssl: system
+  curl: system
+foundation_pins: { zlib: "1.3.1", xz: "5.4.6", zstd: "1.5.6" }
+buildcache:
+  spack_generation: "spack-{spack_version}/repo-{package_repo_generation}"
+  foundation_lane: "foundation/{os_id}/glibc-{glibc}/{spack_generation}/{baseline_target}"
+  payload_lane: "payload/{os_id}/glibc-{glibc}/{spack_generation}/{system}"
+release: { save_lockfiles: true, save_manifest: true }

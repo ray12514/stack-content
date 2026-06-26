@@ -1,0 +1,24 @@
+{% set mpich = (profile.vendor_cray or {}).get("cray_mpich") or {} %}
+# Rendered for {{ profile.system.name }} / Cray MPICH externals
+packages:
+  mpi:
+    buildable: false
+    require:
+      - cray-mpich
+  cray-mpich:
+    buildable: false
+    variants: +wrappers
+    externals:
+{% for compiler, flavor in (mpich.get("flavors") or {}) | dictsort %}
+      - spec: "cray-mpich@{{ mpich.version }} %{{ compiler }}"
+        prefix: {{ flavor.prefix }}
+{% set modules = flavor.get("modules") or [] %}
+{% if modules %}
+        modules:
+{% for module in modules %}
+          - {{ module }}
+{% endfor %}
+{% else %}
+        modules: []
+{% endif %}
+{% endfor %}

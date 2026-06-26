@@ -1,0 +1,67 @@
+schema_version: 1
+system:
+  name: smoke
+  family: linux-rhel9
+  description: Rocky Linux 9.3 (Blue Onyx)
+os:
+  name: rocky
+  major: 9
+  minor: 3
+  glibc: "2.34"
+fabric:
+  type: ethernet
+  drivers: []
+modules_system:
+  tool: lmod
+  version: 8.7.65
+vendor_cray: null
+compilers_external:
+  - name: gcc
+    version: 11.5.0
+    prefix: /usr
+    languages:
+      - c
+      - c++
+      - fortran
+filesystem:
+  install_tree_candidates:
+    - path: /shared/stack/spack/opt
+      type: fakeowner
+      locks_honored: true
+      free_gb: 13
+    - path: /opt/spack/opt
+      type: overlay
+      locks_honored: false
+      free_gb: 28
+  source_cache_candidate: /shared/stack/spack/source-cache
+  buildcache_candidate: /shared/stack/buildcache
+node_types:
+  compute:
+    role: both
+    cpu:
+      detected: x86_64_v4
+      preferred: x86_64_v4
+      alternates:
+        - x86_64_v3
+        - x86_64_v2
+        - x86_64
+    gpu: null
+    build_stage:
+      - path: /tmp
+        visibility: node-local
+        writable: true
+        free_gb: 28
+        free_inodes: 6586023
+        mount_opts:
+          - relatime
+          - rw
+        throughput_class: unknown
+      - path: /var/tmp
+        visibility: node-local
+        writable: true
+        free_gb: 28
+        free_inodes: 6586021
+        mount_opts:
+          - relatime
+          - rw
+        throughput_class: unknown
