@@ -1,0 +1,16 @@
+{% set rocm = (profile.gpu_toolkit_modules or {}).get("rocm") or {} %}
+# Rendered for {{ profile.system.name }} / AMD ROCm externals
+packages:
+{% for component in rocm.get("spack_components") or [] %}
+  {{ component.package }}:
+    buildable: false
+    externals:
+      - spec: "{{ component.package }}@{{ rocm.version }}"
+        prefix: {{ component.prefix }}
+{% if rocm.module %}
+        modules:
+          - {{ rocm.module }}
+{% else %}
+        modules: []
+{% endif %}
+{% endfor %}

@@ -1,0 +1,29 @@
+# systems/smoke/deployment.yaml — installer-owned; never auto-derived.
+# Chosen roots for the smoke container; see stack-planning
+# docs/deployment_inputs_and_ownership_v1.md for the field contract.
+schema_version: 1
+system: smoke                          # must match profile.system.name
+
+install_tree:
+  root: /shared/stack/spack/opt        # chosen from profile.filesystem.install_tree_candidates
+
+build_stage:
+  default: /tmp/spack-stage
+
+caches:
+  source: /shared/stack/spack/source-cache
+  misc: /shared/stack/cache/misc
+
+roots:
+  views: /shared/stack/views
+  modules: /shared/modules
+
+modules:
+  publish_root: null                   # smoke uses `module use` directly; no separate MODULEPATH publish
+
+buildcache:
+  destinations:
+    - { name: payload, url: "file:///shared/stack/buildcache/payload" }
+
+spack:
+  root: /home/spack/spack              # where the `spack` tool lives in the smoke image

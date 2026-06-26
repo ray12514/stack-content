@@ -1,0 +1,34 @@
+{% set compiler_commands = {
+  "aocc": {"c": "clang", "cxx": "clang++", "fortran": "flang"},
+  "gcc": {"c": "gcc", "cxx": "g++", "fortran": "gfortran"},
+  "intel": {"c": "icx", "cxx": "icpx", "fortran": "ifx"},
+  "llvm": {"c": "clang", "cxx": "clang++", "fortran": "flang"},
+  "nvhpc": {"c": "nvc", "cxx": "nvc++", "fortran": "nvfortran"},
+  "rocmcc": {"c": "amdclang", "cxx": "amdclang++", "fortran": "amdflang"},
+} %}
+# Rendered for {{ profile.system.name }} / generic Linux compiler externals
+packages:
+{% for compiler in profile.compilers_external or [] %}
+  {{ compiler.name }}:
+    buildable: false
+    externals:
+      - spec: "{{ compiler.name }}@{{ compiler.version }} languages='{{ (compiler.languages or []) | join(',') }}'"
+        prefix: {{ compiler.prefix }}
+{% set modules = compiler.get("modules") or [] %}
+{% if modules %}
+        modules:
+{% for module in modules %}
+          - {{ module }}
+{% endfor %}
+{% else %}
+        modules: []
+{% endif %}
+{% set commands = compiler_commands.get(compiler.name) %}
+{% if commands %}
+        extra_attributes:
+          compilers:
+            c: {{ path_join(compiler.prefix, "bin", commands.c) }}
+            cxx: {{ path_join(compiler.prefix, "bin", commands.cxx) }}
+            fortran: {{ path_join(compiler.prefix, "bin", commands.fortran) }}
+{% endif %}
+{% endfor %}

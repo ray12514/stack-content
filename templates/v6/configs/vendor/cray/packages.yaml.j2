@@ -1,0 +1,38 @@
+{% set compiler_commands = {
+  "aocc": {"c": "clang", "cxx": "clang++", "fortran": "flang"},
+  "cce": {"c": "craycc", "cxx": "craycxx", "fortran": "crayftn"},
+  "gcc": {"c": "gcc", "cxx": "g++", "fortran": "gfortran"},
+  "intel": {"c": "icx", "cxx": "icpx", "fortran": "ifx"},
+  "nvhpc": {"c": "nvc", "cxx": "nvc++", "fortran": "nvfortran"},
+  "rocmcc": {"c": "amdclang", "cxx": "amdclang++", "fortran": "amdflang"},
+} %}
+{% set vendor = profile.vendor_cray or {} %}
+# Rendered for {{ profile.system.name }} / Cray PE compiler externals
+packages:
+{% for name in ["cce", "gcc", "aocc", "intel", "rocmcc", "nvhpc"] %}
+{% set compiler = vendor.get(name) %}
+{% if compiler %}
+  {{ name }}:
+    buildable: false
+    externals:
+      - spec: "{{ name }}@{{ compiler.version }} languages='c,c++,fortran'"
+        prefix: {{ compiler.prefix }}
+{% set modules = compiler.get("modules") or [] %}
+{% if modules %}
+        modules:
+{% for module in modules %}
+          - {{ module }}
+{% endfor %}
+{% else %}
+        modules: []
+{% endif %}
+{% set commands = compiler_commands.get(name) %}
+{% if commands %}
+        extra_attributes:
+          compilers:
+            c: {{ path_join(compiler.prefix, "bin", commands.c) }}
+            cxx: {{ path_join(compiler.prefix, "bin", commands.cxx) }}
+            fortran: {{ path_join(compiler.prefix, "bin", commands.fortran) }}
+{% endif %}
+{% endif %}
+{% endfor %}

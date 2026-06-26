@@ -1,0 +1,14 @@
+{% set cuda = (profile.gpu_toolkit_modules or {}).get("cudatoolkit") or {} %}
+# Rendered for {{ profile.system.name }} / NVIDIA CUDA externals
+packages:
+  cuda:
+    buildable: false
+    externals:
+      - spec: "cuda@{{ cuda.version }}"
+        prefix: {{ cuda.prefix }}
+{% if cuda.module %}
+        modules:
+          - {{ cuda.module }}
+{% else %}
+        modules: []
+{% endif %}
