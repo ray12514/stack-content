@@ -13,10 +13,9 @@ text{font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif}
 <rect class="teal" x="40" y="70" width="185" height="156" rx="4"/>
 <text class="t" x="50" y="94">templates/&lt;set&gt;/</text>
 <text class="ts" x="50" y="111">rendering policy</text>
-<text class="ts" x="50" y="136">• contract.yaml</text>
-<text class="ts" x="50" y="156">• stack-defaults.yaml</text>
-<text class="ts" x="50" y="176">• configs/**.j2</text>
-<text class="ts" x="50" y="196">• environments/**.j2</text>
+<text class="ts" x="50" y="136">• defaults.yaml</text>
+<text class="ts" x="50" y="156">• configs/**.j2</text>
+<text class="ts" x="50" y="176">• environments/**.j2</text>
 <rect class="teal" x="247" y="70" width="185" height="156" rx="4"/>
 <text class="t" x="257" y="94">systems/&lt;sys&gt;/</text>
 <text class="ts" x="257" y="111">per machine</text>

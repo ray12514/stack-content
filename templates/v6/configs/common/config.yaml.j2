@@ -1,0 +1,10 @@
+config:
+  install_tree:
+    root: {{ deployment.install_tree.root }}
+{% if deployment.install_tree.get("padded_length") is not none %}
+    padded_length: {{ deployment.install_tree.padded_length }}
+{% endif %}
+  build_stage:
+    - {{ deployment.build_stage.default }}
+  source_cache: {{ deployment.caches.source }}
+  misc_cache: {{ deployment.caches.misc }}

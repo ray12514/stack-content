@@ -1,7 +1,6 @@
 # Site defaults for the v6 template set — one file, merged into every stack.
-# Replaces the old contract.yaml + stack-defaults.yaml. Selection fields
-# (compilers/mpi/gpu/target) are policy that resolves against any profile; a
-# stack build may override any of them.
+# Selection fields (compilers/mpi/gpu/target) are policy that resolves against
+# any profile; a stack build may override any of them.
 schema_version: 1
 
 profile_contract:
