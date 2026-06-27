@@ -9,6 +9,11 @@ It is synced onto each target's shared filesystem (or read GitLab-direct) where
 `stack-composer render` and the chosen build path run. There may be more than one
 stack-content repo (per team or per stack family); the pattern is the same.
 
+![What the stack-content repo holds](docs/stack_content_contents.svg)
+
+For how these inputs become per-stack workspaces and one shared install tree, see
+the lifecycle note in stack-planning: `docs/stack_workspace_lifecycle_v1.md`.
+
 ## Layout
 
 ```text

@@ -1,31 +1,37 @@
-# Canonical stack-defaults.yaml for the v6 template set.
-# Derived from docs/spack_stack_generation_design_v6.md § Stack Defaults Merge Rules.
-
+# Site defaults for the v6 template set — one file, merged into every stack.
+# Replaces the old contract.yaml + stack-defaults.yaml. Selection fields
+# (compilers/mpi/gpu/target) are policy that resolves against any profile; a
+# stack build may override any of them.
 schema_version: 1
 
 profile_contract:
   schema_version: 1
 
+# --- selection policy (what to build, from what the profile reports) ---
+compilers: all
+mpi:
+  provider: openmpi
+  source: auto        # use the platform MPI if the profile reports one, else build openmpi
+gpu:
+  archs: all
+target: native
+
+# --- site conventions (rarely touched) ---
 spack:
   floor: "1.1.1"
 
+externals:
+  openssl: system
+  curl: system
+
 modules:
   format: tcl
-  additional_formats: []
   exposure: front_door
   init_module: science-stack-init
   module_root: ScienceStack
   hierarchy_style: collapsed
   expose_provenance: true
   platform_module_policy: prereq
-
-externals:
-  compilers: prefer_platform
-  mpi: prefer_platform
-  openssl: system
-  curl: system
-  fabric_userspace: prefer_platform
-  gpu_toolkit: prefer_platform
 
 foundation_pins:
   zlib: "1.3.1"
@@ -34,16 +40,11 @@ foundation_pins:
 
 buildcache:
   spack_generation: "spack-{spack_version}/repo-{package_repo_generation}"
-  foundation_lane: "foundation/{os_id}/glibc-{glibc}/{spack_generation}/{baseline_target}"
   payload_lane: "payload/{os_id}/glibc-{glibc}/{spack_generation}/{system}"
-  signed: false
-  push_after_every_step: true
 
 release:
   save_lockfiles: true
   save_manifest: true
-  retain_previous: 2
-  promotion: gated_manual
 
 helpers:
   inspector: available

@@ -1,0 +1,35 @@
+<svg viewBox="0 0 680 290" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>What the stack-content repo holds, grouped by role</title>
+<desc>stack-content holds three groups: templates (the rendering policy and shared layout), per-system files (profile, deployment, and release manifests plus lockfiles), and a reusable catalog (stacks, package-sets, package-repos). The rendered workspace and install tree are generated on the target and not stored here.</desc>
+<style>
+text{font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif}
+.t{font-size:14px;font-weight:500;fill:#16223a}
+.ts{font-size:12px;font-weight:400;fill:#46506a}
+.th{font-size:14px;font-weight:500;fill:#16223a}
+.teal{fill:#e1f5ee;stroke:#1d9e75}
+</style>
+<text class="th" x="40" y="34">stack-content/ — the definition center</text>
+<text class="ts" x="40" y="52">human-authored source of truth · data, not a tool</text>
+<rect class="teal" x="40" y="70" width="185" height="156" rx="4"/>
+<text class="t" x="50" y="94">templates/&lt;set&gt;/</text>
+<text class="ts" x="50" y="111">rendering policy</text>
+<text class="ts" x="50" y="136">• contract.yaml</text>
+<text class="ts" x="50" y="156">• stack-defaults.yaml</text>
+<text class="ts" x="50" y="176">• configs/**.j2</text>
+<text class="ts" x="50" y="196">• environments/**.j2</text>
+<rect class="teal" x="247" y="70" width="185" height="156" rx="4"/>
+<text class="t" x="257" y="94">systems/&lt;sys&gt;/</text>
+<text class="ts" x="257" y="111">per machine</text>
+<text class="ts" x="257" y="136">• profile.yaml</text>
+<text class="ts" x="257" y="156">• deployment.yaml</text>
+<text class="ts" x="257" y="176">• releases/** —</text>
+<text class="ts" x="257" y="196">   manifest + lock</text>
+<rect class="teal" x="454" y="70" width="185" height="156" rx="4"/>
+<text class="t" x="464" y="94">stacks + sets</text>
+<text class="ts" x="464" y="111">what to build (reusable)</text>
+<text class="ts" x="464" y="136">• stacks/**/stack.yaml</text>
+<text class="ts" x="464" y="156">• package-sets/*.yaml</text>
+<text class="ts" x="464" y="176">• package-repos/**</text>
+<text class="ts" x="40" y="252">templates live here (content) — not in stack-composer (the engine)</text>
+<text class="ts" x="40" y="272">not stored here — generated on the target: the rendered workspace + install tree</text>
+</svg>

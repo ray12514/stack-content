@@ -1,7 +1,10 @@
 # Rendered for {{ profile.system.name }} / {{ stack.name }}
+{% set mpi_providers = rendered_lanes | selectattr('mpi_provider') | map(attribute='mpi_provider') | list %}
 packages:
   all:
+{% if mpi_providers %}
     providers:
-      mpi: [openmpi]
+      mpi: [{{ mpi_providers[0] }}]
+{% endif %}
     prefer:
       - target={{ rendered_lanes[0].target }}
