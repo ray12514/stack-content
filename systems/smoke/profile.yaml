@@ -14,15 +14,16 @@ fabric:
 modules_system:
   tool: lmod
   version: 8.7.65
-vendor_cray: null
-compilers_external:
+compiler_providers:
   - name: gcc
     version: 11.5.0
     prefix: /usr
+    provider_family: system
     languages:
       - c
       - c++
       - fortran
+mpi_providers: []
 filesystem:
   install_tree_candidates:
     - path: /shared/stack/spack/opt

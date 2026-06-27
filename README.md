@@ -18,8 +18,7 @@ the lifecycle note in stack-planning: `docs/stack_workspace_lifecycle_v1.md`.
 
 ```text
 templates/<set>/                 # the reusable placeholder tree (the INPUT)
-  contract.yaml                  #   policy: kind_defaults, scope rules, version floor
-  stack-defaults.yaml            #   defaults merged into every stack
+  defaults.yaml                  #   site policy merged into every stack
   configs/                       #   Spack component yamls as Jinja (.j2): common, os/, target/,
                                  #     vendor/, mpi/<provider>/, gpu/<toolkit>/
   environments/                  #   per-lane spack.yaml.j2 (core, serial, mpi, gpu)

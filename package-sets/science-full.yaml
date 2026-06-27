@@ -1,5 +1,5 @@
 # Canonical example package-set, derived from
-# docs/spack_stack_generation_design_v6.md § Package Sets reference schema (lines ~1547-1592).
+# Package-set example for the current spec-native stack model.
 
 schema_version: 1
 name: science-full
