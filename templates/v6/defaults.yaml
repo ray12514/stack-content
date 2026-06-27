@@ -8,7 +8,7 @@ profile_contract:
   schema_version: 1
 
 # --- selection policy (what to build, from what the profile reports) ---
-compilers: all
+compilers: baseline   # gcc-or-first; set to 'all' (fan out) or a list to widen
 mpi:
   provider: openmpi
   source: auto        # use the platform MPI if the profile reports one, else build openmpi
