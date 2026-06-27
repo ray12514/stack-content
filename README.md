@@ -58,7 +58,11 @@ stack-composer render \
   --templates    templates \
   --package-sets package-sets \
   --package-repos package-repos \
-  --output-root  <render-dir> --release <release>
+  --output-root  <render-dir> \
+  --release      <release> \
+  --rendered-at  <utc-timestamp> \
+  --source-repo  <source-repo-url-or-id> \
+  --source-commit <source-commit>
 ```
 
 ## Status
