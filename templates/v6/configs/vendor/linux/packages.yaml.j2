@@ -1,14 +1,15 @@
 {% set compiler_commands = {
   "aocc": {"c": "clang", "cxx": "clang++", "fortran": "flang"},
+  "cce": {"c": "craycc", "cxx": "craycxx", "fortran": "crayftn"},
   "gcc": {"c": "gcc", "cxx": "g++", "fortran": "gfortran"},
   "intel": {"c": "icx", "cxx": "icpx", "fortran": "ifx"},
   "llvm": {"c": "clang", "cxx": "clang++", "fortran": "flang"},
   "nvhpc": {"c": "nvc", "cxx": "nvc++", "fortran": "nvfortran"},
   "rocmcc": {"c": "amdclang", "cxx": "amdclang++", "fortran": "amdflang"},
 } %}
-# Rendered for {{ profile.system.name }} / generic Linux compiler externals
+# Rendered for {{ profile.system.name }} / compiler externals (from compiler_providers)
 packages:
-{% for compiler in profile.compilers_external or [] %}
+{% for compiler in profile.compiler_providers or [] %}
   {{ compiler.name }}:
     buildable: false
     externals:
@@ -23,8 +24,15 @@ packages:
 {% else %}
         modules: []
 {% endif %}
+{% set explicit = compiler.get("compilers") %}
 {% set commands = compiler_commands.get(compiler.name) %}
-{% if commands %}
+{% if explicit %}
+        extra_attributes:
+          compilers:
+            c: {{ explicit.c }}
+            cxx: {{ explicit.cxx }}
+            fortran: {{ explicit.fortran }}
+{% elif commands %}
         extra_attributes:
           compilers:
             c: {{ path_join(compiler.prefix, "bin", commands.c) }}

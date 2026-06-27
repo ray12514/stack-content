@@ -1,5 +1,6 @@
-{% set mpich = (profile.vendor_cray or {}).get("cray_mpich") or {} %}
-# Rendered for {{ profile.system.name }} / Cray MPICH externals
+{% set matches = (profile.mpi_providers or []) | selectattr("name", "equalto", "cray-mpich") | list %}
+{% set mpich = matches[0] if matches else {} %}
+# Rendered for {{ profile.system.name }} / Cray MPICH externals (from mpi_providers)
 packages:
   mpi:
     buildable: false
