@@ -18,7 +18,7 @@ target: native
 provider_scopes:
   compiler:
     default: vendor/linux
-    families:
+    platform_families:
       cray-pe: vendor/cray
 
 # --- site conventions (rarely touched) ---
