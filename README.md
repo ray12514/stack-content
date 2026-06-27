@@ -29,6 +29,10 @@ systems/<system>/profile.yaml    # observed facts from cluster-inspector (tracke
 systems/<system>/deployment.yaml # installer-chosen roots (install tree, caches, view/module, spack root)
 ```
 
+`deployment.yaml` is required for render. It owns install tree, build-stage,
+cache, view-root, module-root, and buildcache destination choices for that
+system.
+
 ## Two trees — what's authored vs what's generated
 
 - **Authored (here):** `templates/<set>/` is the placeholder tree. It barely
@@ -40,14 +44,16 @@ systems/<system>/deployment.yaml # installer-chosen roots (install tree, caches,
   build path (stack tools / spack-build / Ansible / bare Spack). See
   stack-planning `docs/stack_build_handoff_note_v1.md`.
 
-`stack-composer` fills the placeholders from `profile ∩ contract ∩ stack`. The
-rendered `configs/` therefore differ per system even though the template is shared.
+`stack-composer` fills the placeholders from `profile ∩ deployment ∩ defaults ∩
+stack`. The rendered `configs/` therefore differ per system even though the
+template is shared.
 
 ## How render consumes this repo
 
 ```sh
 stack-composer render \
   --profile      systems/<system>/profile.yaml \
+  --deployment   systems/<system>/deployment.yaml \
   --stack        stacks/<stack>/stack.yaml \
   --templates    templates \
   --package-sets package-sets \
