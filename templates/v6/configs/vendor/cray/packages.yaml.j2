@@ -3,19 +3,17 @@
   "cce": {"c": "craycc", "cxx": "craycxx", "fortran": "crayftn"},
   "gcc": {"c": "gcc", "cxx": "g++", "fortran": "gfortran"},
   "intel": {"c": "icx", "cxx": "icpx", "fortran": "ifx"},
+  "llvm": {"c": "clang", "cxx": "clang++", "fortran": "flang"},
   "nvhpc": {"c": "nvc", "cxx": "nvc++", "fortran": "nvfortran"},
   "rocmcc": {"c": "amdclang", "cxx": "amdclang++", "fortran": "amdflang"},
 } %}
-{% set vendor = profile.vendor_cray or {} %}
-# Rendered for {{ profile.system.name }} / Cray PE compiler externals
+# Rendered for {{ profile.system.name }} / compiler externals (from compiler_providers)
 packages:
-{% for name in ["cce", "gcc", "aocc", "intel", "rocmcc", "nvhpc"] %}
-{% set compiler = vendor.get(name) %}
-{% if compiler %}
-  {{ name }}:
+{% for compiler in profile.compiler_providers or [] %}
+  {{ compiler.name }}:
     buildable: false
     externals:
-      - spec: "{{ name }}@{{ compiler.version }} languages='c,c++,fortran'"
+      - spec: "{{ compiler.name }}@{{ compiler.version }} languages='{{ (compiler.languages or []) | join(',') }}'"
         prefix: {{ compiler.prefix }}
 {% set modules = compiler.get("modules") or [] %}
 {% if modules %}
@@ -26,13 +24,19 @@ packages:
 {% else %}
         modules: []
 {% endif %}
-{% set commands = compiler_commands.get(name) %}
-{% if commands %}
+{% set explicit = compiler.get("compilers") %}
+{% set commands = compiler_commands.get(compiler.name) %}
+{% if explicit %}
+        extra_attributes:
+          compilers:
+            c: {{ explicit.c }}
+            cxx: {{ explicit.cxx }}
+            fortran: {{ explicit.fortran }}
+{% elif commands %}
         extra_attributes:
           compilers:
             c: {{ path_join(compiler.prefix, "bin", commands.c) }}
             cxx: {{ path_join(compiler.prefix, "bin", commands.cxx) }}
             fortran: {{ path_join(compiler.prefix, "bin", commands.fortran) }}
-{% endif %}
 {% endif %}
 {% endfor %}

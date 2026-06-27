@@ -1,4 +1,4 @@
-# Rendered for {{ profile.system.name }} / site OpenMPI externals
+# Rendered for {{ profile.system.name }} / site OpenMPI externals (from mpi_providers)
 packages:
   all:
     providers:
@@ -7,7 +7,7 @@ packages:
   openmpi:
     buildable: false
     externals:
-{% for mpi in profile.mpi or [] %}
+{% for mpi in profile.mpi_providers or [] %}
 {% if mpi.name == "openmpi" %}
       - spec: "openmpi@{{ mpi.version }}{% if mpi.compiler %} %{{ mpi.compiler }}{% endif %}"
         prefix: {{ mpi.prefix }}
