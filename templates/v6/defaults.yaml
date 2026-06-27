@@ -15,6 +15,12 @@ gpu:
   archs: all
 target: native
 
+provider_scopes:
+  compiler:
+    default: vendor/linux
+    families:
+      cray-pe: vendor/cray
+
 # --- site conventions (rarely touched) ---
 spack:
   floor: "1.1.1"
