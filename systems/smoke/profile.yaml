@@ -14,6 +14,22 @@ fabric:
 modules_system:
   tool: lmod
   version: 8.7.65
+system_externals:
+  - name: openssl
+    version: 3.0.7
+    prefix: /usr
+    provider_family: system
+    variants: +shared
+    detection:
+      confidence: probed
+      source: smoke fixture
+  - name: curl
+    version: 8.7.1
+    prefix: /usr
+    provider_family: system
+    detection:
+      confidence: probed
+      source: smoke fixture
 compiler_providers:
   - name: gcc
     version: 11.5.0
