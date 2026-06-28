@@ -37,9 +37,13 @@ memory). Mixed topology: CPU-only partitions **and** APU partitions.
 - **`profile.yaml`** — generate with `cluster-inspector`, then review against what
   you already know is on Blueback from the Kokkos build: gcc, `cray-mpich` +
   GPU-aware flavor, ROCm/gfx942, CPU + APU node types, Slingshot/libfabric.
-- **`deployment.yaml`** — fill from the Kokkos build's **known-good** paths
-  (install tree on the shared FS, build stage, source/misc caches, view root,
-  module root, buildcache dest). No guessing.
+- **`deployment.yaml`** — start from `systems/blueback/deployment.example.yaml`
+  and fill from the Kokkos build's **known-good** paths (install tree on the
+  shared FS, build stage, source/misc caches, view root, module root,
+  buildcache dest). No guessing.
+- **`stack.yaml`** — start from `stacks/blueback-smoke/stack.yaml`; it keeps
+  run #1 narrow: baseline gcc, baseline CPU target, `cray-mpich`, and
+  `kokkos+rocm amdgpu_target=gfx942`.
 - **Spack** — reuse the **site checkout you built Kokkos with** (≥ 1.1.1 floor):
   `spack-build --spack-root <that checkout> --skip-push`. Don't bootstrap.
 

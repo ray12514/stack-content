@@ -1,0 +1,44 @@
+{% macro compiler_packages() -%}
+{% set compiler_commands = {
+  "aocc": {"c": "clang", "cxx": "clang++", "fortran": "flang"},
+  "cce": {"c": "craycc", "cxx": "craycxx", "fortran": "crayftn"},
+  "gcc": {"c": "gcc", "cxx": "g++", "fortran": "gfortran"},
+  "intel": {"c": "icx", "cxx": "icpx", "fortran": "ifx"},
+  "llvm": {"c": "clang", "cxx": "clang++", "fortran": "flang"},
+  "nvhpc": {"c": "nvc", "cxx": "nvc++", "fortran": "nvfortran"},
+  "rocmcc": {"c": "amdclang", "cxx": "amdclang++", "fortran": "amdflang"},
+} %}
+# Rendered for {{ profile.system.name }} / compiler externals (from compiler_providers)
+packages:
+{% for compiler in profile.compiler_providers or [] %}
+  {{ compiler.name }}:
+    buildable: false
+    externals:
+      - spec: "{{ compiler.name }}@{{ compiler.version }} languages='{{ (compiler.languages or []) | join(',') }}'"
+        prefix: {{ compiler.prefix }}
+{% set modules = compiler.get("modules") or [] %}
+{% if modules %}
+        modules:
+{% for module in modules %}
+          - {{ module }}
+{% endfor %}
+{% else %}
+        modules: []
+{% endif %}
+{% set explicit = compiler.get("compilers") %}
+{% set commands = compiler_commands.get(compiler.name) %}
+{% if explicit %}
+        extra_attributes:
+          compilers:
+            c: {{ explicit.c }}
+            cxx: {{ explicit.cxx }}
+            fortran: {{ explicit.fortran }}
+{% elif commands %}
+        extra_attributes:
+          compilers:
+            c: {{ path_join(compiler.prefix, "bin", commands.c) }}
+            cxx: {{ path_join(compiler.prefix, "bin", commands.cxx) }}
+            fortran: {{ path_join(compiler.prefix, "bin", commands.fortran) }}
+{% endif %}
+{% endfor %}
+{%- endmacro %}
