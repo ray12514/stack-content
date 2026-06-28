@@ -58,19 +58,22 @@ memory). Mixed topology: CPU-only partitions **and** APU partitions.
    selector modulefiles. Spack still generates package modulefiles
    (`spack -e <env> module tcl refresh`). For run #1, inspect the rendered
    selector prereqs and use Spack-generated package modules or the view.
-3. **Module loading is two-step and lane-isolated.** An optional init/bootstrap
-   module only makes the stack's selector modules visible. The user then loads
-   one selector such as `ScienceStack/gcc/mpi-osu-craympich`, which prereqs the
-   platform modules and prepends only that lane's package-module roots. Do not
-   expose all lanes at once from the init module.
+3. **Module loading is a compiler-init → lane → package chain.** The compiler
+   init module, e.g. `science_init_gcc`, exposes the GCC foundation/core view
+   and makes the GCC lane modules visible. The user then loads one lane module,
+   e.g. `science/mpi`, which prereqs the platform modules and prepends only that
+   lane's package-module root. Do not expose all lane package roots at once from
+   the init module.
 
 ## Definition of done (pipeline gates)
 
 1. `cluster-inspector` profile reviews clean against Blueback.
 2. `render` succeeds **and** diff-matches the known-good Kokkos config (oracle).
 3. All four roots install (cmake / osu / hdf5 / kokkos).
-4. Rendered selector modulefiles exist for every built lane, and after Spack
-   package module generation each selector exposes only that lane's packages.
+4. Rendered compiler-init and lane modulefiles exist. The compiler init module
+   exposes only the selected foundation/core view plus lane modules, and after
+   Spack package module generation each lane module exposes only that lane's
+   packages.
 5. **Runtime:** `cmake --version` (serial) · **`osu_bw D D`** device-to-device
    over `cray-mpich` (headline — proves rocm + GPU-aware MPI end-to-end) · a
    Kokkos test on the MI300A reporting the HIP/`gfx942` backend.
