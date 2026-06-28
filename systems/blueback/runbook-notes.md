@@ -28,6 +28,9 @@ memory). Mixed topology: CPU-only partitions **and** APU partitions.
 - `mpi: { provider: cray-mpich, source: auto }` → platform `cray-mpich` (gcc
   flavor; GPU-aware for the kokkos lane).
 - gpu archs → `gfx942` (the APU nodes).
+- CPE → pin the **latest** CPE version. Blueback carries multiple CPE releases;
+  within one, gcc and its `cray-mpich` are a tied pair (the toolchain). Run #1
+  uses the latest only; multi-CPE handling is a later item.
 
 ## Inputs to author (Stage 0 / Pre-flight)
 
