@@ -1,0 +1,30 @@
+# Copy to deployment.yaml on Blueback and replace every /PATH/TO/... value with
+# known-good installer-owned paths from the prior Kokkos build. Do not guess
+# these from cluster-inspector output; the profile only reports candidates.
+schema_version: 1
+system: blueback
+
+install_tree:
+  root: /PATH/TO/SHARED/stack/spack/opt
+  padded_length: 128
+
+build_stage:
+  default: /PATH/TO/FAST/SCRATCH/$USER/spack-stage
+
+caches:
+  source: /PATH/TO/SHARED/stack/spack/source-cache
+  misc: /PATH/TO/SHARED/stack/cache/misc
+
+roots:
+  views: /PATH/TO/SHARED/stack/views
+  modules: /PATH/TO/SHARED/stack/modules
+
+modules:
+  publish_root: null
+
+buildcache:
+  destinations:
+    - { name: payload, url: "file:///PATH/TO/SHARED/stack/buildcache/payload" }
+
+spack:
+  root: /PATH/TO/SPACK

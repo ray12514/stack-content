@@ -1,0 +1,52 @@
+schema_version: 1
+name: blueback-smoke
+profile_contract: { schema_version: 1 }
+templates: { set: v6 }
+spack: { version: ">=1.1.1,<1.3" }
+
+# Blueback run #1: keep the matrix intentionally narrow and compare the rendered
+# compiler/MPI/ROCm externals against the known-good hand-built Kokkos config
+# before building.
+
+builds:
+  - name: serial-cmake
+    kind: cpu
+    compilers: baseline
+    target: baseline
+    specs:
+      - cmake
+
+  - name: mpi-osu
+    kind: mpi
+    compilers: baseline
+    target: baseline
+    mpi: { provider: cray-mpich, source: auto }
+    specs:
+      - osu-micro-benchmarks
+
+  - name: mpi-hdf5
+    kind: mpi
+    compilers: baseline
+    target: baseline
+    mpi: { provider: cray-mpich, source: auto }
+    specs:
+      - hdf5+mpi
+
+  - name: gpu-kokkos
+    kind: gpu
+    compilers: baseline
+    target: baseline
+    mpi: { provider: cray-mpich, source: auto }
+    gpu: { archs: [gfx942] }
+    specs:
+      - kokkos+rocm amdgpu_target=gfx942
+
+externals:
+  compilers: prefer_platform
+  mpi: prefer_platform
+  openssl: system
+  curl: system
+  cray-libsci: system
+  fabric_userspace: prefer_platform
+
+release: { save_lockfiles: true, save_manifest: true }
