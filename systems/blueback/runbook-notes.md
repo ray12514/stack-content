@@ -54,10 +54,10 @@ memory). Mixed topology: CPU-only partitions **and** APU partitions.
    and compiler entries against that working config *before* building. Only build
    once they match — turns "does the pipeline work on real HW" into a checkable
    comparison.
-2. **Modules are NOT a pipeline success metric.** The pipeline does not render
-   modulefiles (Phase 9, still open — runbook Stage 4). For run #1, generate them
-   with Spack directly (`spack -e <env> module tcl refresh`) or use `spack load` /
-   the view. "Modules load" tests Spack, not the pipeline.
+2. **Modules are a split responsibility.** The renderer emits front-door lane
+   selector modulefiles. Spack still generates package modulefiles
+   (`spack -e <env> module tcl refresh`). For run #1, inspect the rendered
+   selector prereqs and use Spack-generated package modules or the view.
 
 ## Definition of done (pipeline gates)
 
@@ -74,8 +74,8 @@ Module generation is an interim Spack step, explicitly out of this bar.
 
 - Inspector-profile correctness on the real box: does it probe `cray-mpich`'s
   GPU-aware flavor, `gfx942`, and the CPU + APU node types correctly?
-- Phase 9 modules — record MODULEPATH / module-prereq behavior for the module
-  design.
+- Module exposure — record MODULEPATH / module-prereq behavior for rendered
+  selectors plus Spack-generated package modules.
 - `node_types[0]` cpu asymmetry — confirm one portable `x86_64_v3` build is
   acceptable across all CPU partitions (else per-uarch native cpu fan-out is the
   follow-up model change).
