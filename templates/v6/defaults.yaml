@@ -34,8 +34,8 @@ externals:
 modules:
   format: tcl
   exposure: front_door
-  init_module: science-stack-init
-  module_root: ScienceStack
+  init_module: science_init
+  module_root: science
   hierarchy_style: collapsed
   expose_provenance: true
   platform_module_policy: prereq
