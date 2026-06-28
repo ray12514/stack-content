@@ -41,7 +41,7 @@ system.
 - **Generated (by stack-composer, not committed here):** the rendered workspace
   — concrete `configs/` + `environments/<compiler>/<lane>/spack.yaml` that
   `include::`s them + `release-manifest.yaml`. That tree is the **handoff** to a
-  build path (stack tools / spack-build / Ansible / bare Spack). See
+  build path (spacktools / spack-build / Ansible / bare Spack). See
   stack-planning `docs/stack_build_handoff_note_v1.md`.
 
 `stack-composer` fills the placeholders from `profile ∩ deployment ∩ defaults ∩
