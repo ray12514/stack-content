@@ -28,6 +28,8 @@ spack:
 externals:
   openssl: system
   curl: system
+  cray-libsci: system
+  fabric_userspace: prefer_platform
 
 modules:
   format: tcl

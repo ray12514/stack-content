@@ -11,7 +11,7 @@ packages:
 {% set external_policy = stack.get("externals") or {} %}
 {% for external in profile.get("system_externals") or [] %}
 {% set policy = external_policy.get(external.name) %}
-{% if policy and policy not in ["build", "none", "false"] %}
+{% if policy == "system" %}
   {{ external.name }}:
     buildable: false
     externals:
@@ -28,3 +28,14 @@ packages:
 {% endif %}
 {% endif %}
 {% endfor %}
+{% set fabric_policy = external_policy.get("fabric_userspace", "prefer_platform") %}
+{% if fabric_policy in ["prefer_platform", "mixed"] %}
+{% for userspace in (profile.get("fabric") or {}).get("userspace") or [] %}
+  {{ userspace.name }}:
+    buildable: false
+    externals:
+      - spec: "{{ userspace.name }}@{{ userspace.version }}"
+        prefix: {{ userspace.prefix }}
+        modules: []
+{% endfor %}
+{% endif %}
