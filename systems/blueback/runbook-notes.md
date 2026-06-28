@@ -54,10 +54,10 @@ memory). Mixed topology: CPU-only partitions **and** APU partitions.
    and compiler entries against that working config *before* building. Only build
    once they match — turns "does the pipeline work on real HW" into a checkable
    comparison.
-2. **Modules are a split responsibility.** The renderer emits front-door lane
-   selector modulefiles. Spack still generates package modulefiles
+2. **Modules are a split responsibility.** The renderer emits front-door
+   compiler-init and lane modulefiles. Spack still generates package modulefiles
    (`spack -e <env> module tcl refresh`). For run #1, inspect the rendered
-   selector prereqs and use Spack-generated package modules or the view.
+   lane prereqs and use Spack-generated package modules or the view.
 3. **Module loading is a compiler-init → lane → package chain.** The compiler
    init module, e.g. `science_init_gcc`, exposes the GCC foundation/core view
    and makes the GCC lane modules visible. The user then loads one lane module,
@@ -83,7 +83,7 @@ memory). Mixed topology: CPU-only partitions **and** APU partitions.
 - Inspector-profile correctness on the real box: does it probe `cray-mpich`'s
   GPU-aware flavor, `gfx942`, and the CPU + APU node types correctly?
 - Module exposure — record MODULEPATH / module-prereq behavior for rendered
-  selectors plus Spack-generated package modules.
+  compiler-init/lane modules plus Spack-generated package modules.
 - `node_types[0]` cpu asymmetry — confirm one portable `x86_64_v3` build is
   acceptable across all CPU partitions (else per-uarch native cpu fan-out is the
   follow-up model change).
