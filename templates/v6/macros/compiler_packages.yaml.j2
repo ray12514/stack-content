@@ -1,45 +1,27 @@
 {% macro compiler_packages(target_scope) -%}
-{% set compiler_commands = {
-  "aocc": {"c": "clang", "cxx": "clang++", "fortran": "flang"},
-  "cce": {"c": "craycc", "cxx": "craycxx", "fortran": "crayftn"},
-  "gcc": {"c": "gcc", "cxx": "g++", "fortran": "gfortran"},
-  "intel": {"c": "icx", "cxx": "icpx", "fortran": "ifx"},
-  "llvm": {"c": "clang", "cxx": "clang++", "fortran": "flang"},
-  "nvhpc": {"c": "nvc", "cxx": "nvc++", "fortran": "nvfortran"},
-  "rocmcc": {"c": "amdclang", "cxx": "amdclang++", "fortran": "amdflang"},
-} %}
 # Rendered for {{ profile.system.name }} / compiler externals (from compiler_providers)
 packages:
-{% for name, compilers in compiler_providers_for_scope(profile, stack, target_scope) | groupby("name") %}
-  {{ name }}:
-    buildable: false
+{% for package in compiler_external_packages(profile, stack, target_scope) %}
+  {{ package.name }}:
+    buildable: {{ package.buildable | lower }}
     externals:
-{% for compiler in compilers %}
-      - spec: "{{ compiler.name }}@{{ compiler.version }} languages='{{ (compiler.languages or []) | join(',') }}'"
-        prefix: {{ compiler.prefix }}
-{% set modules = compiler.get("modules") or [] %}
-{% if modules %}
+{% for external in package.externals %}
+      - spec: "{{ external.spec }}"
+        prefix: {{ external.prefix }}
+{% if external.modules %}
         modules:
-{% for module in modules %}
+{% for module in external.modules %}
           - {{ module }}
 {% endfor %}
 {% else %}
         modules: []
 {% endif %}
-{% set explicit = compiler.get("compilers") %}
-{% set commands = compiler_commands.get(compiler.name) %}
-{% if explicit %}
+{% if external.get("extra_attributes") %}
         extra_attributes:
           compilers:
-            c: {{ explicit.c }}
-            cxx: {{ explicit.cxx }}
-            fortran: {{ explicit.fortran }}
-{% elif commands %}
-        extra_attributes:
-          compilers:
-            c: {{ path_join(compiler.prefix, "bin", commands.c) }}
-            cxx: {{ path_join(compiler.prefix, "bin", commands.cxx) }}
-            fortran: {{ path_join(compiler.prefix, "bin", commands.fortran) }}
+            c: {{ external.extra_attributes.compilers.c }}
+            cxx: {{ external.extra_attributes.compilers.cxx }}
+            fortran: {{ external.extra_attributes.compilers.fortran }}
 {% endif %}
 {% endfor %}
 {% endfor %}
