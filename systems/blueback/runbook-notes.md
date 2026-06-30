@@ -165,6 +165,8 @@ python "$STACK_COMPOSER" validate \
 Render only after validation passes:
 
 ```bash
+export RELEASE=blueback-smoke-001
+
 python "$STACK_COMPOSER" render \
   --profile "$PROFILE" \
   --deployment "$BLUEBACK/deployment.yaml" \
@@ -173,7 +175,7 @@ python "$STACK_COMPOSER" render \
   --package-sets "$CONTENT/package-sets" \
   --package-repos "$CONTENT/package-repos" \
   --output-root "$RENDER_ROOT" \
-  --release blueback-smoke-001 \
+  --release "$RELEASE" \
   --rendered-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --source-repo "local-blueback-smoke" \
   --source-commit "$(git -C "$CONTENT" rev-parse --short=12 HEAD)" \
@@ -188,16 +190,59 @@ are locally edited and not yet committed.
 Expected rendered workspace:
 
 ```text
-$RENDER_ROOT/blueback/blueback-smoke/blueback-smoke-001/
+$RENDER_ROOT/blueback/blueback-smoke/$RELEASE/
 ```
 
 After render, inspect:
 
 ```bash
-find "$RENDER_ROOT/blueback/blueback-smoke/blueback-smoke-001/modulefiles" -type f | sort
-sed -n '1,160p' "$RENDER_ROOT/blueback/blueback-smoke/blueback-smoke-001/configs/common/config.yaml"
-sed -n '1,220p' "$RENDER_ROOT/blueback/blueback-smoke/blueback-smoke-001/configs/mpi/cray-mpich/packages.yaml"
-sed -n '1,220p' "$RENDER_ROOT/blueback/blueback-smoke/blueback-smoke-001/configs/gpu/amd-rocm/packages.yaml"
+export WORKSPACE="$RENDER_ROOT/blueback/blueback-smoke/$RELEASE"
+
+find "$WORKSPACE/modulefiles" -type f | sort
+sed -n '1,160p' "$WORKSPACE/configs/common/config.yaml"
+sed -n '1,220p' "$WORKSPACE/configs/mpi/cray-mpich/packages.yaml"
+sed -n '1,220p' "$WORKSPACE/configs/gpu/amd-rocm/packages.yaml"
+```
+
+Before building, verify the MPI selection matches the Blueback smoke intent:
+
+```bash
+grep -R "configs/mpi/openmpi" "$WORKSPACE/environments" -n || true
+grep -R "configs/mpi/cray-mpich" "$WORKSPACE/environments" -n
+```
+
+The OpenMPI grep should return no environment includes for this smoke stack.
+The Cray MPICH grep should show the MPI and GPU lanes.
+
+Build from the rendered workspace with the shipped `spack-build` helper. The
+first command builds one cheap lane and stops on the first failure. The second
+command builds all lanes after the cheap lane succeeds. Keep `--skip-push` for
+the first Blueback pass; add buildcache destinations only after the install path
+is trusted.
+
+```bash
+bash "$COMPOSER/scripts/spack-build" \
+  --workspace "$WORKSPACE" \
+  --spack-root "$SPACK_ROOT" \
+  --lanes "gcc/serial-cmake" \
+  --reports "$WORKSPACE/reports" \
+  --skip-push \
+  --fail-fast
+
+bash "$COMPOSER/scripts/spack-build" \
+  --workspace "$WORKSPACE" \
+  --spack-root "$SPACK_ROOT" \
+  --reports "$WORKSPACE/reports" \
+  --skip-push \
+  --fail-fast
+```
+
+`spack-build` runs per-lane `spack concretize --force`, `spack fetch -D`,
+`spack install`, view regeneration, `spack verify libraries`, and manifest
+verification. It writes lane logs and summary YAML under:
+
+```text
+$WORKSPACE/reports/
 ```
 
 ## Decisions this build relies on (beyond the generic runbook)
