@@ -1,4 +1,4 @@
-{% macro compiler_packages() -%}
+{% macro compiler_packages(target_scope) -%}
 {% set compiler_commands = {
   "aocc": {"c": "clang", "cxx": "clang++", "fortran": "flang"},
   "cce": {"c": "craycc", "cxx": "craycxx", "fortran": "crayftn"},
@@ -10,10 +10,11 @@
 } %}
 # Rendered for {{ profile.system.name }} / compiler externals (from compiler_providers)
 packages:
-{% for compiler in profile.compiler_providers or [] %}
-  {{ compiler.name }}:
+{% for name, compilers in compiler_providers_for_scope(profile, stack, target_scope) | groupby("name") %}
+  {{ name }}:
     buildable: false
     externals:
+{% for compiler in compilers %}
       - spec: "{{ compiler.name }}@{{ compiler.version }} languages='{{ (compiler.languages or []) | join(',') }}'"
         prefix: {{ compiler.prefix }}
 {% set modules = compiler.get("modules") or [] %}
@@ -40,5 +41,6 @@ packages:
             cxx: {{ path_join(compiler.prefix, "bin", commands.cxx) }}
             fortran: {{ path_join(compiler.prefix, "bin", commands.fortran) }}
 {% endif %}
+{% endfor %}
 {% endfor %}
 {%- endmacro %}
