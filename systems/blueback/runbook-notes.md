@@ -47,6 +47,137 @@ memory). Mixed topology: CPU-only partitions **and** APU partitions.
 - **Spack** — reuse the **site checkout you built Kokkos with** (≥ 1.1.1 floor):
   `spack-build --spack-root <that checkout> --skip-push`. Don't bootstrap.
 
+## Blueback command map (current `~/STACK_TESTING` layout)
+
+Assume the repos are checked out as siblings:
+
+```text
+~/STACK_TESTING/
+  cluster-inspector/
+  stack-composer/
+  stack-content/
+```
+
+Set these once per shell:
+
+```bash
+export WORK_ROOT="$HOME/STACK_TESTING"
+export CONTENT="$WORK_ROOT/stack-content"
+export COMPOSER="$WORK_ROOT/stack-composer"
+export BLUEBACK="$CONTENT/systems/blueback"
+export RENDER_ROOT="$WORK_ROOT/rendered"
+```
+
+Source the local Spack activation script before writing `deployment.yaml`, then
+fail fast if it did not set `SPACK_ROOT`:
+
+```bash
+source /path/to/use-spack.sh
+: "${SPACK_ROOT:?SPACK_ROOT is not set; source use-spack.sh first}"
+spack --version
+```
+
+The profile produced by the fragment merge should live at:
+
+```bash
+export PROFILE="$BLUEBACK/profile.yaml"
+```
+
+Create the first-pass deployment file from the example. The values below keep
+the first render/build contained under the operator's test area; replace them
+with the approved shared install/cache/buildcache roots before publishing any
+real stack.
+
+```bash
+cat > "$BLUEBACK/deployment.yaml" <<EOF
+schema_version: 1
+system: blueback
+
+install_tree:
+  root: $WORK_ROOT/install/spack/opt
+  padded_length: 128
+
+build_stage:
+  default: $WORK_ROOT/stage/spack-stage
+
+caches:
+  source: $WORK_ROOT/cache/spack/source-cache
+  misc: $WORK_ROOT/cache/misc
+
+roots:
+  views: $WORK_ROOT/views
+  modules: $WORK_ROOT/modules
+
+modules:
+  publish_root: null
+
+buildcache:
+  destinations:
+    - { name: payload, url: "file://$WORK_ROOT/buildcache/payload" }
+
+spack:
+  root: $SPACK_ROOT
+EOF
+```
+
+Use the `stack-composer.pyz` from the local build without installing it into the
+site environment:
+
+```bash
+export STACK_COMPOSER="$COMPOSER/dist/stack-composer.pyz"
+```
+
+Validate first:
+
+```bash
+python "$STACK_COMPOSER" validate \
+  --profile "$PROFILE" \
+  --deployment "$BLUEBACK/deployment.yaml" \
+  --stack "$CONTENT/stacks/blueback-smoke/stack.yaml" \
+  --templates "$CONTENT/templates" \
+  --package-sets "$CONTENT/package-sets" \
+  --package-repos "$CONTENT/package-repos" \
+  --report "$BLUEBACK/validate-report.yaml"
+```
+
+Render only after validation passes:
+
+```bash
+python "$STACK_COMPOSER" render \
+  --profile "$PROFILE" \
+  --deployment "$BLUEBACK/deployment.yaml" \
+  --stack "$CONTENT/stacks/blueback-smoke/stack.yaml" \
+  --templates "$CONTENT/templates" \
+  --package-sets "$CONTENT/package-sets" \
+  --package-repos "$CONTENT/package-repos" \
+  --output-root "$RENDER_ROOT" \
+  --release blueback-smoke-001 \
+  --rendered-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --source-repo "local-blueback-smoke" \
+  --source-commit "$(git -C "$CONTENT" rev-parse --short=12 HEAD)" \
+  --source-dirty
+```
+
+`--source-repo` may be a development identifier for this first run. The
+`--source-commit` value must look like a git hex digest; using the current
+`stack-content` commit is enough. Keep `--source-dirty` while the Blueback files
+are locally edited and not yet committed.
+
+Expected rendered workspace:
+
+```text
+$RENDER_ROOT/blueback/blueback-smoke/blueback-smoke-001/
+```
+
+After render, inspect:
+
+```bash
+find "$RENDER_ROOT/blueback/blueback-smoke/blueback-smoke-001/modulefiles" -type f | sort
+sed -n '1,160p' "$RENDER_ROOT/blueback/blueback-smoke/blueback-smoke-001/configs/common/config.yaml"
+sed -n '1,220p' "$RENDER_ROOT/blueback/blueback-smoke/blueback-smoke-001/configs/mpi/cray-mpich/packages.yaml"
+sed -n '1,220p' "$RENDER_ROOT/blueback/blueback-smoke/blueback-smoke-001/configs/gpu/amd-rocm/packages.yaml"
+```
+
 ## Decisions this build relies on (beyond the generic runbook)
 
 1. **Oracle diff (de-risks the render).** Your hand-built Kokkos on Blueback is
