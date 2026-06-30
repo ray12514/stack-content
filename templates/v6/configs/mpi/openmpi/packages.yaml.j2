@@ -9,7 +9,8 @@ packages:
     externals:
 {% for mpi in profile.mpi_providers or [] %}
 {% if mpi.name == "openmpi" %}
-      - spec: "openmpi@{{ mpi.version }}{% if mpi.compiler %} %{{ mpi.compiler }}{% endif %}"
+{% set compiler = mpi.get("compiler") %}
+      - spec: "openmpi@{{ mpi.version }}{% if compiler %} %{{ compiler }}{% endif %}"
         prefix: {{ mpi.prefix }}
 {% set modules = mpi.get("modules") or [] %}
 {% if modules %}
