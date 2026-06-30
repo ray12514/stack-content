@@ -8,34 +8,20 @@ packages:
 {% endif %}
     prefer:
       - target={{ rendered_lanes[0].target }}
-{% set external_policy = stack.get("externals") or {} %}
-{% for external in profile.get("system_externals") or [] %}
-{% set policy = external_policy.get(external.name) %}
-{% if policy == "system" %}
-  {{ external.name }}:
-    buildable: false
+{% for package in common_external_packages(profile, stack) %}
+  {{ package.name }}:
+    buildable: {{ package.buildable | lower }}
     externals:
-      - spec: "{{ external.name }}@{{ external.version }}{% if external.get("variants") %} {{ external.variants }}{% endif %}"
+{% for external in package.externals %}
+      - spec: "{{ external.spec }}"
         prefix: {{ external.prefix }}
-{% set modules = external.get("modules") or [] %}
-{% if modules %}
+{% if external.modules %}
         modules:
-{% for module in modules %}
+{% for module in external.modules %}
           - {{ module }}
 {% endfor %}
 {% else %}
         modules: []
 {% endif %}
-{% endif %}
 {% endfor %}
-{% set fabric_policy = external_policy.get("fabric_userspace", "prefer_platform") %}
-{% if fabric_policy in ["prefer_platform", "mixed"] %}
-{% for userspace in (profile.get("fabric") or {}).get("userspace") or [] %}
-  {{ userspace.name }}:
-    buildable: false
-    externals:
-      - spec: "{{ userspace.name }}@{{ userspace.version }}"
-        prefix: {{ userspace.prefix }}
-        modules: []
 {% endfor %}
-{% endif %}
