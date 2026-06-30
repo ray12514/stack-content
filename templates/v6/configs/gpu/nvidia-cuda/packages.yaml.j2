@@ -1,14 +1,19 @@
-{% set cuda = (profile.gpu_toolkit_modules or {}).get("cudatoolkit") or {} %}
 # Rendered for {{ profile.system.name }} / NVIDIA CUDA externals
 packages:
-  cuda:
-    buildable: false
+{% for package in gpu_external_packages(profile, "cuda") %}
+  {{ package.name }}:
+    buildable: {{ package.buildable | lower }}
     externals:
-      - spec: "cuda@{{ cuda.version }}"
-        prefix: {{ cuda.prefix }}
-{% if cuda.module %}
+{% for external in package.externals %}
+      - spec: "{{ external.spec }}"
+        prefix: {{ external.prefix }}
+{% if external.modules %}
         modules:
-          - {{ cuda.module }}
+{% for module in external.modules %}
+          - {{ module }}
+{% endfor %}
 {% else %}
         modules: []
 {% endif %}
+{% endfor %}
+{% endfor %}

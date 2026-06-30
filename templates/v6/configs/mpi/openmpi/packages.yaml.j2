@@ -7,19 +7,17 @@ packages:
   openmpi:
     buildable: false
     externals:
-{% for mpi in profile.mpi_providers or [] %}
-{% if mpi.name == "openmpi" %}
-{% set compiler = mpi.get("compiler") %}
-      - spec: "openmpi@{{ mpi.version }}{% if compiler %} %{{ compiler }}{% endif %}"
-        prefix: {{ mpi.prefix }}
-{% set modules = mpi.get("modules") or [] %}
-{% if modules %}
+{% for package in mpi_external_packages(profile, "openmpi") %}
+{% for external in package.externals %}
+      - spec: "{{ external.spec }}"
+        prefix: {{ external.prefix }}
+{% if external.modules %}
         modules:
-{% for module in modules %}
+{% for module in external.modules %}
           - {{ module }}
 {% endfor %}
 {% else %}
         modules: []
 {% endif %}
-{% endif %}
+{% endfor %}
 {% endfor %}
