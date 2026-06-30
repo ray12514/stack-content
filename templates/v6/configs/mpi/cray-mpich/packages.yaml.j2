@@ -1,25 +1,26 @@
-{% set matches = (profile.mpi_providers or []) | selectattr("name", "equalto", "cray-mpich") | list %}
-{% set mpich = matches[0] if matches else {} %}
 # Rendered for {{ profile.system.name }} / Cray MPICH externals (from mpi_providers)
 packages:
   mpi:
     buildable: false
     require:
       - cray-mpich
-  cray-mpich:
-    buildable: false
-    variants: +wrappers
+{% for package in mpi_external_packages(profile, "cray-mpich") %}
+  {{ package.name }}:
+    buildable: {{ package.buildable | lower }}
+{% if package.get("variants") %}
+    variants: {{ package.variants }}
+{% endif %}
     externals:
-{% for compiler, flavor in (mpich.get("flavors") or {}) | dictsort %}
-      - spec: "cray-mpich@{{ mpich.version }} %{{ compiler }}"
-        prefix: {{ flavor.prefix }}
-{% set modules = flavor.get("modules") or [] %}
-{% if modules %}
+{% for external in package.externals %}
+      - spec: "{{ external.spec }}"
+        prefix: {{ external.prefix }}
+{% if external.modules %}
         modules:
-{% for module in modules %}
+{% for module in external.modules %}
           - {{ module }}
 {% endfor %}
 {% else %}
         modules: []
 {% endif %}
+{% endfor %}
 {% endfor %}
