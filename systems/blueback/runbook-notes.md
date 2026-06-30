@@ -68,6 +68,28 @@ export BLUEBACK="$CONTENT/systems/blueback"
 export RENDER_ROOT="$WORK_ROOT/rendered"
 ```
 
+Update the local checkouts before building/rendering. If you have local
+Blueback edits, commit them or stash them before `git pull --ff-only`.
+
+```bash
+git -C "$WORK_ROOT/cluster-inspector" pull --ff-only
+git -C "$WORK_ROOT/stack-composer" pull --ff-only
+git -C "$WORK_ROOT/stack-content" pull --ff-only
+```
+
+Build the local `stack-composer.pyz` release artifact. Do this in a repo-local
+virtual environment so no packages are installed into the site/CSE environment.
+Run the build script with `bash`; it is a shell script, not a Python script.
+
+```bash
+cd "$COMPOSER"
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e '.[dev]'
+bash scripts/build-pyz.sh
+```
+
 Source the local Spack activation script before writing `deployment.yaml`, then
 fail fast if it did not set `SPACK_ROOT`:
 
