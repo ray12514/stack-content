@@ -9,3 +9,10 @@ spack:
 {% for spec in specs %}
     - {{ spec }}
 {% endfor %}
+{% if mpi_requirement %}
+  packages:
+    mpi:
+      buildable: false
+      require:
+        - "{{ mpi_requirement }}"
+{% endif %}
