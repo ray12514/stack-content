@@ -1,0 +1,9 @@
+# Rendered for {{ profile.system.name }} / OpenMPI toolchains (from mpi_providers)
+toolchains:
+{% for toolchain in mpi_toolchains(profile, "openmpi") %}
+  {{ toolchain.name }}:
+{% for entry in toolchain.entries %}
+    - spec: "{{ entry.spec }}"
+      when: "{{ entry.when }}"
+{% endfor %}
+{% endfor %}
