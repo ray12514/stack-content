@@ -252,9 +252,10 @@ $WORKSPACE/reports/
    ground truth. After `render`, diff the generated `cray-mpich` + ROCm externals
    and compiler entries against that working config *before* building. Include
    `configs/mpi/cray-mpich/toolchains.yaml` in that diff — it encodes the actual
-   gcc+cray-mpich pairing (the `%gcc_craympich` binding the lane specs carry),
-   not just which externals exist. Only build once they match — turns "does the
-   pipeline work on real HW" into a checkable comparison.
+   gcc+cray-mpich pairing (for example a spec-token-safe binding like
+   `%gcc1330_craympich910`), not just which externals exist. Only build once
+   they match — turns "does the pipeline work on real HW" into a checkable
+   comparison.
 2. **Modules are a split responsibility.** The renderer emits front-door
    compiler-init and lane modulefiles. Spack still generates package modulefiles
    (`spack -e <env> module tcl refresh`). For run #1, inspect the rendered
@@ -279,7 +280,27 @@ $WORKSPACE/reports/
    over `cray-mpich` (headline — proves rocm + GPU-aware MPI end-to-end) · a
    Kokkos test on the MI300A reporting the HIP/`gfx942` backend.
 
+## Run #1 CPE note (2026-07-01)
+
+The pulled profile captured Blueback's default CPE, which is now the **newest
+(ROCm 7-era) release** that landed the week of 2026-06-22 — the known-good
+Kokkos baseline was built on the previous CPE (cray-mpich 8.1.29 / ROCm 6 era).
+Consequences:
+
+- The oracle diff (Decisions §1) is **structural**, not version-exact: check
+  flavor prefixes, toolchain binding shape, and external layout — the
+  cray-mpich/ROCm/CCE versions will legitimately differ from the baseline.
+- Do not mix components across the two CPEs. Cross-major ROCm/cray-mpich
+  pairings are unsupported in both directions — rules and sources in
+  `stack-planning/docs/cpe_rocm_compatibility_note_v1.md`.
+
 ## Open / watch (carry back per runbook)
+
+- GPU-aware cray-mpich currently requires an `LD_PRELOAD` of the GTL library.
+  Eliminating the preload is a tracked follow-up (own package-repo GTL package
+  or site-style patches; starting clue:
+  https://github.com/llnl/benchpark/pull/1226 — not yet researched). Tracked in
+  stack-composer `PHASE_STATUS.md` Deferred/open.
 
 - Inspector-profile correctness on the real box: does it probe `cray-mpich`'s
   GPU-aware flavor, `gfx942`, and the CPU + APU node types correctly?
