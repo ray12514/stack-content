@@ -16,20 +16,13 @@ builds:
     specs:
       - cmake
 
-  - name: mpi-osu
+  - name: mpi-smoke
     kind: mpi
     compilers: baseline
     target: baseline
     mpi: { provider: cray-mpich, source: auto }
     specs:
       - osu-micro-benchmarks
-
-  - name: mpi-hdf5
-    kind: mpi
-    compilers: baseline
-    target: baseline
-    mpi: { provider: cray-mpich, source: auto }
-    specs:
       - hdf5+mpi
 
   - name: gpu-kokkos

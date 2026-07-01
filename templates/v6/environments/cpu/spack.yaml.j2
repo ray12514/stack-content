@@ -9,10 +9,7 @@ spack:
 {% for spec in specs %}
     - {{ spec }}
 {% endfor %}
-{% if mpi_requirement %}
+{% if lane_packages %}
   packages:
-    mpi:
-      buildable: false
-      require:
-        - "{{ mpi_requirement }}"
+{{ lane_packages | to_yaml | indent(4, true) }}
 {% endif %}

@@ -212,7 +212,7 @@ grep -R "configs/mpi/cray-mpich" "$WORKSPACE/environments" -n
 ```
 
 The OpenMPI grep should return no environment includes for this smoke stack.
-The Cray MPICH grep should show the MPI and GPU lanes.
+The Cray MPICH grep should show one combined MPI lane plus the GPU lane.
 
 Build from the rendered workspace with the shipped `spack-build` helper. The
 first command builds one cheap lane and stops on the first failure. The second
@@ -267,7 +267,7 @@ $WORKSPACE/reports/
 
 1. `cluster-inspector` profile reviews clean against Blueback.
 2. `render` succeeds **and** diff-matches the known-good Kokkos config (oracle).
-3. All four roots install (cmake / osu / hdf5 / kokkos).
+3. All four roots install across three lanes (cmake / osu + hdf5 / kokkos).
 4. Rendered compiler-init and lane modulefiles exist. The compiler init module
    exposes only the selected foundation/core view plus lane modules, and after
    Spack package module generation each lane module exposes only that lane's
