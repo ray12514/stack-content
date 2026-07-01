@@ -1,0 +1,9 @@
+# Rendered for {{ profile.system.name }} / Cray MPICH toolchains (from mpi_providers)
+toolchains:
+{% for toolchain in mpi_toolchains(profile, "cray-mpich") %}
+  {{ toolchain.name }}:
+{% for entry in toolchain.entries %}
+    - spec: "{{ entry.spec }}"
+      when: "{{ entry.when }}"
+{% endfor %}
+{% endfor %}

@@ -9,7 +9,3 @@ spack:
 {% for spec in specs %}
     - {{ spec }}
 {% endfor %}
-{% if lane_packages %}
-  packages:
-{{ lane_packages | to_yaml | indent(4, true) }}
-{% endif %}
