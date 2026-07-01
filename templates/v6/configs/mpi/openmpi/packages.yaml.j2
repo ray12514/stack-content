@@ -4,10 +4,12 @@ packages:
     providers:
       mpi:
         - openmpi
+{% set openmpi_packages = mpi_external_packages(profile, "openmpi") %}
+{% if openmpi_packages %}
   openmpi:
     buildable: false
     externals:
-{% for package in mpi_external_packages(profile, "openmpi") %}
+{% for package in openmpi_packages %}
 {% for external in package.externals %}
       - spec: "{{ external.spec }}"
         prefix: {{ external.prefix }}
@@ -21,3 +23,12 @@ packages:
 {% endif %}
 {% endfor %}
 {% endfor %}
+{% else %}
+  # No platform OpenMPI external: the lane builds it. The `mpi` requirement
+  # keeps the lane's provider singular so nothing floats a second MPI in.
+  mpi:
+    require:
+      - openmpi
+  openmpi:
+    buildable: true
+{% endif %}
