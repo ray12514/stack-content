@@ -201,6 +201,7 @@ export WORKSPACE="$RENDER_ROOT/blueback/blueback-smoke/$RELEASE"
 find "$WORKSPACE/modulefiles" -type f | sort
 sed -n '1,160p' "$WORKSPACE/configs/common/config.yaml"
 sed -n '1,220p' "$WORKSPACE/configs/mpi/cray-mpich/packages.yaml"
+sed -n '1,80p' "$WORKSPACE/configs/mpi/cray-mpich/toolchains.yaml"
 sed -n '1,220p' "$WORKSPACE/configs/gpu/amd-rocm/packages.yaml"
 ```
 
@@ -249,9 +250,11 @@ $WORKSPACE/reports/
 
 1. **Oracle diff (de-risks the render).** Your hand-built Kokkos on Blueback is
    ground truth. After `render`, diff the generated `cray-mpich` + ROCm externals
-   and compiler entries against that working config *before* building. Only build
-   once they match — turns "does the pipeline work on real HW" into a checkable
-   comparison.
+   and compiler entries against that working config *before* building. Include
+   `configs/mpi/cray-mpich/toolchains.yaml` in that diff — it encodes the actual
+   gcc+cray-mpich pairing (the `%gcc_craympich` binding the lane specs carry),
+   not just which externals exist. Only build once they match — turns "does the
+   pipeline work on real HW" into a checkable comparison.
 2. **Modules are a split responsibility.** The renderer emits front-door
    compiler-init and lane modulefiles. Spack still generates package modulefiles
    (`spack -e <env> module tcl refresh`). For run #1, inspect the rendered
