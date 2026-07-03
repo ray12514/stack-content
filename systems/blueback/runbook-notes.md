@@ -349,11 +349,24 @@ per-package opt-in; OSU/Kokkos never opted in — see
   Without the preload, `MPICH_GPU_SUPPORT_ENABLED=1` aborts at MPI_Init with
   "must be linked against the GTL library" — that error is the confirmation,
   not a new problem.
-- **Experiment while on the box**: load `craype-accel-amd-gfx942` during the
-  OSU build — the PE compiler wrappers then inject the GTL link themselves.
-  If the Spack build of OSU goes through the `+wrappers` cray-mpich wrappers
-  with that module loaded, GTL links properly with no preload. Record the
-  result either way; if it works, it is the bridge until the package repo.
+- **Diagnostic while on the box** (two minutes, settles whether a no-preload
+  bridge exists). GTL injection is done by the craype driver (`cc`), which our
+  stack never invokes — we expose gcc outright. The open question is whether
+  the mpich-prefix `mpicc` (what `+wrappers` hands to dependent builds)
+  consults the accel/GTL env or just execs gcc with a fixed link line:
+
+  ```bash
+  module load cray-mpich craype-accel-amd-gfx942
+  env | grep -i gtl        # PE_MPICH_GTL_DIR/LIBS_amd_gfx942 present?
+  mpicc -show              # execs craype cc, or gcc directly? gtl in link line?
+  ```
+
+  If `mpicc` routes through the craype driver, loading the accel module during
+  Spack builds links GTL with no preload. If it execs gcc with a static line,
+  the near-term options are the preload above or adding HPE's documented
+  manual flags to the OSU spec
+  (`$PE_MPICH_GTL_DIR_amd_gfx942 -lmpi_gtl_hsa`). Record the result either
+  way; the PE_MPICH_GTL_* vars are also candidate inspector facts.
 
 ## Open / watch (carry back per runbook)
 
