@@ -330,9 +330,34 @@ Consequences:
   pairings are unsupported in both directions — rules and sources in
   `stack-planning/docs/cpe_rocm_compatibility_note_v1.md`.
 
+## GPU-aware MPI at runtime (run #1 workaround)
+
+Nothing in the rendered stack links GTL at build time (upstream's mechanism is
+per-package opt-in; OSU/Kokkos never opted in — see
+`stack-planning/docs/cray_runtime_package_repo_note_v1.md`). Scope it right:
+
+- The Kokkos HIP test needs **no** GTL — Kokkos makes no MPI calls. Only
+  binaries passing GPU buffers to MPI need it (`osu_bw D D`, Kokkos-based apps).
+- Sanctioned run #1 workaround for `osu_bw D D` (adjust version/paths to the
+  render-plan report):
+
+  ```bash
+  export MPICH_GPU_SUPPORT_ENABLED=1
+  export LD_PRELOAD=/opt/cray/pe/mpich/<version>/gtl/lib/libmpi_gtl_hsa.so
+  ```
+
+  Without the preload, `MPICH_GPU_SUPPORT_ENABLED=1` aborts at MPI_Init with
+  "must be linked against the GTL library" — that error is the confirmation,
+  not a new problem.
+- **Experiment while on the box**: load `craype-accel-amd-gfx942` during the
+  OSU build — the PE compiler wrappers then inject the GTL link themselves.
+  If the Spack build of OSU goes through the `+wrappers` cray-mpich wrappers
+  with that module loaded, GTL links properly with no preload. Record the
+  result either way; if it works, it is the bridge until the package repo.
+
 ## Open / watch (carry back per runbook)
 
-- GPU-aware cray-mpich currently requires an `LD_PRELOAD` of the GTL library.
+- GPU-aware cray-mpich currently requires the `LD_PRELOAD` workaround above.
   Eliminating the preload is a tracked follow-up (own package-repo GTL package
   or site-style patches; starting clue:
   https://github.com/llnl/benchpark/pull/1226 — not yet researched). Tracked in
