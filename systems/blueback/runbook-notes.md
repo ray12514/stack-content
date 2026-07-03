@@ -64,17 +64,29 @@ Set these once per shell:
 export WORK_ROOT="$HOME/STACK_TESTING"
 export CONTENT="$WORK_ROOT/stack-content"
 export COMPOSER="$WORK_ROOT/stack-composer"
+export INSPECTOR="$WORK_ROOT/cluster-inspector"
 export BLUEBACK="$CONTENT/systems/blueback"
 export RENDER_ROOT="$WORK_ROOT/rendered"
+export STACK_BRANCH="codex/simplified-render-plan"
 ```
 
-Update the local checkouts before building/rendering. If you have local
-Blueback edits, commit them or stash them before `git pull --ff-only`.
+Update the local checkouts onto the current test branch before
+building/rendering. If you have local Blueback edits, commit them or stash them
+before `git switch` / `git pull --ff-only`.
 
 ```bash
-git -C "$WORK_ROOT/cluster-inspector" pull --ff-only
-git -C "$WORK_ROOT/stack-composer" pull --ff-only
-git -C "$WORK_ROOT/stack-content" pull --ff-only
+for repo in cluster-inspector stack-composer stack-content; do
+  git -C "$WORK_ROOT/$repo" fetch origin
+  git -C "$WORK_ROOT/$repo" switch "$STACK_BRANCH"
+  git -C "$WORK_ROOT/$repo" pull --ff-only
+done
+
+# Optional: update the planning docs too if stack-planning is checked out.
+if [ -d "$WORK_ROOT/stack-planning/.git" ]; then
+  git -C "$WORK_ROOT/stack-planning" fetch origin
+  git -C "$WORK_ROOT/stack-planning" switch "$STACK_BRANCH"
+  git -C "$WORK_ROOT/stack-planning" pull --ff-only
+fi
 ```
 
 Build the local `stack-composer.pyz` release artifact. Do this in a repo-local
