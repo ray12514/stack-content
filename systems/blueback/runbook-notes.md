@@ -200,6 +200,7 @@ export WORKSPACE="$RENDER_ROOT/blueback/blueback-smoke/$RELEASE"
 
 find "$WORKSPACE/modulefiles" -type f | sort
 sed -n '1,160p' "$WORKSPACE/configs/common/config.yaml"
+sed -n '1,220p' "$WORKSPACE/reports/render-plan.yaml"
 sed -n '1,220p' "$WORKSPACE/configs/mpi/cray-mpich/packages.yaml"
 sed -n '1,80p' "$WORKSPACE/configs/mpi/cray-mpich/toolchains.yaml"
 sed -n '1,220p' "$WORKSPACE/configs/gpu/amd-rocm/packages.yaml"
@@ -214,6 +215,22 @@ grep -R "configs/mpi/cray-mpich" "$WORKSPACE/environments" -n
 
 The OpenMPI grep should return no environment includes for this smoke stack.
 The Cray MPICH grep should show one combined MPI lane plus the GPU lane.
+
+Also check the network plan before building:
+
+```bash
+grep -n "fabric_userspace:" "$WORKSPACE/reports/render-plan.yaml"
+grep -n "cray-gtl\\|cray-pmi\\|cray-pals" "$WORKSPACE/reports/render-plan.yaml" || true
+grep -n "requires_explicit_package_repo_policy" "$WORKSPACE/reports/render-plan.yaml" || true
+grep -n "cray-gtl\\|cray-pmi\\|cray-pals" "$WORKSPACE/configs/common/packages.yaml" && false || true
+```
+
+If Cluster Inspector observes Cray GTL, PMI, or PALS, they should appear in the
+render plan as observed network/runtime facts. They should not appear in
+`configs/common/packages.yaml` during this smoke run; those package names need
+an explicit package repo policy before they are safe to render as Spack
+externals. `libfabric` and `ucx` may still be rendered as common fabric
+externals.
 
 Build from the rendered workspace with the shipped `spack-build` helper. The
 first command builds one cheap lane and stops on the first failure. The second
