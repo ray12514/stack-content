@@ -4,7 +4,7 @@ packages:
     buildable: false
     require:
       - cray-mpich
-{% for package in mpi_external_packages(profile, "cray-mpich") %}
+{% for package in mpi_external_packages(profile, "cray-mpich", rendered_lanes) %}
   {{ package.name }}:
     buildable: {{ package.buildable | lower }}
 {% if package.get("variants") %}
