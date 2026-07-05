@@ -27,7 +27,8 @@ Assume repos are checked out as siblings:
   rendered/                # generated; do not commit
 ```
 
-Set these once per shell:
+Set these once per shell. Replace `<system-name>` with the actual short system
+name before running anything else.
 
 ```bash
 export WORK_ROOT="$HOME/STACK_TESTING"
@@ -38,6 +39,16 @@ export SYSTEM_NAME="<system-name>"
 export SYSTEM_DIR="$CONTENT/systems/$SYSTEM_NAME"
 export RENDER_ROOT="$WORK_ROOT/rendered"
 export STACK_BRANCH="codex/simplified-render-plan"
+```
+
+Bootstrap the per-system notes directory from this template. After this command,
+work from `$SYSTEM_DIR/runbook-notes.md` for the actual system.
+
+```bash
+mkdir -p "$CONTENT/systems"
+if [ "$SYSTEM_NAME" != "linux-smoke" ] && [ ! -d "$SYSTEM_DIR" ]; then
+  cp -R "$CONTENT/systems/linux-smoke" "$SYSTEM_DIR"
+fi
 ```
 
 Update the checkouts:
@@ -86,7 +97,7 @@ newer Spack release.
 
 ## Stage 1 — Manual profile fragments
 
-Create the system directory:
+Ensure the system directory exists:
 
 ```bash
 mkdir -p "$SYSTEM_DIR"
@@ -134,7 +145,8 @@ cd "$INSPECTOR"
 ```
 
 Back on the login node, merge the fragments. Omit `build.frag.yaml` if compute
-is also the build host.
+is also the build host. For the common case where login and compute are enough,
+use:
 
 ```bash
 cd "$INSPECTOR"
@@ -143,10 +155,20 @@ cd "$INSPECTOR"
   --system-fragment "$SYSTEM_DIR/system.frag.yaml" \
   --node "$SYSTEM_DIR/login.frag.yaml" \
   --node "$SYSTEM_DIR/compute.frag.yaml" \
-  --node "$SYSTEM_DIR/build.frag.yaml" \
   --output "$SYSTEM_DIR/profile.yaml"
 
 ./cluster-inspector verify "$SYSTEM_DIR/profile.yaml"
+```
+
+If the site has a distinct build node fragment, include it:
+
+```bash
+./cluster-inspector merge \
+  --system-fragment "$SYSTEM_DIR/system.frag.yaml" \
+  --node "$SYSTEM_DIR/login.frag.yaml" \
+  --node "$SYSTEM_DIR/compute.frag.yaml" \
+  --node "$SYSTEM_DIR/build.frag.yaml" \
+  --output "$SYSTEM_DIR/profile.yaml"
 ```
 
 Review `profile.yaml` before rendering:
@@ -197,6 +219,20 @@ buildcache:
 spack:
   root: $SPACK_ROOT
 EOF
+```
+
+Create the directories named by the deployment file for the first smoke run:
+
+```bash
+mkdir -p \
+  "$WORK_ROOT/install/spack/opt" \
+  "$WORK_ROOT/stage/spack-stage" \
+  "$WORK_ROOT/cache/spack/source-cache" \
+  "$WORK_ROOT/cache/misc" \
+  "$WORK_ROOT/views" \
+  "$WORK_ROOT/modules" \
+  "$WORK_ROOT/buildcache/payload" \
+  "$RENDER_ROOT"
 ```
 
 For the first Linux smoke, use the existing `stacks/mpi-smoke/stack.yaml` if MPI
