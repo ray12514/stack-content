@@ -1,6 +1,6 @@
 # Rendered for {{ profile.system.name }} / AMD ROCm externals
 packages:
-{% for package in gpu_external_packages(profile, "rocm") %}
+{% for package in gpu_plan.get("rocm") or [] %}
   {{ package.name }}:
     buildable: {{ package.buildable | lower }}
     externals:
