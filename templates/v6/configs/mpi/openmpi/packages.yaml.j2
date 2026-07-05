@@ -4,7 +4,7 @@ packages:
     providers:
       mpi:
         - openmpi
-{% set openmpi_packages = mpi_external_packages(profile, "openmpi", rendered_lanes) %}
+{% set openmpi_packages = (mpi_plan.get("openmpi") or {}).get("packages") or [] %}
 {% if openmpi_packages %}
   openmpi:
     buildable: false
