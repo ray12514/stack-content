@@ -330,6 +330,49 @@ Consequences:
   pairings are unsupported in both directions — rules and sources in
   `stack-planning/docs/cpe_rocm_compatibility_note_v1.md`.
 
+## Blueback smoke baseline (2026-07-05)
+
+The `codex/simplified-render-plan` branch produced a working first real-system
+Blueback smoke path through:
+
+```text
+cluster-inspector -> profile.yaml -> stack-composer validate/render -> spack-build
+```
+
+The successful run used the latest observed Blueback platform set:
+
+- `PrgEnv-gnu` with the Cray PE GNU compiler module;
+- `cray-mpich` 9.1.0;
+- ROCm 7.0.0 for `gfx942`;
+- selected Cray platform runtime facts in the render plan;
+- conservative rendering of network/runtime facts that need site package
+  definitions.
+
+The critical fixes that must be present before reproducing this run are:
+
+1. Compiler providers are deduplicated by `(name, version)` so soft-linked
+   compiler prefixes do not create multiple indistinguishable Spack externals.
+2. Stack Composer renders the lane-selected Cray MPICH external only, while
+   compiler binding lives in `toolchains.yaml`.
+3. Cray MPICH package externals use plain provider specs such as
+   `cray-mpich@9.1.0`; toolchain specs carry `%gcc@...`.
+4. ROCm HIP externals use the ROCm toolkit root prefix proven by `bin/hipcc`,
+   not a guessed `$ROCM_ROOT/hip` prefix.
+5. Cray GTL, PMI, and PALS are reported as observed platform runtime facts but
+   are not rendered as package externals unless a site package repo policy is
+   provided.
+
+Known acceptable smoke-run finding:
+
+- `spack verify libraries` can report a Cray MPICH lane library issue involving
+  external system/runtime libraries such as XPM/hugepages. This does not fail
+  the blueprint purpose of the run. Record it, then model the relevant runtime
+  package only if the managed stack needs to own it.
+
+Retest rule: after any Cluster Inspector change, regenerate `system.frag.yaml`,
+`login.frag.yaml`, `compute.frag.yaml`, and `profile.yaml`. Do not reuse an old
+Blueback profile with a newly built inspector.
+
 ## GPU-aware MPI at runtime (run #1 workaround)
 
 Nothing in the rendered stack links GTL at build time (upstream's mechanism is
@@ -372,7 +415,7 @@ per-package opt-in; OSU/Kokkos never opted in — see
 
 - GPU-aware cray-mpich currently requires the `LD_PRELOAD` workaround above.
   Eliminating the preload is a tracked follow-up (own package-repo GTL package
-  or site-style patches; starting clue:
+  or site-style package definitions; starting clue:
   https://github.com/llnl/benchpark/pull/1226 — not yet researched). Tracked in
   stack-composer `PHASE_STATUS.md` Deferred/open.
 
