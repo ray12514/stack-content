@@ -1,22 +1,46 @@
-# Generic Linux — Smoke Runbook Notes
+# Smoke Runbook Notes
 
-Per-system instance of `stack-planning/docs/runbook.md` for the first generic
-Linux/Penguin-style real-system smoke. Use this file as the starting point for a
-new non-Cray system, then rename/copy the directory to the actual system name.
+Per-system instance of `stack-planning/docs/runbook.md` for real-system smoke
+tests. Use this directory as the starting point for a new target system, then
+copy it to the actual system name.
 
-The goal is to prove the generic Linux path:
+The goal is to prove the common path on Cray, generic Linux/Penguin-style
+systems, and future vendor platforms:
 
 ```text
 cluster-inspector -> profile.yaml -> stack-composer validate/render -> spack-build
 ```
 
-No Cray PE assumptions should be required. Site compilers, MPI modules, GPU SDKs
-if present, and system externals should come from the generated profile and the
-stack/default policy.
+Platform-specific facts should come from the generated profile and the
+stack/default policy. The runbook should not require a Blueback-style directory
+layout or any preexisting project checkouts on the target system.
 
-## Expected layout
+## Stage 0 — Create the stack test area
 
-Assume repos are checked out as siblings:
+Start from a fresh shell on the target system. The only assumption is that you
+can create a working directory, clone the project repos, and source a supported
+Spack install.
+
+Set these once per shell. Replace `<system-name>` with the actual short system
+name before running anything else.
+
+```bash
+export WORK_ROOT="$HOME/STACK_TESTING"
+export STACK_BRANCH="codex/simplified-render-plan"
+export SYSTEM_NAME="<system-name>"
+
+export CONTENT="$WORK_ROOT/stack-content"
+export COMPOSER="$WORK_ROOT/stack-composer"
+export INSPECTOR="$WORK_ROOT/cluster-inspector"
+export PLANNING="$WORK_ROOT/stack-planning"
+export SYSTEM_DIR="$CONTENT/systems/$SYSTEM_NAME"
+export RENDER_ROOT="$WORK_ROOT/rendered"
+
+mkdir -p "$WORK_ROOT"
+cd "$WORK_ROOT"
+```
+
+The working tree should end up in this shape:
 
 ```text
 ~/STACK_TESTING/
@@ -27,43 +51,48 @@ Assume repos are checked out as siblings:
   rendered/                # generated; do not commit
 ```
 
-Set these once per shell. Replace `<system-name>` with the actual short system
-name before running anything else.
+Clone the repos if this is the first run on the system. During alpha, these URLs
+may be GitHub. After migration, use the internal GitLab URLs with the same local
+directory names.
 
 ```bash
-export WORK_ROOT="$HOME/STACK_TESTING"
-export CONTENT="$WORK_ROOT/stack-content"
-export COMPOSER="$WORK_ROOT/stack-composer"
-export INSPECTOR="$WORK_ROOT/cluster-inspector"
-export SYSTEM_NAME="<system-name>"
-export SYSTEM_DIR="$CONTENT/systems/$SYSTEM_NAME"
-export RENDER_ROOT="$WORK_ROOT/rendered"
-export STACK_BRANCH="codex/simplified-render-plan"
-```
+if [ ! -d "$INSPECTOR/.git" ]; then
+  git clone git@github.com:ray12514/cluster-inspector.git "$INSPECTOR"
+fi
 
-Bootstrap the per-system notes directory from this template. After this command,
-work from `$SYSTEM_DIR/runbook-notes.md` for the actual system.
+if [ ! -d "$COMPOSER/.git" ]; then
+  git clone git@github.com:ray12514/stack-composer.git "$COMPOSER"
+fi
 
-```bash
-mkdir -p "$CONTENT/systems"
-if [ "$SYSTEM_NAME" != "linux-smoke" ] && [ ! -d "$SYSTEM_DIR" ]; then
-  cp -R "$CONTENT/systems/linux-smoke" "$SYSTEM_DIR"
+if [ ! -d "$CONTENT/.git" ]; then
+  git clone git@github.com:ray12514/stack-content.git "$CONTENT"
+fi
+
+if [ ! -d "$PLANNING/.git" ]; then
+  git clone git@github.com:ray12514/stack-planning.git "$PLANNING"
 fi
 ```
 
-Update the checkouts:
+Check out the test branch. Use `git -C` with explicit repo paths instead of
+running bare `git` from `$WORK_ROOT`; on HPC systems, `$HOME`, project storage,
+and cloned repos may cross filesystem boundaries, which can trigger Git
+discovery errors.
 
 ```bash
-for repo in cluster-inspector stack-composer stack-content; do
+for repo in cluster-inspector stack-composer stack-content stack-planning; do
   git -C "$WORK_ROOT/$repo" fetch origin
   git -C "$WORK_ROOT/$repo" switch "$STACK_BRANCH"
   git -C "$WORK_ROOT/$repo" pull --ff-only
 done
+```
 
-if [ -d "$WORK_ROOT/stack-planning/.git" ]; then
-  git -C "$WORK_ROOT/stack-planning" fetch origin
-  git -C "$WORK_ROOT/stack-planning" switch "$STACK_BRANCH"
-  git -C "$WORK_ROOT/stack-planning" pull --ff-only
+Bootstrap the per-system notes directory from this smoke template. After this
+command, work from `$SYSTEM_DIR/runbook-notes.md` for the actual system.
+
+```bash
+mkdir -p "$CONTENT/systems"
+if [ "$SYSTEM_NAME" != "smoke" ] && [ ! -d "$SYSTEM_DIR" ]; then
+  cp -R "$CONTENT/systems/smoke" "$SYSTEM_DIR"
 fi
 ```
 
@@ -92,8 +121,8 @@ source /path/to/use-spack.sh
 spack --version
 ```
 
-Use Spack 1.1.1 for the control run unless the purpose is explicitly to test a
-newer Spack release.
+Use Spack 1.1.1 or newer for the control run. Treat a new Spack minor release
+as an explicit adoption test until its smoke matrix passes.
 
 ## Stage 1 — Manual profile fragments
 
@@ -177,7 +206,7 @@ Review `profile.yaml` before rendering:
   `provider_family`;
 - MPI providers: site/system/platform classification, prefixes, modules, and
   compiler compatibility if discoverable;
-- GPU toolkit modules if the Linux system has NVIDIA or AMD GPU partitions;
+- GPU toolkit modules if the system has NVIDIA or AMD GPU partitions;
 - system externals such as OpenSSL, curl, libfabric, UCX, CUDA/ROCm components;
 - node CPU target and build-stage candidates.
 
@@ -235,9 +264,9 @@ mkdir -p \
   "$RENDER_ROOT"
 ```
 
-For the first Linux smoke, use the existing `stacks/mpi-smoke/stack.yaml` if MPI
-is available. If no external MPI should be used, use or create a serial-only
-smoke stack and record that decision.
+For the first smoke, use the existing `stacks/mpi-smoke/stack.yaml` if MPI is
+available. If no external MPI should be used, use or create a serial-only smoke
+stack and record that decision.
 
 ## Stage 3 — Validate and render
 
@@ -286,8 +315,8 @@ find "$WORKSPACE/configs" -name packages.yaml -print | sort
 find "$WORKSPACE/modulefiles" -type f | sort
 ```
 
-For generic Linux, check specifically that no Cray-only scopes or packages are
-selected:
+On a non-Cray system, check specifically that no Cray-only scopes or packages
+are selected:
 
 ```bash
 grep -R "vendor/cray\\|cray-mpich\\|cray-gtl\\|cray-libsci" "$WORKSPACE" -n && false || true
@@ -325,7 +354,7 @@ tail -f "$WORKSPACE/reports/<compiler>/<lane>/install.log"
 
 1. Manual fragment collection produces a verified `profile.yaml`.
 2. `stack-composer validate` and `render` succeed.
-3. Render plan selects generic Linux scopes and no Cray-only runtime packages.
+3. Render plan selects the expected platform scopes and runtime packages.
 4. One cheap lane concretizes and installs.
 5. The full smoke stack builds or fails with a recorded system/package issue,
    not a missing profile/render contract.
