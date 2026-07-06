@@ -51,25 +51,27 @@ The working tree should end up in this shape:
   rendered/                # generated; do not commit
 ```
 
-Clone the repos if this is the first run on the system. During alpha, these URLs
-may be GitHub. After migration, use the internal GitLab URLs with the same local
-directory names.
+Clone the repos if this is the first run on the system. Use HTTPS on HPC
+systems unless SSH keys are already configured there; the SSH-style
+`git@github.com:...` form will fail with `Permission denied (publickey)` on many
+login nodes. During alpha, these URLs may be GitHub. After migration, use the
+internal GitLab HTTPS URLs with the same local directory names.
 
 ```bash
 if [ ! -d "$INSPECTOR/.git" ]; then
-  git clone git@github.com:ray12514/cluster-inspector.git "$INSPECTOR"
+  git clone https://github.com/ray12514/cluster-inspector.git "$INSPECTOR"
 fi
 
 if [ ! -d "$COMPOSER/.git" ]; then
-  git clone git@github.com:ray12514/stack-composer.git "$COMPOSER"
+  git clone https://github.com/ray12514/stack-composer.git "$COMPOSER"
 fi
 
 if [ ! -d "$CONTENT/.git" ]; then
-  git clone git@github.com:ray12514/stack-content.git "$CONTENT"
+  git clone https://github.com/ray12514/stack-content.git "$CONTENT"
 fi
 
 if [ ! -d "$PLANNING/.git" ]; then
-  git clone git@github.com:ray12514/stack-planning.git "$PLANNING"
+  git clone https://github.com/ray12514/stack-planning.git "$PLANNING"
 fi
 ```
 
