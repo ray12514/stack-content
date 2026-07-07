@@ -24,3 +24,14 @@ Do not add assistant/tool attribution to commit messages, trailers, file
 headers, generated docs, or comments. Do not include automated co-author
 trailers, generated-by footers, assistant signatures, or similar tool stamps.
 If a tool proposes one, remove it before committing.
+
+## Model and agent usage
+
+Conserve usage credits when working in this repo:
+
+- Use a cheaper, faster model or agent for research, fact-gathering, code
+  search, and claim verification.
+- Reserve the strongest available model for implementation, design judgment,
+  and hard debugging.
+- Do not start queued or speculative work until the owner green-lights the
+  spend.
