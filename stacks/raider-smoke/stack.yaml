@@ -1,0 +1,46 @@
+schema_version: 1
+name: raider-smoke
+profile_contract: { schema_version: 1 }
+templates: { set: v6 }
+spack: { version: ">=1.1.1,<1.3" }
+
+# Raider run #1: the blueback-smoke matrix, NVIDIA edition. Keep it narrow and
+# compare the rendered compiler/MPI/CUDA externals against the profile before
+# building.
+
+builds:
+  - name: serial-cmake
+    kind: cpu
+    compilers: baseline
+    target: baseline
+    specs:
+      - cmake
+
+  - name: mpi-smoke
+    kind: mpi
+    compilers: baseline
+    target: baseline
+    mpi: { provider: openmpi, source: auto }
+    specs:
+      - osu-micro-benchmarks
+      - hdf5+mpi
+
+  - name: gpu-kokkos
+    kind: gpu
+    compilers: baseline
+    target: baseline
+    mpi: { provider: openmpi, source: auto }
+    # A100 (cuda_arch=80). Confirm against the profile's node_types
+    # arch_target once probed; adjust here if the system reports otherwise.
+    gpu: { archs: all }
+    specs:
+      - kokkos+cuda cuda_arch=80
+
+externals:
+  compilers: prefer_platform
+  mpi: prefer_platform
+  openssl: system
+  curl: system
+  fabric_userspace: prefer_platform
+
+release: { save_lockfiles: true, save_manifest: true }
