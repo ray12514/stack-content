@@ -10,7 +10,8 @@ profile_contract:
 compilers: baseline   # gcc-or-first; set to 'all' (fan out) or a list to widen
 mpi:
   provider: openmpi
-  source: auto        # use the platform MPI if the profile reports one, else build openmpi
+  source: auto            # use the platform MPI if the profile reports one, else build openmpi
+  version_policy: newest  # several site versions of one provider resolve to the highest
 gpu:
   archs: all
 target: native
