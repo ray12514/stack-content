@@ -1,47 +1,55 @@
-# Canonical example package-set, derived from
-# Package-set example for the current spec-native stack model.
-
 schema_version: 1
 name: science-full
 tier: canonical
 description: |
-  Full curated science library set: HDF5/NetCDF/PnetCDF (multi-version),
-  TAU, and performance-portability roots used by science-stack payload lanes.
+  Full curated science library set, two versions per package (cse-stack
+  lineage): HDF5/NetCDF serial+MPI cross-products, FFTW, OpenBLAS, Boost,
+  TAU, and Kokkos for GPU lanes.
 
-kinds: [serial, mpi, gpu]
+kinds: [cpu, mpi, gpu]
 
 specs:
-  any:
-    - gsl@2.8
-  serial:
-    - hdf5@1.14.5~mpi+fortran
-    - hdf5@1.14.4~mpi+fortran
-    - hdf5@1.12.3~mpi+fortran
-    - netcdf-c@4.9.2~mpi
-    - netcdf-c@4.9.0~mpi
+  cpu:
+    # serial = MPI-capable packages deliberately built without MPI
+    - hdf5@1.14.6 ~mpi +fortran +cxx +hl
+    - hdf5@1.14.5 ~mpi +fortran +cxx +hl
+    - netcdf-c@4.9.3 ~mpi ^hdf5@1.14.6~mpi
+    - netcdf-c@4.9.2 ~mpi ^hdf5@1.14.5~mpi
+    - netcdf-fortran@4.6.2 ^netcdf-c@4.9.3~mpi
+    - netcdf-fortran@4.6.1 ^netcdf-c@4.9.2~mpi
+    - netcdf-cxx4@4.3.1 ^netcdf-c@4.9.3~mpi
+    - fftw@3.3.10 ~mpi
+    - fftw@3.3.9 ~mpi
+    - boost@1.88.0 ~mpi
+    - boost@1.87.0 ~mpi
+    # only-serial but compiler/performance-sensitive, so payload not core
+    - openblas@0.3.30
+    - openblas@0.3.29
+    # only-serial user tool; placement flagged for team review (core vs serial)
+    - gnuplot@6.0.0
+    - gnuplot@5.4.10
   mpi:
-    - hdf5@1.14.5+mpi+fortran
-    - hdf5@1.14.4+mpi+fortran
-    - hdf5@1.12.3+mpi+fortran
-    - netcdf-c@4.9.2+mpi
-    - netcdf-c@4.9.0+mpi
-    - parallel-netcdf@1.13.0
-    - tau+mpi
+    - hdf5@1.14.6 +mpi +fortran +cxx +hl
+    - hdf5@1.14.5 +mpi +fortran +cxx +hl
+    - netcdf-c@4.9.3 +mpi +parallel-netcdf ^hdf5@1.14.6+mpi
+    - netcdf-c@4.9.2 +mpi +parallel-netcdf ^hdf5@1.14.5+mpi
+    - netcdf-fortran@4.6.2 ^netcdf-c@4.9.3+mpi
+    - netcdf-fortran@4.6.1 ^netcdf-c@4.9.2+mpi
+    - netcdf-cxx4@4.3.1 ^netcdf-c@4.9.3+mpi
+    - fftw@3.3.10 +mpi
+    - fftw@3.3.9 +mpi
+    - tau +mpi
   gpu:
-    - hdf5@1.14.5+mpi+fortran
-    - hdf5@1.14.4+mpi+fortran
-    - hdf5@1.12.3+mpi+fortran
-    - netcdf-c@4.9.2+mpi
-    - netcdf-c@4.9.0+mpi
-    - parallel-netcdf@1.13.0
-    - tau+mpi
-    - kokkos+gpu
-    - raja+gpu
+    # +gpu expands per lane: +rocm amdgpu_target=<arch> or +cuda cuda_arch=<n>
+    - kokkos +gpu
 
 provenance_hints:
   cray-mpich: Platform-backed
   openssl:    Site-external
 
 notes: |
-  Multi-version HDF5/NetCDF is the working target. PnetCDF stays single-version
-  until the next refresh; revisit when 1.14.x lands.
+  Versions carried from cse-stack package-sets/science-full.yaml (two per
+  package, the settled working target; three was aspirational). TAU is
+  unversioned until the first concretize pins it. raja deferred (v6 listed it;
+  not confirmed for run one). Kokkos GPU arch comes from the lane via the
+  +gpu placeholder, keeping this set vendor-neutral across AMD/NVIDIA systems.

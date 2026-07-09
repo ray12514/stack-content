@@ -1,0 +1,48 @@
+schema_version: 1
+name: blueback-science
+profile_contract: { schema_version: 1 }
+templates: { set: v6 }
+spack: { version: ">=1.1.1,<1.3" }
+
+# Science stack run: the full two-version roster (cse-stack lineage) on one
+# compiler lane (baseline = gcc / PrgEnv-gnu). Core carries foundation +
+# loadable tools; serial/mpi/gpu are the payload cross-products.
+
+builds:
+  - name: core
+    kind: cpu
+    compilers: baseline
+    target: baseline
+    package_set: core-foundation
+
+  - name: serial
+    kind: cpu
+    compilers: baseline
+    target: native
+    package_set: science-full
+
+  - name: mpi
+    kind: mpi
+    compilers: baseline
+    target: native
+    mpi: { provider: cray-mpich, source: auto }
+    package_set: science-full
+
+  - name: gpu-kokkos
+    kind: gpu
+    compilers: baseline
+    target: native
+    mpi: { provider: cray-mpich, source: auto }
+    gpu: { archs: [gfx942] }
+    package_set: science-full
+
+externals:
+  compilers: prefer_platform
+  mpi: prefer_platform
+  openssl: system
+  curl: system
+  cray-libsci: system
+  fabric_userspace: prefer_platform
+
+foundation_pins: { zlib: "1.3.1", xz: "5.4.6", zstd: "1.5.6" }
+release: { save_lockfiles: true, save_manifest: true }

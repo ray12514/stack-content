@@ -1,0 +1,6 @@
+# Multi-version cross-product lanes require unify: false (v6 § Multi-Version
+# Policy and the Foundation Single-Version Rule). Foundation single-version is
+# enforced by require: pins in the common scope, not by unification.
+concretizer:
+  unify: false
+  reuse: true
