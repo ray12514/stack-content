@@ -28,7 +28,7 @@ builds:
     mpi: { provider: cray-mpich, source: auto }
     package_set: science-full
 
-  - name: gpu-kokkos
+  - name: gpu
     kind: gpu
     compilers: baseline
     target: native
