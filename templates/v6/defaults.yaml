@@ -25,6 +25,9 @@ provider_scopes:
 # --- site conventions (rarely touched) ---
 spack:
   floor: "1.1.1"
+  package_repo:
+    git: https://github.com/spack/spack-packages.git
+    tag: v2026.06.0
 
 externals:
   openssl: system

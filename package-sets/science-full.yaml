@@ -11,26 +11,26 @@ kinds: [serial, mpi, gpu]
 specs:
   serial:
     # serial = MPI-capable packages deliberately built without MPI
+    - hdf5@2.1.0 ~mpi +fortran +cxx +hl
     - hdf5@1.14.6 ~mpi +fortran +cxx +hl
     - hdf5@1.14.5 ~mpi +fortran +cxx +hl
-    - hdf5@1.14.4-3 ~mpi +fortran +cxx +hl
+    - netcdf-c@4.10.0 ~mpi ^hdf5@2.1.0~mpi
     - netcdf-c@4.9.3 ~mpi ^hdf5@1.14.6~mpi
     - netcdf-c@4.9.2 ~mpi ^hdf5@1.14.5~mpi
-    - netcdf-c@4.9.0 ~mpi ^hdf5@1.14.4-3~mpi
-    - netcdf-fortran@4.6.2 ^netcdf-c@4.9.3~mpi
-    - netcdf-fortran@4.6.1 ^netcdf-c@4.9.2~mpi
-    - netcdf-fortran@4.6.0 ^netcdf-c@4.9.0~mpi
-    - netcdf-cxx4@4.3.1 ^netcdf-c@4.9.3~mpi
+    - netcdf-fortran@4.6.2 ^netcdf-c@4.10.0~mpi
+    - netcdf-fortran@4.6.1 ^netcdf-c@4.9.3~mpi
+    - netcdf-fortran@4.6.0 ^netcdf-c@4.9.2~mpi
+    - netcdf-cxx4@4.3.1 ^netcdf-c@4.10.0~mpi
+    - fftw@3.3.11 ~mpi
     - fftw@3.3.10 ~mpi
     - fftw@3.3.9 ~mpi
-    - fftw@3.3.8 ~mpi
+    - boost@1.90.0 ~mpi
+    - boost@1.89.0 ~mpi
     - boost@1.88.0 ~mpi
-    - boost@1.87.0 ~mpi
-    - boost@1.86.0 ~mpi
     # only-serial but compiler/performance-sensitive, so payload not core
+    - openblas@0.3.33
+    - openblas@0.3.32
     - openblas@0.3.30
-    - openblas@0.3.29
-    - openblas@0.3.28
     # reference LAPACK alongside openblas's — flagged for team review
     - netlib-lapack@3.12.1
     - netlib-lapack@3.12.0
@@ -40,27 +40,27 @@ specs:
     - gnuplot@5.4.10
     - gnuplot@5.4.3
   mpi:
+    - hdf5@2.1.0 +mpi +fortran +cxx +hl
     - hdf5@1.14.6 +mpi +fortran +cxx +hl
     - hdf5@1.14.5 +mpi +fortran +cxx +hl
-    - hdf5@1.14.4-3 +mpi +fortran +cxx +hl
+    - netcdf-c@4.10.0 +mpi +parallel-netcdf ^hdf5@2.1.0+mpi
     - netcdf-c@4.9.3 +mpi +parallel-netcdf ^hdf5@1.14.6+mpi
     - netcdf-c@4.9.2 +mpi +parallel-netcdf ^hdf5@1.14.5+mpi
-    - netcdf-c@4.9.0 +mpi +parallel-netcdf ^hdf5@1.14.4-3+mpi
-    - netcdf-fortran@4.6.2 ^netcdf-c@4.9.3+mpi
-    - netcdf-fortran@4.6.1 ^netcdf-c@4.9.2+mpi
-    - netcdf-fortran@4.6.0 ^netcdf-c@4.9.0+mpi
-    - netcdf-cxx4@4.3.1 ^netcdf-c@4.9.3+mpi
+    - netcdf-fortran@4.6.2 ^netcdf-c@4.10.0+mpi
+    - netcdf-fortran@4.6.1 ^netcdf-c@4.9.3+mpi
+    - netcdf-fortran@4.6.0 ^netcdf-c@4.9.2+mpi
+    - netcdf-cxx4@4.3.1 ^netcdf-c@4.10.0+mpi
+    - fftw@3.3.11 +mpi
     - fftw@3.3.10 +mpi
     - fftw@3.3.9 +mpi
-    - fftw@3.3.8 +mpi
+    - tau@2.35.1 +mpi
     - tau@2.35 +mpi
-    - tau@2.34.1 +mpi
-    - dakota@6.20.0 +mpi
-    - dakota@6.19.0 +mpi
+    - dakota@6.24.0 +mpi
+    - dakota@6.23.0 +mpi
   gpu:
     # +gpu expands per lane: +rocm amdgpu_target=<arch> or +cuda cuda_arch=<n>
-    - kokkos@4.7.01 +gpu
-    - kokkos@4.7.00 +gpu
+    - kokkos@5.1.1 +gpu
+    - kokkos@5.1.0 +gpu
 
 provenance_hints:
   cray-mpich: Platform-backed
@@ -70,11 +70,14 @@ provenance_hints:
 notes: |
   Roster from the 2026-07 usage list plus tau and kokkos. openmpi,
   cray-mpich, and openssl are system externals, never built. Versions are
-  pinned against the recipe generation the deployed Spack uses — Spack
-  v1.1.1 pins spack-packages releases/v2025.11 (== v2025.11.0); when the
-  deployed Spack moves, re-pin against its recipe generation. netcdf-cxx4
-  has exactly one recipe version; it rides the newest netcdf chain only.
-  netcdf-c has no 4.9.1 recipe, so the third chain pairs 4.9.0 with
-  hdf5 1.14.4-3. dakota carries two versions (heaviest build in the
-  roster). No target optimization this pass: lanes build at the portable
-  baseline.
+  pinned against the recipe generation declared in defaults
+  spack.package_repo (spack-packages v2026.06.0, Package API v2.2,
+  compatible with Spack v1.1.1); when the generation pin moves, re-pin
+  this roster with it. netcdf-cxx4 has exactly one recipe version and
+  rides the newest netcdf chain. The newest three netcdf-c versions carry
+  no hdf5 upper bound, so each chain pairs newest-with-newest. hdf5 2.1.0
+  is the literal newest; the recipes mark 1.14.6 preferred — if 2.1.0
+  misbehaves on-system, the 1.14.x chains stand alone. dakota carries two
+  versions (heaviest build; 6.24.0 fetches a tarball while 6.23.0 uses
+  git refs with submodules — watch the first fetch). No target
+  optimization this pass: lanes build at the portable baseline.
