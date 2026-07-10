@@ -15,33 +15,34 @@ specs:
     - xz@5.4.6
     - zstd@1.5.6
     # core tools — user-loadable, compiler-agnostic building blocks
-    - cmake@4.3.3
-    - cmake@4.2.3
-    - cmake@4.1.5
+    - cmake@4.1.2
+    - cmake@4.1.1
+    - cmake@4.0.4
     - ninja
     - pkgconf
     - git
-    - python@3.14.5
-    - python@3.13.13
-    - python@3.12.13
-    - py-numpy@2.5.1 ^python@3.14.5
-    - py-numpy@2.5.1 ^python@3.13.13
-    - py-numpy@2.5.1 ^python@3.12.13
-    - py-numpy@2.4.6 ^python@3.13.13
-    - miniforge3@26.3.2-3
+    - python@3.14.0
+    - python@3.13.8
+    - python@3.12.12
+    - py-numpy@2.3.4 ^python@3.14.0
+    - py-numpy@2.3.4 ^python@3.13.8
+    - py-numpy@2.3.4 ^python@3.12.12
+    - py-numpy@2.3.3 ^python@3.13.8
+    - miniforge3@25.3.0-3
     # only-serial by nature (no MPI implementation exists)
     - gsl@2.8
     - gsl@2.7.1
     - gsl@2.7
-    - sqlite@3.53.1
-    - sqlite@3.51.2
     - sqlite@3.50.4
+    - sqlite@3.50.2
+    - sqlite@3.46.0
 
 notes: |
-  Version policy (2026-07-09): three versions where the Spack recipes carry
-  them, minimum the latest two; miniforge3 is single-version by nature.
-  Versions verified against the Spack builtin package recipes (develop);
-  a system's pinned Spack may carry slightly older recipe sets — a missing
-  version fails concretize loudly and is a one-line adjustment here.
-  Core membership rule: only-serial by nature (gsl, sqlite) or a
-  compiler-agnostic building block (python, miniforge, cmake).
+  Version policy: three versions where the recipe generation carries them,
+  minimum the latest two; miniforge3 is single-version by nature. Versions
+  pinned against the recipe generation the deployed Spack uses —
+  Spack v1.1.1 pins spack-packages releases/v2025.11 (== v2025.11.0).
+  When the deployed Spack moves, re-pin this roster against its recipe
+  generation; a missing version fails concretize loudly and is a one-line
+  adjustment here. Core membership rule: only-serial by nature (gsl,
+  sqlite) or a compiler-agnostic building block (python, miniforge, cmake).
