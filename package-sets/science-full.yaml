@@ -2,54 +2,82 @@ schema_version: 1
 name: science-full
 tier: canonical
 description: |
-  Full curated science library set, two versions per package (cse-stack
-  lineage): HDF5/NetCDF serial+MPI cross-products, FFTW, OpenBLAS, Boost,
-  TAU, and Kokkos for GPU lanes.
+  Full curated science library set, up to three versions per package:
+  HDF5/NetCDF serial+MPI cross-products, FFTW, OpenBLAS, LAPACK, Boost,
+  Gnuplot, TAU, Dakota, and Kokkos for GPU lanes.
 
-kinds: [cpu, mpi, gpu]
+kinds: [serial, mpi, gpu]
 
 specs:
-  cpu:
+  serial:
     # serial = MPI-capable packages deliberately built without MPI
+    - hdf5@2.1.0 ~mpi +fortran +cxx +hl
     - hdf5@1.14.6 ~mpi +fortran +cxx +hl
     - hdf5@1.14.5 ~mpi +fortran +cxx +hl
+    - netcdf-c@4.10.0 ~mpi ^hdf5@2.1.0~mpi
     - netcdf-c@4.9.3 ~mpi ^hdf5@1.14.6~mpi
     - netcdf-c@4.9.2 ~mpi ^hdf5@1.14.5~mpi
-    - netcdf-fortran@4.6.2 ^netcdf-c@4.9.3~mpi
-    - netcdf-fortran@4.6.1 ^netcdf-c@4.9.2~mpi
-    - netcdf-cxx4@4.3.1 ^netcdf-c@4.9.3~mpi
+    - netcdf-fortran@4.6.2 ^netcdf-c@4.10.0~mpi
+    - netcdf-fortran@4.6.1 ^netcdf-c@4.9.3~mpi
+    - netcdf-fortran@4.6.0 ^netcdf-c@4.9.2~mpi
+    - netcdf-cxx4@4.3.1 ^netcdf-c@4.10.0~mpi
+    - fftw@3.3.11 ~mpi
     - fftw@3.3.10 ~mpi
     - fftw@3.3.9 ~mpi
+    - boost@1.90.0 ~mpi
+    - boost@1.89.0 ~mpi
     - boost@1.88.0 ~mpi
-    - boost@1.87.0 ~mpi
     # only-serial but compiler/performance-sensitive, so payload not core
+    - openblas@0.3.33
+    - openblas@0.3.32
     - openblas@0.3.30
-    - openblas@0.3.29
+    # reference LAPACK alongside openblas's — flagged for team review
+    - netlib-lapack@3.12.1
+    - netlib-lapack@3.12.0
+    - netlib-lapack@3.11.0
     # only-serial user tool; placement flagged for team review (core vs serial)
     - gnuplot@6.0.0
     - gnuplot@5.4.10
+    - gnuplot@5.4.3
   mpi:
+    - hdf5@2.1.0 +mpi +fortran +cxx +hl
     - hdf5@1.14.6 +mpi +fortran +cxx +hl
     - hdf5@1.14.5 +mpi +fortran +cxx +hl
+    - netcdf-c@4.10.0 +mpi +parallel-netcdf ^hdf5@2.1.0+mpi
     - netcdf-c@4.9.3 +mpi +parallel-netcdf ^hdf5@1.14.6+mpi
     - netcdf-c@4.9.2 +mpi +parallel-netcdf ^hdf5@1.14.5+mpi
-    - netcdf-fortran@4.6.2 ^netcdf-c@4.9.3+mpi
-    - netcdf-fortran@4.6.1 ^netcdf-c@4.9.2+mpi
-    - netcdf-cxx4@4.3.1 ^netcdf-c@4.9.3+mpi
+    - netcdf-fortran@4.6.2 ^netcdf-c@4.10.0+mpi
+    - netcdf-fortran@4.6.1 ^netcdf-c@4.9.3+mpi
+    - netcdf-fortran@4.6.0 ^netcdf-c@4.9.2+mpi
+    - netcdf-cxx4@4.3.1 ^netcdf-c@4.10.0+mpi
+    - fftw@3.3.11 +mpi
     - fftw@3.3.10 +mpi
     - fftw@3.3.9 +mpi
-    - tau +mpi
+    - tau@2.35.2 +mpi
+    - tau@2.35.1 +mpi
+    - dakota@6.24.0 +mpi
+    - dakota@6.23.0 +mpi
   gpu:
     # +gpu expands per lane: +rocm amdgpu_target=<arch> or +cuda cuda_arch=<n>
-    - kokkos +gpu
+    - kokkos@5.1.1 +gpu
+    - kokkos@5.1.0 +gpu
 
 provenance_hints:
   cray-mpich: Platform-backed
+  openmpi:    Site-external
   openssl:    Site-external
 
 notes: |
-  Versions carried from cse-stack package-sets/science-full.yaml (two per
-  package, the settled working target; three was aspirational). TAU is
-  unversioned until the first concretize pins it. raja deferred (v6 listed it;
-  not confirmed for run one). Kokkos GPU arch comes from the lane via the
-  +gpu placeholder, keeping this set vendor-neutral across AMD/NVIDIA systems.
+  Roster from the 2026-07 usage list (hdf5, netcdf, openmpi, netcdf_cxx4,
+  miniforge3, lapack, gnuplot, netcdf_fortran, openssl, sqlite, gsl, cmake,
+  fftw, boost, dakota, python3) plus tau and kokkos. openmpi/cray-mpich and
+  openssl are system externals, never built. netcdf-cxx4 has exactly one
+  recipe version; it rides the newest netcdf chain only. dakota carries two
+  versions, not three: it is by far the heaviest build here (large
+  Boost-anchored tree) and 6.22.0's recipe pins git refs — add it later if
+  the team wants it. hdf5 2.1.0 is a new major series; the netcdf recipes
+  accept it, but if it misbehaves on-system, drop to 1.14.x pairs first.
+  Versions verified against Spack builtin recipes (develop); a system's
+  pinned Spack may carry older recipe sets — a missing version fails
+  concretize loudly and is a one-line adjustment here. No target
+  optimization this pass: lanes build at the portable baseline.
