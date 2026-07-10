@@ -35,8 +35,7 @@ externals:
 modules:
   format: tcl
   exposure: front_door
-  init_module: science_init
-  module_root: science
+  module_root: cse
   hierarchy_style: collapsed
   expose_provenance: true
   platform_module_policy: prereq
