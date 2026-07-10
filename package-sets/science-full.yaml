@@ -17,10 +17,10 @@ specs:
     - netcdf-c@4.10.0 ~mpi ^hdf5@2.1.0~mpi
     - netcdf-c@4.9.3 ~mpi ^hdf5@1.14.6~mpi
     - netcdf-c@4.9.2 ~mpi ^hdf5@1.14.5~mpi
-    - netcdf-fortran@4.6.2 ^netcdf-c@4.10.0~mpi
-    - netcdf-fortran@4.6.1 ^netcdf-c@4.9.3~mpi
-    - netcdf-fortran@4.6.0 ^netcdf-c@4.9.2~mpi
-    - netcdf-cxx4@4.3.1 ^netcdf-c@4.10.0~mpi
+    - netcdf-fortran@4.6.2 ^netcdf-c@4.10.0~mpi ^hdf5@2.1.0~mpi
+    - netcdf-fortran@4.6.1 ^netcdf-c@4.9.3~mpi ^hdf5@1.14.6~mpi
+    - netcdf-fortran@4.6.0 ^netcdf-c@4.9.2~mpi ^hdf5@1.14.5~mpi
+    - netcdf-cxx4@4.3.1 ^netcdf-c@4.10.0~mpi ^hdf5@2.1.0~mpi
     - fftw@3.3.11 ~mpi
     - fftw@3.3.10 ~mpi
     - fftw@3.3.9 ~mpi
@@ -46,10 +46,10 @@ specs:
     - netcdf-c@4.10.0 +mpi +parallel-netcdf ^hdf5@2.1.0+mpi
     - netcdf-c@4.9.3 +mpi +parallel-netcdf ^hdf5@1.14.6+mpi
     - netcdf-c@4.9.2 +mpi +parallel-netcdf ^hdf5@1.14.5+mpi
-    - netcdf-fortran@4.6.2 ^netcdf-c@4.10.0+mpi
-    - netcdf-fortran@4.6.1 ^netcdf-c@4.9.3+mpi
-    - netcdf-fortran@4.6.0 ^netcdf-c@4.9.2+mpi
-    - netcdf-cxx4@4.3.1 ^netcdf-c@4.10.0+mpi
+    - netcdf-fortran@4.6.2 ^netcdf-c@4.10.0+mpi ^hdf5@2.1.0+mpi
+    - netcdf-fortran@4.6.1 ^netcdf-c@4.9.3+mpi ^hdf5@1.14.6+mpi
+    - netcdf-fortran@4.6.0 ^netcdf-c@4.9.2+mpi ^hdf5@1.14.5+mpi
+    - netcdf-cxx4@4.3.1 ^netcdf-c@4.10.0+mpi ^hdf5@2.1.0+mpi
     - fftw@3.3.11 +mpi
     - fftw@3.3.10 +mpi
     - fftw@3.3.9 +mpi

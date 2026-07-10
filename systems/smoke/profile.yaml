@@ -11,45 +11,54 @@ os:
 fabric:
   type: ethernet
   drivers: []
+  userspace:
+    - name: libfabric
+      version: "2.3.1"
+      prefix: /usr
+    - name: ucx
+      version: "1.19.1"
+      prefix: /usr
 modules_system:
   tool: lmod
-  version: 8.7.65
-system_externals:
-  - name: openssl
-    version: 3.0.7
-    prefix: /usr
-    provider_family: system
-    variants: +shared
-    detection:
-      confidence: probed
-      source: smoke fixture
-  - name: curl
-    version: 8.7.1
-    prefix: /usr
-    provider_family: system
-    detection:
-      confidence: probed
-      source: smoke fixture
+  version: "8.7.65"
 compiler_providers:
   - name: gcc
-    version: 11.5.0
+    version: "11.5.0"
     prefix: /usr
     provider_family: system
     languages:
       - c
       - c++
       - fortran
-mpi_providers: []
+mpi_providers:
+  - name: openmpi
+    version: "4.1.1"
+    provider_family: system
+    prefix: /usr/lib64/openmpi
+    modules:
+      - mpi/openmpi-x86_64
+gpu_toolkit_modules: {}
+system_externals:
+  - name: openssl
+    version: "3.5.5"
+    prefix: /usr
+    provider_family: system
+    detection:
+      confidence: probed
+      source: openssl version
+  - name: curl
+    version: "7.76.1"
+    prefix: /usr
+    provider_family: system
+    detection:
+      confidence: probed
+      source: curl --version
 filesystem:
   install_tree_candidates:
     - path: /shared/stack/spack/opt
       type: fakeowner
       locks_honored: true
-      free_gb: 13
-    - path: /opt/spack/opt
-      type: overlay
-      locks_honored: false
-      free_gb: 28
+      free_gb: 126
   source_cache_candidate: /shared/stack/spack/source-cache
   buildcache_candidate: /shared/stack/buildcache
 node_types:
@@ -67,8 +76,8 @@ node_types:
       - path: /tmp
         visibility: node-local
         writable: true
-        free_gb: 28
-        free_inodes: 6586023
+        free_gb: 26
+        free_inodes: 6546184
         mount_opts:
           - relatime
           - rw
@@ -76,8 +85,8 @@ node_types:
       - path: /var/tmp
         visibility: node-local
         writable: true
-        free_gb: 28
-        free_inodes: 6586021
+        free_gb: 26
+        free_inodes: 6546182
         mount_opts:
           - relatime
           - rw
