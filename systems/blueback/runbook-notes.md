@@ -426,3 +426,39 @@ per-package opt-in; OSU/Kokkos never opted in — see
 - `node_types[0]` cpu asymmetry — confirm one portable `x86_64_v3` build is
   acceptable across all CPU partitions (else per-uarch native cpu fan-out is the
   follow-up model change).
+
+## Science run (2026-07-10 — blueback-science, current procedure)
+
+Everything below assumes `git pull` in stack-composer, stack-content, and
+cluster-inspector first, and a **rebuilt inspector binary + composer pyz** —
+stale artifacts caused two false failures in the container; assume nothing.
+
+1. Re-probe with the current inspector (it now takes MPI versions from the
+   driver's own report and rejects ride-along compiler modules). Verify:
+   PASS schema + semantic; cray-mpich with per-compiler flavors; gcc from
+   PrgEnv-gnu; rocm generations listed under gpu_toolkit_modules.
+2. Validate + render `stacks/blueback-science/stack.yaml`. Expect four gcc
+   lanes: core, serial, mpi-craympich, gpu-craympich-gfx942. Any skipped
+   build prints its reason; GPU toolkit warnings mean the profile lost the
+   rocm facts — stop and fix the fact sheet.
+3. Oracle checks before building:
+   - `configs/common/repos.yaml` pins builtin to the recipe generation from
+     defaults (`spack-packages` tag v2026.06.0).
+   - `configs/mpi/cray-mpich/{packages,toolchains}.yaml`: externals at real
+     `/opt/cray/pe/mpich/...` flavor prefixes; toolchain names versioned.
+   - `configs/gpu/amd-rocm/packages.yaml`: hip etc. buildable false at real
+     /opt/rocm prefixes.
+4. Concretize every lane before any install. Gates:
+   - externals used, never fetched (cray-mpich, rocm, openssl);
+   - serial lane lockfile has **zero MPI nodes** (grep the lock — purity is
+     checked in the lock, never assumed);
+   - each netcdf chain resolves exactly its pinned hdf5; three pythons,
+     not six, in core.
+5. Install lanes (independent, parallelizable), regenerate views/modules.
+6. Front-door check (first real test of the naming): `module load cse/GCC`
+   → core tools appear; then exactly one of Serial / MPI / GPU; loading a
+   second lane must fail loudly. `module whatis` shows provenance.
+7. Runtime: GPU-aware MPI still uses the run #1 LD_PRELOAD workaround (see
+   section above) until the GTL packaging work lands.
+8. Commit the refreshed profile.yaml (and this file's findings) back to
+   systems/blueback/.
