@@ -1,8 +1,9 @@
-# Smoke Runbook Notes
+# Local Smoke Fixture Notes
 
-Per-system instance of `stack-planning/docs/runbook.md` for real-system smoke
-tests. Use this directory as the starting point for a new target system, then
-copy it to the actual system name.
+This file records the reusable local/generic-Linux smoke fixture. It is not the
+per-system notes template. For a new target system, copy
+`systems/_template/runbook-notes.md`, then use
+`stack-planning/docs/runbook.md` for the common procedure.
 
 The goal is to prove the common path on Cray, generic Linux/Penguin-style
 systems, and future vendor platforms:

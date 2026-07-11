@@ -14,7 +14,7 @@ memory). Mixed topology: CPU-only partitions **and** APU partitions.
 
 | kind | package(s) | proves |
 |---|---|---|
-| cpu (serial) | `cmake` | foundation/core + serial path |
+| serial | `cmake` | foundation/core + serial path |
 | mpi | `osu-micro-benchmarks`, `hdf5 +mpi` | `cray-mpich` |
 | gpu | `kokkos +rocm` (gfx942) over GPU-aware `cray-mpich` | rocm/gfx942 + GPU-aware MPI |
 
@@ -296,10 +296,10 @@ $WORKSPACE/reports/
    compiler-init and lane modulefiles. Spack still generates package modulefiles
    (`spack -e <env> module tcl refresh`). For run #1, inspect the rendered
    lane prereqs and use Spack-generated package modules or the view.
-3. **Module loading is a compiler-init → lane → package chain.** The compiler
-   init module, e.g. `science_init_gcc`, exposes the GCC foundation/core view
+3. **Module loading is a compiler-surface → lane → package chain.** The compiler
+   surface module, `cse/GCC`, exposes the GCC foundation/core view
    and makes the GCC lane modules visible. The user then loads one lane module,
-   e.g. `science/mpi`, which prereqs the platform modules and prepends only that
+   e.g. `cse/GCC/MPI`, which prereqs the platform modules and prepends only that
    lane's package-module root. Do not expose all lane package roots at once from
    the init module.
 
