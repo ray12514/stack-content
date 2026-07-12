@@ -25,17 +25,24 @@ spack:
       share/man: [MANPATH]
       '.': [CMAKE_PREFIX_PATH]
     default:
-      enable: [tcl]
+      enable:
+{% for format in module_formats %}
+        - {{ format }}
+{% endfor %}
       use_view: cse_modules
       roots:
-        tcl: {{ lane.package_module_root }}
-      tcl:
+{% for format in module_formats %}
+        {{ format }}: {{ lane.package_module_root }}
+{% endfor %}
+{% for format in module_formats %}
+      {{ format }}:
         hash_length: 0
         exclude_implicits: true
         projections:
           all: '{name}/{version}'
         all:
           autoload: none
+{% endfor %}
   include:
 {% for scope in scopes %}
     - {{ scope }}
