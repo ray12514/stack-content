@@ -36,6 +36,9 @@ platform acceptance checklist from `stack-planning/docs/`.
 - View root:
 - Module root and publish root:
 - Buildcache destination:
+- Collaboration group:
+- Package/publication read audience (`group` or `world`):
+- Package write audience (`user` or `group`):
 
 ## System-specific commands
 
@@ -51,6 +54,8 @@ commands that differ from the canonical runbook.
 - [ ] Serial lockfile contains no MPI implementation
 - [ ] System-provided externals are used rather than fetched
 - [ ] Install, view, and module generation complete
+- [ ] Rendered `packages.yaml` contains the approved package permissions
+- [ ] Another collaboration-group member can read the release from login and compute nodes
 - [ ] `cse/<Compiler>` exposes core plus lane selectors
 - [ ] Loading a second conflicting lane fails
 - [ ] Representative serial, MPI, and GPU runtime tests pass

@@ -1,6 +1,41 @@
 # Rendered by {{ renderer_identity.name }} {{ renderer_identity.version }}
 spack:
-  view: {{ view_root }}
+  view:
+    default:
+      root: {{ view_root }}
+      link_type: symlink
+    cse_modules:
+      root: {{ module_view_root }}
+      link: all
+      link_type: symlink
+      projections:
+{% for name in view_projection_names %}
+        {{ name }}: '{name}/{version}'
+{% endfor %}
+        all: '{name}/{version}-{hash:7}'
+  modules:
+    prefix_inspections:
+      bin: [PATH]
+      lib: [LD_LIBRARY_PATH]
+      lib64: [LD_LIBRARY_PATH]
+      include: [CPATH]
+      lib/pkgconfig: [PKG_CONFIG_PATH]
+      lib64/pkgconfig: [PKG_CONFIG_PATH]
+      share/pkgconfig: [PKG_CONFIG_PATH]
+      share/man: [MANPATH]
+      '.': [CMAKE_PREFIX_PATH]
+    default:
+      enable: [tcl]
+      use_view: cse_modules
+      roots:
+        tcl: {{ lane.package_module_root }}
+      tcl:
+        hash_length: 0
+        exclude_implicits: true
+        projections:
+          all: '{name}/{version}'
+        all:
+          autoload: none
   include:
 {% for scope in scopes %}
     - {{ scope }}

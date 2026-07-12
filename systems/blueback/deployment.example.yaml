@@ -3,6 +3,10 @@
 # these from cluster-inspector output; the profile only reports candidates.
 schema_version: 1
 system: blueback
+access:
+  group: cse
+  read: group
+  write: group
 
 install_tree:
   root: /PATH/TO/SHARED/stack/spack/opt

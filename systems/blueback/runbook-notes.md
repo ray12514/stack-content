@@ -123,9 +123,15 @@ with the approved shared install/cache/buildcache roots before publishing any
 real stack.
 
 ```bash
+export STACK_GROUP="${STACK_GROUP:-cse}"
+
 cat > "$BLUEBACK/deployment.yaml" <<EOF
 schema_version: 1
 system: blueback
+access:
+  group: $STACK_GROUP
+  read: group
+  write: group
 
 install_tree:
   root: $WORK_ROOT/install/spack/opt

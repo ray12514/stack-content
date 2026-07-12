@@ -1,6 +1,10 @@
 # Rendered for {{ profile.system.name }} / {{ stack.name }}
 packages:
   all:
+    permissions:
+      group: {{ deployment.access.group }}
+      read: {{ deployment.access.read }}
+      write: {{ deployment.access.write }}
 {% if common_plan.default_mpi_provider %}
     providers:
       mpi: [{{ common_plan.default_mpi_provider }}]

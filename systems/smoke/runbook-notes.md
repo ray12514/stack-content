@@ -222,9 +222,15 @@ Create `deployment.yaml` from the selected test roots. These are installer-owned
 paths, not discovered facts.
 
 ```bash
+export STACK_GROUP="${STACK_GROUP:-cse}"
+
 cat > "$SYSTEM_DIR/deployment.yaml" <<EOF
 schema_version: 1
 system: $SYSTEM_NAME
+access:
+  group: $STACK_GROUP
+  read: group
+  write: group
 
 install_tree:
   root: $WORK_ROOT/install/spack/opt

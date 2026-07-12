@@ -3,6 +3,10 @@
 # docs/deployment_inputs_and_ownership_v1.md for the field contract.
 schema_version: 1
 system: smoke                          # must match profile.system.name
+access:
+  group: spack                         # group present in the smoke image
+  read: group
+  write: group
 
 install_tree:
   root: /shared/stack/spack/opt        # chosen from profile.filesystem.install_tree_candidates

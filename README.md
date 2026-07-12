@@ -26,12 +26,14 @@ package-sets/*.yaml              # curated Spack spec sets a stack can reference
 package-repos/<name>/            # optional Spack package repositories
 stacks/<stack>/stack.yaml        # package intent (spec-native: name + specs [+ kind])
 systems/<system>/profile.yaml    # observed facts from cluster-inspector (tracked per system)
-systems/<system>/deployment.yaml # installer-chosen roots (install tree, caches, view/module, spack root)
+systems/<system>/deployment.yaml # installer-chosen roots and shared access policy
 ```
 
 `deployment.yaml` is required for render. It owns install tree, build-stage,
-cache, view-root, module-root, and buildcache destination choices for that
-system.
+cache, view-root, module-root, buildcache destination, Spack root, and shared
+access choices for that system. Stack Composer maps `access` to Spack package
+permissions; the build/publish path applies the same policy to non-package
+artifacts.
 
 ## Two trees — what's authored vs what's generated
 
