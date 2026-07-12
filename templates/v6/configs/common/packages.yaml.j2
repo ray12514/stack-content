@@ -18,13 +18,6 @@ packages:
 {% for external in package.externals %}
       - spec: "{{ external.spec }}"
         prefix: {{ external.prefix }}
-{% if external.modules %}
-        modules:
-{% for module in external.modules %}
-          - {{ module }}
-{% endfor %}
-{% else %}
-        modules: []
-{% endif %}
+        modules: {{ external.modules | yaml_flow }}
 {% endfor %}
 {% endfor %}

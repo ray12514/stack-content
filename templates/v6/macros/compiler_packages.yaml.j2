@@ -1,21 +1,14 @@
 {% macro compiler_packages(target_scope) -%}
 # Rendered for {{ profile.system.name }} / compiler externals (from compiler_providers)
 packages:
-{% for package in compiler_plan.get(target_scope) or [] %}
+{% for package in compiler_plan[target_scope] %}
   {{ package.name }}:
     buildable: {{ package.buildable | lower }}
     externals:
 {% for external in package.externals %}
       - spec: "{{ external.spec }}"
         prefix: {{ external.prefix }}
-{% if external.modules %}
-        modules:
-{% for module in external.modules %}
-          - {{ module }}
-{% endfor %}
-{% else %}
-        modules: []
-{% endif %}
+        modules: {{ external.modules | yaml_flow }}
 {% if external.get("extra_attributes") %}
         extra_attributes:
           compilers:

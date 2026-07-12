@@ -1,6 +1,6 @@
 # Rendered for {{ profile.system.name }} / OpenMPI toolchains (from mpi_providers)
 toolchains:
-{% for toolchain in (mpi_plan.get("openmpi") or {}).get("toolchains") or [] %}
+{% for toolchain in mpi_plan["openmpi"].toolchains %}
   {{ toolchain.name }}:
 {% for entry in toolchain.entries %}
     - spec: "{{ entry.spec }}"

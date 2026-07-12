@@ -4,7 +4,7 @@ packages:
     buildable: false
     require:
       - cray-mpich
-{% for package in (mpi_plan.get("cray-mpich") or {}).get("packages") or [] %}
+{% for package in mpi_plan["cray-mpich"].packages %}
   {{ package.name }}:
     buildable: {{ package.buildable | lower }}
 {% if package.get("variants") %}
@@ -14,13 +14,6 @@ packages:
 {% for external in package.externals %}
       - spec: "{{ external.spec }}"
         prefix: {{ external.prefix }}
-{% if external.modules %}
-        modules:
-{% for module in external.modules %}
-          - {{ module }}
-{% endfor %}
-{% else %}
-        modules: []
-{% endif %}
+        modules: {{ external.modules | yaml_flow }}
 {% endfor %}
 {% endfor %}
