@@ -1,18 +1,1 @@
-{%- set spack_cfg = stack.get('spack') or {} -%}
-{%- set pin = spack_cfg.get('package_repo') -%}
-{%- if pin or package_repos -%}
-repos:
-{% if pin %}  builtin:
-    git: {{ pin.get('git') }}
-{% if pin.get('tag') %}    tag: {{ pin.get('tag') }}
-{% endif -%}
-{% if pin.get('commit') %}    commit: {{ pin.get('commit') }}
-{% endif -%}
-{% if pin.get('branch') %}    branch: {{ pin.get('branch') }}
-{% endif -%}
-{% endif -%}
-{% for repo in package_repos %}  {{ repo.name }}: {{ path_join('..', '..', 'package-repos', repo.name) }}
-{% endfor -%}
-{%- else -%}
-repos: {}
-{% endif -%}
+{{ {"repos": common_plan.repos} | to_yaml }}
