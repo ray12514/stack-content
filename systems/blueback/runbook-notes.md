@@ -305,7 +305,7 @@ $WORKSPACE/reports/
 3. **Module loading is a compiler-surface → lane → package chain.** The compiler
    surface module, `cse/GCC`, exposes the GCC foundation/core view
    and makes the GCC lane modules visible. The user then loads one lane module,
-   e.g. `cse/GCC/MPI`, which prereqs the platform modules and prepends only that
+   e.g. `MPI` after loading `cse/GCC`; it prereqs the platform modules and prepends only that
    lane's package-module root. Do not expose all lane package roots at once from
    the init module.
 
