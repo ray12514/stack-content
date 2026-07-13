@@ -2,8 +2,8 @@ schema_version: 1
 name: science-full
 tier: canonical
 description: |
-  Full curated science library set, up to three versions per package:
-  HDF5/NetCDF serial+MPI cross-products, FFTW, OpenBLAS, LAPACK, Boost,
+  Full curated science library set, up to two versions per package:
+  HDF5/NetCDF/FFTW/Boost serial+MPI dual builds, OpenBLAS, LAPACK,
   Gnuplot, TAU, Dakota, and Kokkos for GPU lanes.
 
 kinds: [serial, mpi, gpu]
@@ -13,46 +13,37 @@ specs:
     # serial = MPI-capable packages deliberately built without MPI
     - hdf5@2.1.0 ~mpi +fortran +cxx +hl
     - hdf5@1.14.6 ~mpi +fortran +cxx +hl
-    - hdf5@1.14.5 ~mpi +fortran +cxx +hl
     - netcdf-c@4.10.0 ~mpi ^hdf5@2.1.0~mpi
     - netcdf-c@4.9.3 ~mpi ^hdf5@1.14.6~mpi
-    - netcdf-c@4.9.2 ~mpi ^hdf5@1.14.5~mpi
     - netcdf-fortran@4.6.2 ^netcdf-c@4.10.0~mpi ^hdf5@2.1.0~mpi
     - netcdf-fortran@4.6.1 ^netcdf-c@4.9.3~mpi ^hdf5@1.14.6~mpi
-    - netcdf-fortran@4.6.0 ^netcdf-c@4.9.2~mpi ^hdf5@1.14.5~mpi
     - netcdf-cxx4@4.3.1 ^netcdf-c@4.10.0~mpi ^hdf5@2.1.0~mpi
     - fftw@3.3.11 ~mpi
     - fftw@3.3.10 ~mpi
-    - fftw@3.3.9 ~mpi
     - boost@1.90.0 ~mpi
     - boost@1.89.0 ~mpi
-    - boost@1.88.0 ~mpi
     # only-serial but compiler/performance-sensitive, so payload not core
     - openblas@0.3.33
     - openblas@0.3.32
-    - openblas@0.3.30
     # reference LAPACK alongside openblas's — flagged for team review
     - netlib-lapack@3.12.1
     - netlib-lapack@3.12.0
-    - netlib-lapack@3.11.0
-    # only-serial user tool; placement flagged for team review (core vs serial)
+    # user tool; payload not core — needs the surface's compiler for
+    # library compatibility (decided 2026-07-13)
     - gnuplot@6.0.0
     - gnuplot@5.4.10
-    - gnuplot@5.4.3
   mpi:
     - hdf5@2.1.0 +mpi +fortran +cxx +hl
     - hdf5@1.14.6 +mpi +fortran +cxx +hl
-    - hdf5@1.14.5 +mpi +fortran +cxx +hl
     - netcdf-c@4.10.0 +mpi +parallel-netcdf ^hdf5@2.1.0+mpi
     - netcdf-c@4.9.3 +mpi +parallel-netcdf ^hdf5@1.14.6+mpi
-    - netcdf-c@4.9.2 +mpi +parallel-netcdf ^hdf5@1.14.5+mpi
     - netcdf-fortran@4.6.2 ^netcdf-c@4.10.0+mpi ^hdf5@2.1.0+mpi
     - netcdf-fortran@4.6.1 ^netcdf-c@4.9.3+mpi ^hdf5@1.14.6+mpi
-    - netcdf-fortran@4.6.0 ^netcdf-c@4.9.2+mpi ^hdf5@1.14.5+mpi
     - netcdf-cxx4@4.3.1 ^netcdf-c@4.10.0+mpi ^hdf5@2.1.0+mpi
     - fftw@3.3.11 +mpi
     - fftw@3.3.10 +mpi
-    - fftw@3.3.9 +mpi
+    - boost@1.90.0 +mpi
+    - boost@1.89.0 +mpi
     - tau@2.35.1 +mpi
     - tau@2.35 +mpi
     - dakota@6.24.0 +mpi
@@ -62,22 +53,32 @@ specs:
     - kokkos@5.1.1 +gpu
     - kokkos@5.1.0 +gpu
 
+# One serial-lane build, module-exposed in every payload lane of the compiler
+# column (serial/MPI/GPU). Membership test: exactly one MPI-less build in the
+# stack (no MPI implementation exists) AND not compiler-agnostic (so not
+# Core). boost left this list 2026-07-13: it is MPI-capable, so it is
+# dual-build (~mpi in serial, +mpi in mpi) like hdf5/fftw.
+lane_agnostic: [gnuplot, netlib-lapack, openblas]
+
 provenance_hints:
   cray-mpich: Platform-backed
   openmpi:    Site-external
   openssl:    Site-external
 
 notes: |
-  Roster from the 2026-07 usage list plus tau and kokkos. openmpi,
+  Roster from the 2026-07 usage list plus tau and kokkos. The lane_agnostic
+  packages build once in the serial lane; MPI and GPU users load the same
+  modules through the per-compiler shared module root (openblas/lapack are
+  node-local dense linear algebra every lane links). openmpi,
   cray-mpich, and openssl are system externals, never built. Versions are
   pinned against the recipe generation declared in defaults
   spack.package_repo (spack-packages v2026.06.0, Package API v2.2,
   compatible with Spack v1.1.1); when the generation pin moves, re-pin
   this roster with it. netcdf-cxx4 has exactly one recipe version and
-  rides the newest netcdf chain. The newest three netcdf-c versions carry
+  rides the newest netcdf chain. The newest two netcdf-c versions carry
   no hdf5 upper bound, so each chain pairs newest-with-newest. hdf5 2.1.0
   is the literal newest; the recipes mark 1.14.6 preferred — if 2.1.0
-  misbehaves on-system, the 1.14.x chains stand alone. dakota carries two
+  misbehaves on-system, the 1.14.6 chain stands alone. dakota carries two
   versions (heaviest build; 6.24.0 fetches a tarball while 6.23.0 uses
   git refs with submodules — watch the first fetch). No target
   optimization this pass: lanes build at the portable baseline.

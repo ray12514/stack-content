@@ -458,12 +458,18 @@ stale artifacts caused two false failures in the container; assume nothing.
    - externals used, never fetched (cray-mpich, rocm, openssl);
    - serial lane lockfile has **zero MPI nodes** (grep the lock — purity is
      checked in the lock, never assumed);
-   - each netcdf chain resolves exactly its pinned hdf5; three pythons,
-     not six, in core.
+   - each netcdf chain resolves exactly its pinned hdf5; two pythons,
+     not four, in core.
 5. Install lanes (independent, parallelizable), regenerate views/modules.
 6. Front-door check (first real test of the naming): `module load cse/GCC`
    → core tools appear; then exactly one of Serial / MPI / GPU; loading a
    second lane must fail loudly. `module whatis` shows provenance.
+   Lane-agnostic exposure (first on-system test): from the **MPI** lane,
+   `module avail openblas` shows the serial-built openblas/netlib-lapack/
+   gnuplot via the `<compiler>/shared` module root; loading one from
+   MPI must resolve to the same install the Serial lane sees (one hash).
+   boost is dual-build: each lane shows its own boost (~mpi vs +mpi) under
+   the same clean name.
 7. Runtime: GPU-aware MPI still uses the run #1 LD_PRELOAD workaround (see
    section above) until the GTL packaging work lands.
 8. Commit the refreshed profile.yaml (and this file's findings) back to
