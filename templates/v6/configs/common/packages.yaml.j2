@@ -11,6 +11,10 @@ packages:
 {% endif %}
     prefer:
       - target={{ common_plan.target_prefer }}
+{% for pin in common_plan.foundation_pins %}
+  {{ pin.name }}:
+    require: ["@{{ pin.version }}"]
+{% endfor %}
 {% for package in common_plan.externals %}
   {{ package.name }}:
     buildable: {{ package.buildable | lower }}
