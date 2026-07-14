@@ -9,8 +9,8 @@ spack:
       link: all
       link_type: symlink
       projections:
-{% for name in view_projection_names %}
-        {{ name }}: '{name}/{version}'
+{% for entry in root_projections %}
+        {{ entry.name }}: '{{ entry.projection }}'
 {% endfor %}
         all: '{name}/{version}-{hash:7}'
   modules:
@@ -45,6 +45,9 @@ spack:
         exclude: {{ lane_shared_module_set.packages | yaml_flow }}
 {% endif %}
         projections:
+{% for entry in qualified_projections %}
+          {{ entry.name }}: '{{ entry.projection }}'
+{% endfor %}
           all: '{name}/{version}'
         all:
           autoload: none

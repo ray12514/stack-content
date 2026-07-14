@@ -459,7 +459,9 @@ stale artifacts caused two false failures in the container; assume nothing.
    - serial lane lockfile has **zero MPI nodes** (grep the lock — purity is
      checked in the lock, never assumed);
    - each netcdf chain resolves exactly its pinned hdf5; two pythons,
-     not four, in core.
+     not four, in core; py-numpy modules are python-qualified
+     (py-numpy/2.4.6-python3.14.5), one per python line, no name clash
+     at module generation.
 5. Install lanes (independent, parallelizable), regenerate views/modules.
 6. Front-door check (first real test of the naming): `module load cse/GCC`
    → core tools appear; then exactly one of Serial / MPI / GPU; loading a
