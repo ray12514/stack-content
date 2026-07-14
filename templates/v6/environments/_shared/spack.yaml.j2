@@ -41,9 +41,8 @@ spack:
       {{ format }}:
         hash_length: 0
         exclude_implicits: true
-{% if lane_shared_module_set %}
-        exclude: {{ lane_shared_module_set.packages | yaml_flow }}
-{% endif %}
+        include: {{ lane_module_includes | yaml_flow }}
+        exclude: ['@:']
         projections:
 {% for entry in qualified_projections %}
           {{ entry.name }}: '{{ entry.projection }}'

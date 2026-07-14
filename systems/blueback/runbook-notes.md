@@ -472,6 +472,11 @@ stale artifacts caused two false failures in the container; assume nothing.
    MPI must resolve to the same install the Serial lane sees (one hash).
    boost is dual-build: each lane shows its own boost (~mpi vs +mpi) under
    the same clean name.
+   Module tree purity: each lane's module tree contains exactly its own
+   roster (the default module set is an include whitelist). No zlib/xz/zstd
+   module anywhere (foundation is view-only); no python/cmake module inside
+   a payload lane (core tools come from the surface); no openblas module in
+   a lane root (shared root only).
 7. Runtime: GPU-aware MPI still uses the run #1 LD_PRELOAD workaround (see
    section above) until the GTL packaging work lands.
 8. Commit the refreshed profile.yaml (and this file's findings) back to
