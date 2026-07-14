@@ -30,6 +30,9 @@ spack:
         - {{ format }}
 {% endfor %}
       use_view: cse_modules
+      # Lane module roots ARE the module tree the lane selector prepends;
+      # no arch subdirectory in between (the lane already fixes the arch).
+      arch_folder: false
       roots:
 {% for format in module_formats %}
         {{ format }}: {{ lane.package_module_root }}
@@ -53,6 +56,7 @@ spack:
         - {{ format }}
 {% endfor %}
       use_view: cse_modules
+      arch_folder: false
       roots:
 {% for format in module_formats %}
         {{ format }}: {{ lane_shared_module_set.root }}
