@@ -49,7 +49,26 @@ specs:
     - dakota@6.24.0 +mpi
     - dakota@6.23.0 +mpi
   gpu:
-    # +gpu expands per lane: +rocm amdgpu_target=<arch> or +cuda cuda_arch=<n>
+    # GPU is a superset of the MPI lane's runtime surface: it selects the
+    # same MPI-enabled roster (identical specs -> Spack reuses the installed
+    # builds by hash; no rebuild), plus the GPU payload.
+    - hdf5@2.1.0 +mpi +fortran +cxx +hl
+    - hdf5@1.14.6 +mpi +fortran +cxx +hl
+    - netcdf-c@4.10.0 +mpi +parallel-netcdf ^hdf5@2.1.0+mpi
+    - netcdf-c@4.9.3 +mpi +parallel-netcdf ^hdf5@1.14.6+mpi
+    - netcdf-fortran@4.6.2 ^netcdf-c@4.10.0+mpi ^hdf5@2.1.0+mpi
+    - netcdf-fortran@4.6.1 ^netcdf-c@4.9.3+mpi ^hdf5@1.14.6+mpi
+    - netcdf-cxx4@4.3.1 ^netcdf-c@4.10.0+mpi ^hdf5@2.1.0+mpi
+    - fftw@3.3.11 +mpi
+    - fftw@3.3.10 +mpi
+    - boost@1.90.0 +mpi
+    - boost@1.89.0 +mpi
+    - tau@2.35.1 +mpi
+    - tau@2.35 +mpi
+    - dakota@6.24.0 +mpi
+    - dakota@6.23.0 +mpi
+    # GPU payload: +gpu expands per lane to +rocm amdgpu_target=<arch> or
+    # +cuda cuda_arch=<n>
     - kokkos@5.1.1 +gpu
     - kokkos@5.1.0 +gpu
 
@@ -69,7 +88,11 @@ notes: |
   Roster from the 2026-07 usage list plus tau and kokkos. The lane_agnostic
   packages build once in the serial lane; MPI and GPU users load the same
   modules through the per-compiler shared module root (openblas/lapack are
-  node-local dense linear algebra every lane links). openmpi,
+  node-local dense linear algebra every lane links). The gpu kind repeats
+  the mpi kind's roster verbatim (2026-07-13): GPU is a superset of the
+  MPI lane's runtime surface, and identical specs reuse the same installs
+  by hash, so the cost is lockfile entries and modules, not rebuilds.
+  openmpi,
   cray-mpich, and openssl are system externals, never built. Versions are
   pinned against the recipe generation declared in defaults
   spack.package_repo (spack-packages v2026.06.0, Package API v2.2,
