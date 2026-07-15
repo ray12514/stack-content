@@ -3,7 +3,7 @@ name: science-full
 tier: canonical
 description: |
   Full curated science library set, up to two versions per package:
-  HDF5/NetCDF/FFTW/Boost serial+MPI dual builds, OpenBLAS, LAPACK,
+  HDF5/NetCDF/FFTW/Boost serial+MPI dual builds, OpenBLAS (BLAS+LAPACK),
   ScaLAPACK, Gnuplot, TAU, Dakota, and Kokkos for GPU lanes.
 
 kinds: [serial, mpi, gpu]
@@ -22,12 +22,11 @@ specs:
     - fftw@3.3.10 ~mpi
     - boost@1.90.0 ~mpi
     - boost@1.89.0 ~mpi
-    # only-serial but compiler/performance-sensitive, so payload not core
+    # BLAS and LAPACK for every lane: openblas provides both APIs
+    # (provides("blas", "lapack")), so it is the single implementation.
+    # Only-serial but compiler/performance-sensitive, so payload not core.
     - openblas@0.3.33
     - openblas@0.3.32
-    # reference LAPACK alongside openblas's — flagged for team review
-    - netlib-lapack@3.12.1
-    - netlib-lapack@3.12.0
     # user tool; payload not core — needs the surface's compiler for
     # library compatibility (decided 2026-07-13)
     - gnuplot@6.0.0
@@ -87,7 +86,7 @@ specs:
 # stack (no MPI implementation exists) AND not compiler-agnostic (so not
 # Core). boost left this list 2026-07-13: it is MPI-capable, so it is
 # dual-build (~mpi in serial, +mpi in mpi) like hdf5/fftw.
-lane_agnostic: [gnuplot, netlib-lapack, openblas]
+lane_agnostic: [gnuplot, openblas]
 
 provenance_hints:
   cray-mpich: Platform-backed
@@ -97,7 +96,7 @@ provenance_hints:
 notes: |
   Roster from the 2026-07 usage list plus tau and kokkos. The lane_agnostic
   packages build once in the serial lane; MPI and GPU users load the same
-  modules through the per-compiler shared module root (openblas/lapack are
+  modules through the per-compiler shared module root (openblas is
   node-local dense linear algebra every lane links). The gpu kind repeats
   the mpi kind's roster verbatim (2026-07-13): GPU is a superset of the
   MPI lane's runtime surface, and identical specs reuse the same installs
