@@ -3,7 +3,18 @@ spack:
   view:
     default:
       root: {{ view_root }}
+      link: {{ default_view.link }}
       link_type: symlink
+{% if default_view.select %}
+      select: {{ default_view.select | yaml_flow }}
+{% endif %}
+{% if default_view.projections %}
+      projections:
+{% for entry in default_view.projections %}
+        {{ entry.name }}: '{{ entry.projection }}'
+{% endfor %}
+        all: '{name}/{version}-{hash:7}'
+{% endif %}
     cse_modules:
       root: {{ module_view_root }}
       link: all
