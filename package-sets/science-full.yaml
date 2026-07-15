@@ -4,7 +4,7 @@ tier: canonical
 description: |
   Full curated science library set, up to two versions per package:
   HDF5/NetCDF/FFTW/Boost serial+MPI dual builds, OpenBLAS, LAPACK,
-  Gnuplot, TAU, Dakota, and Kokkos for GPU lanes.
+  ScaLAPACK, Gnuplot, TAU, Dakota, and Kokkos for GPU lanes.
 
 kinds: [serial, mpi, gpu]
 
@@ -44,8 +44,13 @@ specs:
     - fftw@3.3.10 +mpi
     - boost@1.90.0 +mpi
     - boost@1.89.0 +mpi
+    # distributed dense linear algebra: MPI by nature (BLACS over MPI), so it
+    # has no serial form. Rides the lane's BLAS/LAPACK.
+    - netlib-scalapack@2.2.3
+    - netlib-scalapack@2.2.2
+    # profiler: a tool users run, not a library their code carries, so one
+    # version (same rule as miniforge3)
     - tau@2.35.1 +mpi
-    - tau@2.35 +mpi
     - dakota@6.24.0 +mpi
     - dakota@6.23.0 +mpi
   gpu:
@@ -63,10 +68,15 @@ specs:
     - fftw@3.3.10 +mpi
     - boost@1.90.0 +mpi
     - boost@1.89.0 +mpi
-    - tau@2.35.1 +mpi
-    - tau@2.35 +mpi
+    - netlib-scalapack@2.2.3
+    - netlib-scalapack@2.2.2
     - dakota@6.24.0 +mpi
     - dakota@6.23.0 +mpi
+    # GPU-aware profiler: the plain +mpi tau cannot see kernels, so the GPU
+    # lane carries its own build. +gpu_runtime expands to +rocm or +cuda with
+    # no arch flag: tau traces the GPU runtime, it does not compile device
+    # code, and its recipe has no amdgpu_target/cuda_arch variant.
+    - tau@2.35.1 +mpi +gpu_runtime
     # GPU payload: +gpu expands per lane to +rocm amdgpu_target=<arch> or
     # +cuda cuda_arch=<n>
     - kokkos@5.1.1 +gpu
