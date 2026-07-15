@@ -479,5 +479,26 @@ stale artifacts caused two false failures in the container; assume nothing.
    a lane root (shared root only).
 7. Runtime: GPU-aware MPI still uses the run #1 LD_PRELOAD workaround (see
    section above) until the GTL packaging work lands.
-8. Commit the refreshed profile.yaml (and this file's findings) back to
+8. Manual-build proof, once the GCC lanes are installed. This is the demo
+   path (`docs/manual_build_walkthrough_v1.md` in stack-planning) and it
+   runs against the finished tree, so it comes after step 5 rather than
+   alongside it.
+   - Generate the catalog: `render-static` against the reviewed profile,
+     published under systems/blueback/static/<release>/.
+   - Read the generated README, copy the GCC include block into a hand-written
+     `spack.yaml` somewhere outside the workspace, add one small spec that
+     depends on hdf5.
+   - Concretize. Gate: the GCC compiler, cray-mpich, and ROCm appear as
+     externals being used, and nothing proposes to build an MPI.
+   - Point `~/.spack/upstreams.yaml` at the curated install tree
+     (`install_tree:` = the deployment overlay's install root), concretize
+     again.
+   - **The gate that matters:** hdf5 resolves to the curated install and is
+     not rebuilt. Reuse proves the catalog carries every pin that decides the
+     hash (compiler ref, MPI flavor, target, recipe generation). A rebuild is
+     a catalog bug, not a user error: record which pin was missing.
+   - The curated tree stays read-only throughout. Nothing the manual build
+     installs lands in it, and nothing it does appears in the release
+     manifest.
+9. Commit the refreshed profile.yaml (and this file's findings) back to
    systems/blueback/.
