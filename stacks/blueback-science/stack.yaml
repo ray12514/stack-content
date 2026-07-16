@@ -15,6 +15,11 @@ builds:
     target: baseline
     package_set: core-foundation
 
+  - name: common
+    kind: common
+    compilers: baseline
+    target: baseline
+    package_set: science-full
   - name: serial
     kind: serial
     compilers: baseline

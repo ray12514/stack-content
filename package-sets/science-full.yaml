@@ -6,9 +6,20 @@ description: |
   HDF5/NetCDF/FFTW/Boost serial+MPI dual builds, OpenBLAS (BLAS+LAPACK),
   ScaLAPACK, Gnuplot, TAU, Dakota, and Kokkos for GPU lanes.
 
-kinds: [serial, mpi, gpu]
+kinds: [common, serial, mpi, gpu]
 
 specs:
+  common:
+    # compiler-common: built for one compiler family, independent of the
+    # execution model, so one build serves Serial, MPI, and GPU alike. Not
+    # Core, because both must be built with the surface's compiler.
+    # BLAS and LAPACK for every lane: openblas provides both APIs
+    # (provides("blas", "lapack")), so it is the single implementation.
+    - openblas@0.3.33
+    - openblas@0.3.32
+    # user tool: needs the surface's compiler for library compatibility
+    - gnuplot@6.0.0
+    - gnuplot@5.4.10
   serial:
     # serial = MPI-capable packages deliberately built without MPI
     - hdf5@2.1.0 ~mpi +fortran +cxx +hl
@@ -22,15 +33,6 @@ specs:
     - fftw@3.3.10 ~mpi
     - boost@1.90.0 ~mpi
     - boost@1.89.0 ~mpi
-    # BLAS and LAPACK for every lane: openblas provides both APIs
-    # (provides("blas", "lapack")), so it is the single implementation.
-    # Only-serial but compiler/performance-sensitive, so payload not core.
-    - openblas@0.3.33
-    - openblas@0.3.32
-    # user tool; payload not core — needs the surface's compiler for
-    # library compatibility (decided 2026-07-13)
-    - gnuplot@6.0.0
-    - gnuplot@5.4.10
   mpi:
     - hdf5@2.1.0 +mpi +fortran +cxx +hl
     - hdf5@1.14.6 +mpi +fortran +cxx +hl
@@ -81,23 +83,17 @@ specs:
     - kokkos@5.1.1 +gpu
     - kokkos@5.1.0 +gpu
 
-# One serial-lane build, module-exposed in every payload lane of the compiler
-# column (serial/MPI/GPU). Membership test: exactly one MPI-less build in the
-# stack (no MPI implementation exists) AND not compiler-agnostic (so not
-# Core). boost left this list 2026-07-13: it is MPI-capable, so it is
-# dual-build (~mpi in serial, +mpi in mpi) like hdf5/fftw.
-lane_agnostic: [gnuplot, openblas]
-
 provenance_hints:
   cray-mpich: Platform-backed
   openmpi:    Site-external
   openssl:    Site-external
 
 notes: |
-  Roster from the 2026-07 usage list plus tau and kokkos. The lane_agnostic
-  packages build once in the serial lane; MPI and GPU users load the same
-  modules through the per-compiler shared module root (openblas is
-  node-local dense linear algebra every lane links). The gpu kind repeats
+  Roster from the 2026-07 usage list plus tau and kokkos. The common kind is
+  the compiler-common group: built once per compiler, independent of the
+  execution model, and reachable from the compiler surface rather than from
+  any one lane (openblas is node-local dense linear algebra every lane
+  links). The gpu kind repeats
   the mpi kind's roster verbatim (2026-07-13): GPU is a superset of the
   MPI lane's runtime surface, and identical specs reuse the same installs
   by hash, so the cost is lockfile entries and modules, not rebuilds.

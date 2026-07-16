@@ -62,30 +62,6 @@ spack:
         all:
           autoload: none
 {% endfor %}
-{% if lane_shared_module_set %}
-    cse_shared:
-      enable:
-{% for format in module_formats %}
-        - {{ format }}
-{% endfor %}
-      use_view: cse_modules
-      arch_folder: false
-      roots:
-{% for format in module_formats %}
-        {{ format }}: {{ lane_shared_module_set.root }}
-{% endfor %}
-{% for format in module_formats %}
-      {{ format }}:
-        hash_length: 0
-        exclude_implicits: true
-        include: {{ lane_shared_module_includes | yaml_flow }}
-        exclude: ['@:']
-        projections:
-          all: '{name}/{version}'
-        all:
-          autoload: none
-{% endfor %}
-{% endif %}
   include:
 {% for scope in scopes %}
     - {{ scope }}
