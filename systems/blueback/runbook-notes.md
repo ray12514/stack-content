@@ -466,17 +466,18 @@ stale artifacts caused two false failures in the container; assume nothing.
 6. Front-door check (first real test of the naming): `module load cse/GCC`
    → core tools appear; then exactly one of Serial / MPI / GPU; loading a
    second lane must fail loudly. `module whatis` shows provenance.
-   Lane-agnostic exposure (first on-system test): from the **MPI** lane,
-   `module avail openblas` shows the serial-built openblas/netlib-lapack/
-   gnuplot via the `<compiler>/shared` module root; loading one from
-   MPI must resolve to the same install the Serial lane sees (one hash).
+   Compiler-common exposure (first on-system test): right after
+   `module load cse/GCC`, before any lane, `module avail` shows openblas and
+   gnuplot from the `<compiler>/common` root alongside the Core tools;
+   loading openblas from the MPI lane must resolve to the same install the
+   Serial lane sees (one hash).
    boost is dual-build: each lane shows its own boost (~mpi vs +mpi) under
    the same clean name.
    Module tree purity: each lane's module tree contains exactly its own
    roster (the default module set is an include whitelist). No zlib/xz/zstd
    module anywhere (foundation is view-only); no python/cmake module inside
    a payload lane (core tools come from the surface); no openblas module in
-   a lane root (shared root only).
+   a lane root (the common root only).
 7. Runtime: GPU-aware MPI still uses the run #1 LD_PRELOAD workaround (see
    section above) until the GTL packaging work lands.
 8. Manual-build proof, once the GCC lanes are installed. This is the demo

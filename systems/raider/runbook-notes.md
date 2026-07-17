@@ -33,11 +33,11 @@ with one exception: the CUDA lane, which only this machine can prove.
    coherent hdf5 chains; two pythons in core.
 6. Install, regenerate views/modules, front-door check:
    `module load cse/GCC` → one lane → package. Conflicts fail loudly.
-   Lane-agnostic check (same as Blueback): from the MPI lane,
-   `module avail openblas` shows the serial-built openblas/netlib-lapack/
-   gnuplot via `<compiler>/shared`; loading one resolves to the same
-   install the Serial lane sees (one hash). boost is dual-build: each lane
-   shows its own boost (~mpi vs +mpi) under the same clean name.
+   Compiler-common check (same as Blueback): right after
+   `module load cse/GCC`, `module avail` shows openblas and gnuplot from
+   `<compiler>/common`; loading openblas from any lane resolves to the same
+   install (one hash). boost is dual-build: each lane shows its own boost
+   (~mpi vs +mpi) under the same clean name.
 7. Generate the platform catalog (`render-static`) and commit it under
    systems/raider/static/<release>/ for the app managers building outside
    the stack.
