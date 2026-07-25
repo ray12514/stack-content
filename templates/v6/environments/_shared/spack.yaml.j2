@@ -62,7 +62,9 @@ spack:
         all:
           autoload: none
 {% endfor %}
-  include:
+  # Two colons: override every ambient scope (~/.spack, site, system) so a
+  # lane concretizes from this tree alone and stays reproducible.
+  include::
 {% for scope in scopes %}
     - {{ scope }}
 {% endfor %}
