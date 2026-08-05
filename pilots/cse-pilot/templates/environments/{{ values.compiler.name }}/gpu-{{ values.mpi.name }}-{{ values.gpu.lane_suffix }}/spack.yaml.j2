@@ -1,0 +1,67 @@
+spack:
+  include::
+    - {{ (catalog.root ~ '/' ~ values.catalog_scopes.common) | yaml_scalar }}
+{% if values.compiler.source == 'external' %}
+    - {{ (catalog.root ~ '/' ~ values.catalog_scopes.compiler) | yaml_scalar }}
+{% endif %}
+{% if values.mpi.source == 'external' %}
+    - {{ (catalog.root ~ '/' ~ values.catalog_scopes.mpi) | yaml_scalar }}
+{% endif %}
+    - {{ (catalog.root ~ '/' ~ values.catalog_scopes.gpu) | yaml_scalar }}
+{% if values.catalog_scopes.platform %}
+    - {{ (catalog.root ~ '/' ~ values.catalog_scopes.platform) | yaml_scalar }}
+{% endif %}
+    - {{ (workspace.root ~ '/configs/common') | yaml_scalar }}
+    - {{ (workspace.root ~ '/configs/providers') | yaml_scalar }}
+    - {{ (workspace.root ~ '/configs/environments/' ~ values.compiler.name ~ '/gpu-' ~ values.mpi.name ~ '-' ~ values.gpu.lane_suffix) | yaml_scalar }}
+  definitions:
+    - mpi_payload:
+{% for spec in data.roster.specs.mpi %}
+        - {{ spec | yaml_scalar }}
+{% endfor %}
+    - gpu_payload:
+{% for spec in data.roster.specs.gpu_payload %}
+{% set expanded = spec | replace('+gpu_runtime', values.gpu.runtime_variant) | replace('+gpu', values.gpu.runtime_variant ~ ' ' ~ values.gpu.architecture_variant) %}
+        - {{ expanded | yaml_scalar }}
+{% endfor %}
+  specs:
+{% if values.compiler.source == 'build' %}
+    - group: compiler
+      specs:
+        - {{ (values.compiler.name ~ '@' ~ values.compiler.version) | yaml_scalar }}
+{% endif %}
+{% if values.mpi.source == 'build' %}
+    - group: mpi
+{% if values.compiler.source == 'build' %}
+      needs: [compiler]
+{% endif %}
+      specs:
+        - {{ (values.mpi.name ~ '@' ~ values.mpi.version ~ ' %' ~ values.compiler.toolchain) | yaml_scalar }}
+{% endif %}
+    - group: mpi_payload
+{% if values.mpi.source == 'build' %}
+      needs: [mpi]
+{% elif values.compiler.source == 'build' %}
+      needs: [compiler]
+{% endif %}
+      specs:
+        - matrix:
+            - [$mpi_payload]
+            - [{{ ('%' ~ values.mpi.toolchain) | yaml_scalar }}]
+    - group: gpu_payload
+{% if values.mpi.source == 'build' %}
+      needs: [mpi]
+{% elif values.compiler.source == 'build' %}
+      needs: [compiler]
+{% endif %}
+      specs:
+        - matrix:
+            - [$gpu_payload]
+            - [{{ ('%' ~ values.mpi.toolchain) | yaml_scalar }}]
+  view:
+    cse_modules:
+      root: {{ (values.paths.views_root ~ '/' ~ values.release ~ '/' ~ values.system.name ~ '/' ~ values.stack.name ~ '/' ~ values.compiler.name ~ '/gpu-' ~ values.mpi.name ~ '-' ~ values.gpu.lane_suffix ~ '-modules') | yaml_scalar }}
+      link: roots
+      link_type: symlink
+      projections:
+        all: '{name}/{version}'

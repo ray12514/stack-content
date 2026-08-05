@@ -1,0 +1,26 @@
+# {{ values.stack.name }} workspace for {{ values.system.name }}
+
+Release: `{{ values.release }}`
+
+This workspace was initialized from static catalog:
+
+`{{ catalog.root }}`
+
+Selected providers:
+
+- compiler: `{{ values.compiler.name }}@{{ values.compiler.version }}` (`{{ values.compiler.source }}`)
+- MPI: `{{ values.mpi.name }}@{{ values.mpi.version }}` (`{{ values.mpi.source }}`)
+- GPU: `{{ values.gpu.provider }}@{{ values.gpu.version }}`
+
+Build order:
+
+1. `environments/{{ values.compiler.name }}/core`
+2. `environments/{{ values.compiler.name }}/common`
+3. `environments/{{ values.compiler.name }}/serial`
+4. `environments/{{ values.compiler.name }}/mpi-{{ values.mpi.name }}`
+5. `environments/{{ values.compiler.name }}/gpu-{{ values.mpi.name }}-{{ values.gpu.lane_suffix }}`
+
+Foundation is ambient in the Core view. Core and Common package modules become
+visible through `modulefiles/cse/{{ values.compiler.public_name }}`. The GPU
+surface contains the compatible MPI roster plus the GPU payload; users load one
+lane selector, not separate MPI and GPU selectors.

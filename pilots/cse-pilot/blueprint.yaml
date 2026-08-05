@@ -1,0 +1,56 @@
+schema_version: 1
+name: cse-pilot
+description: |
+  Pilot-specific, include-ready Spack 1.2 workspace templates assembled from
+  an explicit static platform catalog selection. This blueprint does not
+  discover system facts and does not replace the full environment renderer.
+template_root: templates
+required_values:
+  - system.name
+  - release
+  - stack.name
+  - compiler.name
+  - compiler.version
+  - compiler.toolchain
+  - compiler.public_name
+  - compiler.source
+  - compiler.modules
+  - mpi.name
+  - mpi.version
+  - mpi.toolchain
+  - mpi.source
+  - mpi.modules
+  - gpu.provider
+  - gpu.version
+  - gpu.lane_suffix
+  - gpu.runtime_variant
+  - gpu.architecture_variant
+  - gpu.modules
+  - catalog_scopes.common
+  - catalog_scopes.compiler
+  - catalog_scopes.mpi
+  - catalog_scopes.gpu
+  - paths.install_tree
+  - paths.build_stage
+  - paths.source_cache
+  - paths.misc_cache
+  - paths.views_root
+  - paths.modules_root
+  - permissions.group
+  - permissions.read
+  - permissions.write
+  - build_jobs
+  - package_repo.git
+  - package_repo.tag
+data_files:
+  roster: roster.yaml
+allowed_values:
+  compiler.source: [external, build]
+  mpi.source: [external, build]
+  gpu.provider: [cuda, rocm]
+catalog_scope_values:
+  - catalog_scopes.common
+  - catalog_scopes.compiler
+  - catalog_scopes.mpi
+  - catalog_scopes.gpu
+  - catalog_scopes.platform

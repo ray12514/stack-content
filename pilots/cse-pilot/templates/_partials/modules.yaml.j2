@@ -1,0 +1,26 @@
+modules:
+  prefix_inspections:
+    bin: [PATH]
+    lib: [LD_LIBRARY_PATH]
+    lib64: [LD_LIBRARY_PATH]
+    include: [CPATH]
+    lib/pkgconfig: [PKG_CONFIG_PATH]
+    lib64/pkgconfig: [PKG_CONFIG_PATH]
+    share/pkgconfig: [PKG_CONFIG_PATH]
+    share/man: [MANPATH]
+    '.': [CMAKE_PREFIX_PATH]
+  default:
+    enable: [tcl]
+    use_view: cse_modules
+    arch_folder: false
+    roots:
+      tcl: {{ (values.paths.modules_root ~ '/' ~ values.release ~ '/' ~ values.system.name ~ '/' ~ values.stack.name ~ '/' ~ values.compiler.name ~ '/' ~ environment_name) | yaml_scalar }}
+    tcl:
+      hash_length: 0
+      exclude_implicits: true
+      include: {{ module_packages | yaml_flow }}
+      projections:
+        py-numpy: '{name}/{version}-python{^python.version}'
+        all: '{name}/{version}'
+      all:
+        autoload: none

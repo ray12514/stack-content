@@ -1,0 +1,3 @@
+{% set environment_name = 'gpu-' ~ values.mpi.name ~ '-' ~ values.gpu.lane_suffix %}
+{% set module_packages = data.roster.module_packages.gpu %}
+{% include '_partials/modules.yaml.j2' %}

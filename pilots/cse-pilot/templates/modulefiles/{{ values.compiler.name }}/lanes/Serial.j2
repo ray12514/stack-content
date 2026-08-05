@@ -1,0 +1,4 @@
+#%Module1.0
+module-whatis "CSE Serial lane for {{ values.compiler.public_name }}"
+conflict MPI GPU
+prepend-path MODULEPATH {{ values.paths.modules_root }}/{{ values.release }}/{{ values.system.name }}/{{ values.stack.name }}/{{ values.compiler.name }}/serial

@@ -1,0 +1,10 @@
+#%Module1.0
+module-whatis "CSE GPU lane ({{ values.mpi.name }} + {{ values.gpu.provider }})"
+conflict Serial MPI
+{% for module in values.mpi.modules %}
+module load {{ module }}
+{% endfor %}
+{% for module in values.gpu.modules %}
+module load {{ module }}
+{% endfor %}
+prepend-path MODULEPATH {{ values.paths.modules_root }}/{{ values.release }}/{{ values.system.name }}/{{ values.stack.name }}/{{ values.compiler.name }}/gpu-{{ values.mpi.name }}-{{ values.gpu.lane_suffix }}

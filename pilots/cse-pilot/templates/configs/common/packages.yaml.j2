@@ -1,0 +1,6 @@
+packages:
+  all:
+    permissions:
+      read: {{ values.permissions.read | yaml_scalar }}
+      write: {{ values.permissions.write | yaml_scalar }}
+      group: {{ values.permissions.group | yaml_scalar }}

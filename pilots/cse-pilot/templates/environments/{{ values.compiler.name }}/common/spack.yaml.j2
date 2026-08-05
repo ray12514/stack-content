@@ -1,0 +1,39 @@
+spack:
+  include::
+    - {{ (catalog.root ~ '/' ~ values.catalog_scopes.common) | yaml_scalar }}
+{% if values.compiler.source == 'external' %}
+    - {{ (catalog.root ~ '/' ~ values.catalog_scopes.compiler) | yaml_scalar }}
+{% endif %}
+{% if values.catalog_scopes.platform %}
+    - {{ (catalog.root ~ '/' ~ values.catalog_scopes.platform) | yaml_scalar }}
+{% endif %}
+    - {{ (workspace.root ~ '/configs/common') | yaml_scalar }}
+    - {{ (workspace.root ~ '/configs/providers') | yaml_scalar }}
+    - {{ (workspace.root ~ '/configs/environments/' ~ values.compiler.name ~ '/common') | yaml_scalar }}
+
+  definitions:
+    - common:
+{% for spec in data.roster.specs.common %}
+        - {{ spec | yaml_scalar }}
+{% endfor %}
+  specs:
+{% if values.compiler.source == 'build' %}
+    - group: compiler
+      specs:
+        - {{ (values.compiler.name ~ '@' ~ values.compiler.version) | yaml_scalar }}
+{% endif %}
+    - group: common
+{% if values.compiler.source == 'build' %}
+      needs: [compiler]
+{% endif %}
+      specs:
+        - matrix:
+            - [$common]
+            - [{{ ('%' ~ values.compiler.toolchain) | yaml_scalar }}]
+  view:
+    cse_modules:
+      root: {{ (values.paths.views_root ~ '/' ~ values.release ~ '/' ~ values.system.name ~ '/' ~ values.stack.name ~ '/' ~ values.compiler.name ~ '/common-modules') | yaml_scalar }}
+      link: roots
+      link_type: symlink
+      projections:
+        all: '{name}/{version}'

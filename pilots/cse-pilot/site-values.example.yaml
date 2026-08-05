@@ -1,0 +1,51 @@
+schema_version: 1
+system:
+  name: example-linux
+release: alpha-001
+stack:
+  name: cse-pilot
+
+compiler:
+  name: gcc
+  version: 13.3.1
+  toolchain: cse_gcc1331
+  public_name: GCC
+  source: external
+  modules: [gcc/13.3.1]
+mpi:
+  name: openmpi
+  version: 5.0.8
+  toolchain: cse_gcc1331_openmpi508
+  source: external
+  modules: [openmpi/5.0.8]
+gpu:
+  provider: cuda
+  version: 12.4.1
+  lane_suffix: sm_80
+  runtime_variant: +cuda
+  architecture_variant: cuda_arch=80
+  modules: [cuda/12.4.1]
+
+catalog_scopes:
+  common: scopes/common
+  compiler: scopes/compilers/gcc/13.3.1
+  mpi: scopes/mpi/openmpi/5.0.8/gcc-13.3.1
+  gpu: scopes/gpu/cuda/12.4.1
+  platform: null
+
+paths:
+  install_tree: /shared/cse/spack/opt
+  build_stage: /shared/cse/spack/stage
+  source_cache: /shared/cse/spack/cache/source
+  misc_cache: /shared/cse/spack/cache/misc
+  views_root: /shared/cse/views
+  modules_root: /shared/cse/modules
+permissions:
+  group: cse
+  read: group
+  write: group
+build_jobs: 16
+
+package_repo:
+  git: https://github.com/spack/spack-packages.git
+  tag: v2026.06.0

@@ -27,6 +27,7 @@ package-repos/<name>/            # optional Spack package repositories
 stacks/<stack>/stack.yaml        # package intent (spec-native: name + specs [+ kind])
 systems/<system>/profile.yaml    # observed facts from cluster-inspector (tracked per system)
 systems/<system>/deployment.yaml # installer-chosen roots and shared access policy
+pilots/<pilot>/                  # temporary, named starter blueprints for a specific rollout
 ```
 
 `deployment.yaml` is required for render. It owns install tree, build-stage,
@@ -49,6 +50,22 @@ artifacts.
 `stack-composer` fills the placeholders from `profile ∩ deployment ∩ defaults ∩
 stack`. The rendered `configs/` therefore differ per system even though the
 template is shared.
+
+## Three distinct consumption paths
+
+- `render-static` produces the generic, reusable platform catalog from an
+  observed profile. It contains compiler, MPI, GPU, common-external, and
+  platform scopes; it contains no CSE package roster or deployment workspace.
+- `init-workspace` combines an exact static-catalog selection with an authored
+  starter blueprint. `pilots/cse-pilot/` uses this seam to produce the current
+  Foundation/Core/Common/Serial/MPI/GPU pilot environments and module policy.
+- `render` remains the full curated-stack path. It owns the complete automated
+  workspace, deployment inputs, lanes, views, modules, and release manifest.
+
+The CSE pilot starter kit is intentionally named and isolated. Its package
+roster can change without turning pilot policy into generic static-catalog
+behavior. See `pilots/cse-pilot/README.md` and copy
+`pilots/cse-pilot/site-values.example.yaml` for each target system.
 
 ## How render consumes this repo
 
