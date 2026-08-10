@@ -67,6 +67,10 @@ roster can change without turning pilot policy into generic static-catalog
 behavior. See `pilots/cse-pilot/README.md` and copy
 `pilots/cse-pilot/site-values.example.yaml` for each target system.
 
+For the single repeatable procedure across Blueback, Raider, Wheat, and Fran,
+use `stack-planning/docs/runbook.md`. It starts with target-side repository
+setup and ends at the concretize/build handoff.
+
 ## How render consumes this repo
 
 ```sh

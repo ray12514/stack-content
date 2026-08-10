@@ -1,44 +1,73 @@
-# Raider runbook notes
+# Raider system notes
 
-Raider: generic Linux cluster (Rocky/RHEL family), Slurm, InfiniBand,
-NVIDIA A100 (sm_80). Site GCC + site OpenMPI consumed as externals — this
-system is the NVIDIA/generic-Linux twin of the Blueback procedure, and the
-container smoke (systems/smoke) already validated the same path end to end
-with one exception: the CUDA lane, which only this machine can prove.
+Use `stack-planning/docs/runbook.md` for every command and common gate. This
+file records only Raider-specific facts, choices, and findings.
 
-## First science run (2026-07-10 procedure)
+## System identity
 
-0. Pull all repos; rebuild the inspector binary and composer pyz. Stale
-   artifacts caused false failures twice in the container runs.
-1. Probe → merge → verify. Check the fact sheet before using it:
-   - compiler_providers: the real site GCC modules only — no gcc entries at
-     /usr riding library modules (the inspector now rejects those, and it
-     takes MPI/compiler versions from the drivers' own reports);
-   - mpi_providers: openmpi entries with real versions and the gcc they
-     were built with (module naming like openmpi/x.y.z/gcc-a.b.c);
-   - gpu_toolkit_modules.cudatoolkit: every CUDA generation with version,
-     module, and prefix; node arch_target sm_80.
-2. Commit profile.yaml + deployment.yaml here (systems/raider/) via PR —
-   this directory is the system's record.
-3. Validate + render `stacks/linux-science/stack.yaml`. Expect core,
-   serial, mpi-openmpi, and gpu-openmpi-sm_80 lanes under the gcc surface.
-4. **Outstanding check from the last Raider session:** the earlier run had
-   Spack fetching cuda_12.9_linux.run. Before building, confirm
-   `configs/gpu/nvidia-cuda/packages.yaml` pins cuda buildable false at the
-   real prefix and that the gpu environment's spack.yaml includes that
-   scope. If the file is empty, the profile's cudatoolkit facts are wrong —
-   fix the fact sheet, never the rendered files.
-5. Concretize all lanes. Gates (same as Blueback): externals used never
-   fetched (gcc, openmpi, cuda, openssl); serial lock has zero MPI nodes;
-   coherent hdf5 chains; two pythons in core.
-6. Install, regenerate views/modules, front-door check:
-   `module load cse/GCC` → one lane → package. Conflicts fail loudly.
-   Compiler-common check (same as Blueback): right after
-   `module load cse/GCC`, `module avail` shows openblas and gnuplot from
-   `<compiler>/common`; loading openblas from any lane resolves to the same
-   install (one hash). boost is dual-build: each lane shows its own boost
-   (~mpi vs +mpi) under the same clean name.
-7. Generate the platform catalog (`render-static`) and commit it under
-   systems/raider/static/<release>/ for the app managers building outside
-   the stack.
-8. Second surface (AOCC) only after the GCC surface is green end to end.
+- Platform: generic Rocky/RHEL-family Linux.
+- Scheduler: Slurm.
+- Fabric: InfiniBand.
+- GPU: NVIDIA A100; expected architecture `sm_80` on the current GPU
+  partition.
+- Provider shape: selected site compiler, MPI, and CUDA compatibility must be
+  established from the refreshed profile rather than inferred from names.
+
+## Current pilot posture
+
+- Start with the platform GCC surface and a compatible site OpenMPI when the
+  refreshed profile proves that pairing.
+- Consume the compatible CUDA scope as an external.
+- Treat AOCC and stack-built MPI surfaces as follow-up comparisons after the
+  GCC surface passes end to end.
+- If the profile has no usable site GCC/OpenMPI pairing, stop and record the
+  fact before choosing a stack-built MPI experiment.
+
+## Profile review additions
+
+In addition to the common runbook checks:
+
+- reject false `/usr` GCC discoveries attached to unrelated library modules;
+- confirm compiler and MPI versions from their driver output, not module names
+  alone;
+- confirm the selected OpenMPI record names the GCC it was built with and its
+  real prefix/modules;
+- confirm every intended CUDA generation has an exact version, prefix, module,
+  and runtime-node architecture;
+- confirm the GPU node reports `sm_80` and the chosen CUDA generation supports
+  that node.
+
+## Catalog and workspace gates
+
+- The selected GCC and OpenMPI scopes must describe the same compiler pairing.
+- CUDA packages must be non-buildable externals at the live CUDA prefix. If
+  Spack proposes downloading a CUDA installer, fix the profile/catalog rather
+  than the initialized workspace.
+- The Serial environment must contain no MPI implementation.
+- The MPI and GPU environments must use the same selected OpenMPI pairing.
+- Common packages must resolve to one install reused from Serial, MPI, and GPU.
+
+## Runtime acceptance
+
+After the common build and module checks, apply
+`stack-planning/docs/generic_linux_acceptance_checklist_v1.md`. At minimum
+verify:
+
+- compiler and MPI wrappers resolve from the selected surface;
+- multi-node MPI launch through Slurm;
+- CUDA device visibility and a representative CUDA/Kokkos workload on A100;
+- compiler front door followed by exactly one of Serial, MPI, or GPU;
+- an external CUDA package is used rather than fetched.
+
+## Current run record
+
+- Profile release/date:
+- Catalog release:
+- Pilot release:
+- Selected compiler:
+- Selected MPI:
+- Selected CUDA/GPU architecture:
+- Approved roots/group:
+- Concretization status:
+- Build status:
+- Runtime/module findings:

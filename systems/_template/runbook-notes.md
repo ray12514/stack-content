@@ -1,8 +1,9 @@
 # <System> — Operator Notes
 
-Use `stack-planning/docs/runbook.md` for the common procedure. This file records
-only the values and checks that differ for this system. Apply the matching
-platform acceptance checklist from `stack-planning/docs/`.
+Use `stack-planning/docs/runbook.md` for the common static-catalog pilot
+procedure. This file records only the values and checks that differ for this
+system. Apply the matching platform acceptance checklist from
+`stack-planning/docs/`.
 
 ## System identity
 
