@@ -1,9 +1,9 @@
-# <System> — Operator Notes
+# <System> static pilot notes
 
 Use `stack-planning/docs/runbook.md` for the common static-pilot procedure. This
-file records only the values, promotion evidence, and checks that differ for
-this system. Apply the matching platform acceptance checklist from
-`stack-planning/docs/`.
+file records only the values, promotion evidence, recovery decision, and checks
+that differ for this system. Apply the matching platform acceptance checklist
+from `stack-planning/docs/`.
 
 ## System identity
 
@@ -23,6 +23,9 @@ this system. Apply the matching platform acceptance checklist from
 - Active pilot roster: `pilots/cse-pilot/roster.yaml`
 - Spack release:
 - `spack-packages` release:
+- Cluster Inspector commit:
+- Stack Composer commit:
+- Stack Content commit:
 
 ## Supported surfaces
 
@@ -42,6 +45,19 @@ this system. Apply the matching platform acceptance checklist from
 - CSE Unix group:
 - Package/publication read audience:
 
+## Run state and recovery
+
+- Current release state (`working`, `locked`, `validated`, `cached`,
+  `published`, `accepted`, or `held`):
+- Last successful checkpoint (1-8):
+- Held checkpoint/lane, if any:
+- Exact failed command and exit status:
+- Log or evidence path:
+- Did any durable input or concrete hash change (`yes` or `no`):
+- Recovery decision (`resume same release` or `new release`):
+- Earliest checkpoint to rerun:
+- Exact next command:
+
 ## Promotion record
 
 | Lane | Concretized | Built | Target runtime passed | Cache pushed | Cache-only published | Hashes match |
@@ -56,7 +72,6 @@ this system. Apply the matching platform acceptance checklist from
 - Build-cache index verification:
 - Clean-shell module verification:
 - Release-owner approval:
-- Package write audience (`user` or `group`):
 
 ## System-specific commands
 
@@ -65,18 +80,20 @@ commands that differ from the canonical runbook.
 
 ## Acceptance status
 
-- [ ] Profile reviewed against the live system
-- [ ] Validate and render clean
-- [ ] Rendered externals match the selected platform facts
-- [ ] Every lane concretizes
+- [ ] Profile verified against the live system
+- [ ] Static catalog reviewed against the profile
+- [ ] Restricted workspace and five native `modules.yaml` files generated
+- [ ] Five restricted lockfiles reviewed
 - [ ] Serial lockfile contains no MPI implementation
 - [ ] System-provided externals are used rather than fetched
-- [ ] Install, view, and module generation complete
-- [ ] Rendered `packages.yaml` contains the approved package permissions
-- [ ] Another collaboration-group member can read the release from login and compute nodes
-- [ ] `cse/<Compiler>` exposes core plus lane selectors
+- [ ] Every lane builds and passes its target runtime checks
+- [ ] Approved binaries and cache index are complete
+- [ ] Shared installation is cache-only and published hashes match
+- [ ] Published views and package modules regenerate cleanly
+- [ ] `cse/<Compiler>` exposes the expected lane selectors
 - [ ] Loading a second conflicting lane fails
-- [ ] Representative serial, MPI, and GPU runtime tests pass
+- [ ] Clean login and compute sessions pass the platform checklist
+- [ ] Release owner approves publication
 
 ## Findings and follow-up
 

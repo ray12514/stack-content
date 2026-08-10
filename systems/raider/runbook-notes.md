@@ -74,6 +74,13 @@ verify:
 
 ## Current run record
 
+- Current release state:
+- Last successful checkpoint (1-8):
+- Held checkpoint/lane, if any:
+- Exact failed command, exit status, and evidence path:
+- Durable input or concrete hash changed (`yes` or `no`):
+- Recovery decision (`resume same release` or `new release`):
+- Earliest checkpoint to rerun and exact next command:
 - Profile release/date:
 - Catalog release/path:
 - Restricted build values/workspace:
