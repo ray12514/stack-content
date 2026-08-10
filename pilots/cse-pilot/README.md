@@ -4,10 +4,6 @@ This blueprint turns a selected `render-static` catalog into the authored
 Spack 1.2 workspace used for the current CSE pilot. It is deliberately separate
 from both the generic static catalog and the full curated-stack renderer.
 
-The canonical end-to-end operator procedure is `stack-planning/docs/runbook.md`.
-Use this file for blueprint-specific behavior after that runbook reaches
-workspace initialization.
-
 The initializer does not probe a machine and does not select providers. Copy
 `site-values.example.yaml`, choose exact catalog scopes and provider versions,
 then run:
