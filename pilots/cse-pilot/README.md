@@ -5,21 +5,32 @@ Spack 1.2 workspace used for the current CSE pilot. It is deliberately separate
 from both the generic static catalog and the full curated-stack renderer.
 
 The initializer does not probe a machine and does not select providers. Copy
-`site-values.example.yaml`, choose exact catalog scopes and provider versions,
-then run:
+`site-values.example.yaml` twice, choose exact catalog scopes and provider
+versions once, then create a restricted build values file and a publication
+values file. The two files keep the same package/provider intent and private
+build-cache URL; only `workspace.role` and deployment paths differ.
 
 ```sh
 stack-composer init-workspace \
   --blueprint stack-content/pilots/cse-pilot \
   --catalog rendered-static/<system>/static/<catalog-release> \
-  --values systems/<system>/cse-pilot-values.yaml \
-  --output workspaces/<system>/cse-pilot/<release>
+  --values systems/<system>/cse-pilot-build-values.yaml \
+  --output restricted/workspaces/<system>/cse-pilot/<release>
 ```
 
-The result contains native Spack configuration scopes, five independent
-environments, and the compiler front-door/lane modulefiles. Build in this
-order: Core, Common, Serial, MPI, GPU. Foundation is ambient in the Core view;
-GPU is the compatible MPI surface plus the GPU payload.
+Initialize the publication workspace separately with
+`cse-pilot-publish-values.yaml`. The result in each location contains native
+Spack configuration scopes, five independent environments, a build-cache
+mirror, and the compiler front-door/lane modulefiles. Build and validate in the
+restricted workspace in this order: Core, Common, Serial, MPI, GPU. After
+approval, push the concrete specs to the private CSE build cache, copy the
+validated lockfiles to the publication workspace, and install there with
+`--only-concrete --use-buildcache=only`. A cache miss stops publication; it must
+never trigger a source build in the user-facing tree.
+
+Foundation is ambient in the Core view; GPU is the compatible MPI surface plus
+the GPU payload. The published views and package modules are regenerated only
+after the cache-only installation succeeds.
 
 `compiler.source` and `mpi.source` accept `external` or `build`. External mode
 includes the selected catalog scope. Build mode emits producer groups in each

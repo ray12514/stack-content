@@ -2,6 +2,8 @@
 
 Release: `{{ values.release }}`
 
+Workspace role: `{{ values.workspace.role }}`
+
 This workspace was initialized from static catalog:
 
 `{{ catalog.root }}`
@@ -12,6 +14,10 @@ Selected providers:
 - MPI: `{{ values.mpi.name }}@{{ values.mpi.version }}` (`{{ values.mpi.source }}`)
 - GPU: `{{ values.gpu.provider }}@{{ values.gpu.version }}`
 
+Private CSE build cache:
+
+`{{ values.buildcache.url }}`
+
 Build order:
 
 1. `environments/{{ values.compiler.name }}/core`
@@ -19,6 +25,18 @@ Build order:
 3. `environments/{{ values.compiler.name }}/serial`
 4. `environments/{{ values.compiler.name }}/mpi-{{ values.mpi.name }}`
 5. `environments/{{ values.compiler.name }}/gpu-{{ values.mpi.name }}-{{ values.gpu.lane_suffix }}`
+
+{% if values.workspace.role == 'build' %}
+This is the restricted build and validation workspace. Concretize here, build
+from source as needed, exercise every lane on the target system, and push only
+approved concrete specs to the private CSE build cache.
+{% else %}
+This is the publication workspace. Copy the approved `spack.lock` from the
+matching restricted environment and install with `--only-concrete
+--use-buildcache=only`. Do not concretize or fall back to a source build here.
+Regenerate the user-facing views and package modules after the cache-only
+installation succeeds.
+{% endif %}
 
 Foundation is ambient in the Core view. Core and Common package modules become
 visible through `modulefiles/cse/{{ values.compiler.public_name }}`. The GPU

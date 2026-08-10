@@ -2,10 +2,13 @@ schema_version: 1
 name: cse-pilot
 description: |
   Pilot-specific, include-ready Spack 1.2 workspace templates assembled from
-  an explicit static platform catalog selection. This blueprint does not
-  discover system facts and does not replace the full environment renderer.
+  an explicit static platform catalog selection. The same blueprint initializes
+  the restricted build workspace and the cache-only publication workspace.
+  This blueprint does not discover system facts and does not replace the full
+  environment renderer.
 template_root: templates
 required_values:
+  - workspace.role
   - system.name
   - release
   - stack.name
@@ -36,6 +39,8 @@ required_values:
   - paths.misc_cache
   - paths.views_root
   - paths.modules_root
+  - buildcache.name
+  - buildcache.url
   - permissions.group
   - permissions.read
   - permissions.write
@@ -45,6 +50,7 @@ required_values:
 data_files:
   roster: roster.yaml
 allowed_values:
+  workspace.role: [build, publish]
   compiler.source: [external, build]
   mpi.source: [external, build]
   gpu.provider: [cuda, rocm]

@@ -11,8 +11,10 @@ stack-content repo (per team or per stack family); the pattern is the same.
 
 ![What the stack-content repo holds](docs/stack_content_contents.svg)
 
-For how these inputs become per-stack workspaces and one shared install tree, see
-the lifecycle note in stack-planning: `docs/stack_workspace_lifecycle_v1.md`.
+For the full renderer's per-stack workspaces and shared install-tree lifecycle,
+see `stack-planning/docs/stack_workspace_lifecycle_v1.md`. The current static
+CSE pilot deliberately uses separate restricted and published install trees;
+its canonical procedure is `stack-planning/docs/runbook.md`.
 
 ## Layout
 
@@ -66,6 +68,10 @@ The CSE pilot starter kit is intentionally named and isolated. Its package
 roster can change without turning pilot policy into generic static-catalog
 behavior. See `pilots/cse-pilot/README.md` and copy
 `pilots/cse-pilot/site-values.example.yaml` for each target system.
+
+Use `stack-planning/docs/runbook.md` as the single procedure for Blueback,
+Raider, Wheat, and Fran. It keeps the restricted source build separate from the
+shared cache-only publication while preserving the same approved lockfiles.
 
 ## How render consumes this repo
 

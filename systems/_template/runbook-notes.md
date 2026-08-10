@@ -1,8 +1,9 @@
 # <System> — Operator Notes
 
-Use `stack-planning/docs/runbook.md` for the common procedure. This file records
-only the values and checks that differ for this system. Apply the matching
-platform acceptance checklist from `stack-planning/docs/`.
+Use `stack-planning/docs/runbook.md` for the common static-pilot procedure. This
+file records only the values, promotion evidence, and checks that differ for
+this system. Apply the matching platform acceptance checklist from
+`stack-planning/docs/`.
 
 ## System identity
 
@@ -16,9 +17,10 @@ platform acceptance checklist from `stack-planning/docs/`.
 
 - Reviewed profile: `systems/<system>/profile.yaml`
 - Inspector hints, if needed:
-- Deployment overlay:
-- Stack file:
-- Package set:
+- Static catalog release/path:
+- Restricted build values: `systems/<system>/cse-pilot-build-values.yaml`
+- Publication values: `systems/<system>/cse-pilot-publish-values.yaml`
+- Active pilot roster: `pilots/cse-pilot/roster.yaml`
 - Spack release:
 - `spack-packages` release:
 
@@ -30,14 +32,30 @@ platform acceptance checklist from `stack-planning/docs/`.
 
 ## Site paths
 
-- Install tree:
-- Build stage:
-- Source and misc caches:
-- View root:
-- Module root and publish root:
-- Buildcache destination:
-- Collaboration group:
-- Package/publication read audience (`group` or `world`):
+- Restricted workspace and install tree:
+- Restricted source/misc caches:
+- Restricted views/modules:
+- Private CSE build-cache URL:
+- Published workspace and install tree:
+- Published views/modules:
+- Build and publication scratch stages:
+- CSE Unix group:
+- Package/publication read audience:
+
+## Promotion record
+
+| Lane | Concretized | Built | Target runtime passed | Cache pushed | Cache-only published | Hashes match |
+|---|---|---|---|---|---|---|
+| Core | | | | | | |
+| Common | | | | | | |
+| Serial | | | | | | |
+| MPI | | | | | | |
+| GPU | | | | | | |
+
+- Signing key/policy:
+- Build-cache index verification:
+- Clean-shell module verification:
+- Release-owner approval:
 - Package write audience (`user` or `group`):
 
 ## System-specific commands

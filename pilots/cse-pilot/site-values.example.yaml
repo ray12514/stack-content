@@ -1,4 +1,6 @@
 schema_version: 1
+workspace:
+  role: build
 system:
   name: example-linux
 release: alpha-001
@@ -34,16 +36,19 @@ catalog_scopes:
   platform: null
 
 paths:
-  install_tree: /shared/cse/spack/opt
-  build_stage: /shared/cse/spack/stage
-  source_cache: /shared/cse/spack/cache/source
-  misc_cache: /shared/cse/spack/cache/misc
-  views_root: /shared/cse/views
-  modules_root: /shared/cse/modules
+  install_tree: /shared/cse/cse-pilot/restricted/releases/example-linux/alpha-001/spack/opt
+  build_stage: /scratch/example-user/example-linux/alpha-001/build-stage
+  source_cache: /shared/cse/cse-pilot/restricted/cache/source
+  misc_cache: /shared/cse/cse-pilot/restricted/cache/misc
+  views_root: /shared/cse/cse-pilot/restricted/releases/example-linux/alpha-001/views
+  modules_root: /shared/cse/cse-pilot/restricted/releases/example-linux/alpha-001/modules
+buildcache:
+  name: cse-pilot
+  url: file:///shared/cse/cse-pilot/restricted/buildcache/example-linux/alpha-001
 permissions:
   group: cse
   read: group
-  write: group
+  write: user
 build_jobs: 16
 
 package_repo:
