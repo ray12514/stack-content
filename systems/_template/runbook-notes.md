@@ -42,7 +42,7 @@ from `stack-planning/docs/`.
 - Published workspace and install tree:
 - Published views/modules:
 - Build and publication scratch stages:
-- CSE Unix group:
+- CSE Unix group: `cse`
 - Package/publication read audience:
 
 ## Run state and recovery
