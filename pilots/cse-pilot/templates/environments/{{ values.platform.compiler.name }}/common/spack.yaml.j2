@@ -1,0 +1,7 @@
+{% set surface = values.platform %}
+{% set surface_key = 'platform' %}
+{% set environment_kind = 'common' %}
+{% set environment_name = 'common' %}
+{% set payload_specs = data.roster.specs.common %}
+{% set payload_toolchain = values.platform.compiler.toolchain %}
+{% include '_partials/payload-spack.yaml.j2' %}

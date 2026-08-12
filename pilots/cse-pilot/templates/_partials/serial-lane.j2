@@ -1,0 +1,4 @@
+#%Module1.0
+module-whatis "CSE Serial lane for {{ surface.compiler.public_name }}"
+conflict MPI
+prepend-path MODULEPATH {{ values.paths.modules_root }}/{{ surface.compiler.name }}/serial

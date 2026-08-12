@@ -1,4 +1,36 @@
 modules:
+{% if environment_kind == 'bootstrap' %}
+  compiler_producer:
+    enable: [tcl]
+    use_view: cse_compiler
+    arch_folder: false
+    roots:
+      tcl: {{ (values.paths.modules_root ~ '/' ~ surface_name ~ '/compiler') | yaml_scalar }}
+    tcl:
+      hash_length: 0
+      exclude_implicits: true
+      include: [{{ values.shared.compiler.name }}]
+      projections:
+        all: '{name}/{version}'
+      all:
+        autoload: none
+{% endif %}
+{% if environment_kind == 'mpi' and surface.mpi.source == 'build' %}
+  mpi_producer:
+    enable: [tcl]
+    use_view: cse_mpi
+    arch_folder: false
+    roots:
+      tcl: {{ (values.paths.modules_root ~ '/' ~ surface_name ~ '/' ~ environment_name ~ '-provider') | yaml_scalar }}
+    tcl:
+      hash_length: 0
+      exclude_implicits: true
+      include: [{{ surface.mpi.name }}]
+      projections:
+        all: '{name}/{version}'
+      all:
+        autoload: none
+{% endif %}
   prefix_inspections:
     bin: [PATH]
     lib: [LD_LIBRARY_PATH]
@@ -9,18 +41,21 @@ modules:
     share/pkgconfig: [PKG_CONFIG_PATH]
     share/man: [MANPATH]
     '.': [CMAKE_PREFIX_PATH]
+{% if environment_kind != 'bootstrap' %}
   default:
     enable: [tcl]
     use_view: cse_modules
     arch_folder: false
     roots:
-      tcl: {{ (values.paths.modules_root ~ '/' ~ values.release ~ '/' ~ values.system.name ~ '/' ~ values.stack.name ~ '/' ~ values.compiler.name ~ '/' ~ environment_name) | yaml_scalar }}
+      tcl: {{ (values.paths.modules_root ~ '/' ~ surface_name ~ '/' ~ environment_name) | yaml_scalar }}
     tcl:
       hash_length: 0
       exclude_implicits: true
       include: {{ module_packages | yaml_flow }}
       projections:
+        netcdf-cxx4: '{name}/{version}-netcdf{^netcdf-c.version}-hdf5{^hdf5.version}'
         py-numpy: '{name}/{version}-python{^python.version}'
         all: '{name}/{version}'
       all:
         autoload: none
+{% endif %}

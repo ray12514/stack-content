@@ -1,0 +1,17 @@
+toolchains:
+  {{ values.platform.compiler.toolchain }}:
+    - spec: {{ ('%c=' ~ values.platform.compiler.name ~ '@' ~ values.platform.compiler.version) | yaml_scalar }}
+      when: '%c'
+    - spec: {{ ('%cxx=' ~ values.platform.compiler.name ~ '@' ~ values.platform.compiler.version) | yaml_scalar }}
+      when: '%cxx'
+    - spec: {{ ('%fortran=' ~ values.platform.compiler.name ~ '@' ~ values.platform.compiler.version) | yaml_scalar }}
+      when: '%fortran'
+  {{ values.platform.mpi.toolchain }}:
+    - spec: {{ ('%c=' ~ values.platform.compiler.name ~ '@' ~ values.platform.compiler.version) | yaml_scalar }}
+      when: '%c'
+    - spec: {{ ('%cxx=' ~ values.platform.compiler.name ~ '@' ~ values.platform.compiler.version) | yaml_scalar }}
+      when: '%cxx'
+    - spec: {{ ('%fortran=' ~ values.platform.compiler.name ~ '@' ~ values.platform.compiler.version) | yaml_scalar }}
+      when: '%fortran'
+    - spec: {{ ('%mpi=' ~ values.platform.mpi.name ~ '@' ~ values.platform.mpi.version) | yaml_scalar }}
+      when: '%mpi'

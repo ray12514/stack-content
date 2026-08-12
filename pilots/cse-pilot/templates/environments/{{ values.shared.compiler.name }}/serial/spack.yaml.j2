@@ -1,0 +1,7 @@
+{% set surface = values.shared %}
+{% set surface_key = 'shared' %}
+{% set environment_kind = 'serial' %}
+{% set environment_name = 'serial' %}
+{% set payload_specs = data.roster.specs.serial %}
+{% set payload_toolchain = values.shared.compiler.toolchain %}
+{% include '_partials/payload-spack.yaml.j2' %}

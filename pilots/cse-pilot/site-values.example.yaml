@@ -2,49 +2,72 @@ schema_version: 1
 workspace:
   role: build
 system:
-  name: example-linux
-release: alpha-001
+  name: example-system
+release: trial-001
 stack:
-  name: cse-pilot
+  name: cse-initial-conversion-trials
 
-compiler:
-  name: gcc
-  version: 13.3.1
-  toolchain: cse_gcc1331
-  public_name: GCC
-  source: external
-  modules: [gcc/13.3.1]
-mpi:
-  name: openmpi
-  version: 5.0.8
-  toolchain: cse_gcc1331_openmpi508
-  source: external
-  modules: [openmpi/5.0.8]
-gpu:
-  provider: cuda
-  version: 12.4.1
-  lane_suffix: sm_80
-  runtime_variant: +cuda
-  architecture_variant: cuda_arch=80
-  modules: [cuda/12.4.1]
+# Shared compiler and common CSE compiler surface. GCC 12.5.0 is built once in
+# the bootstrap environment on every trial system. The other environments use
+# its fixed compiler view as an external and reuse Foundation/Core build hashes.
+shared:
+  compiler:
+    name: gcc
+    version: 12.5.0
+    toolchain: cse_gcc1250
+    public_name: GCC
+    source: build
+    modules: []
+  mpi:
+    name: openmpi
+    version: 4.1.8
+    toolchain: cse_gcc1250_openmpi418
+    source: build
+    modules: []
+  catalog_scopes:
+    compiler: null
+    mpi: null
+
+# Replace this example with the exact platform compiler and compatible MPI
+# pairing selected from the static catalog. On a Cray system both are normally
+# external. On a non-Cray system the compiler is external and OpenMPI 4.1.8 is
+# built with it. The compiler scope also supplies the bootstrap compiler used
+# to build GCC 12.5.0; the workspace never discovers one from ambient state.
+# Use the static manifest's `package` value for each `name`. For Classic Intel
+# those values are `intel-oneapi-compilers-classic` and `intel-oneapi-mpi`,
+# while the catalog scope paths remain under `intel` and `intel-mpi`.
+platform:
+  compiler:
+    name: aocc
+    version: 4.2.0
+    toolchain: platform_aocc420
+    public_name: AOCC
+    source: external
+    modules: [aocc/4.2.0]
+  mpi:
+    name: openmpi
+    version: 4.1.8
+    toolchain: platform_aocc420_openmpi418
+    source: build
+    modules: []
+  catalog_scopes:
+    compiler: scopes/compilers/aocc/4.2.0
+    mpi: null
 
 catalog_scopes:
   common: scopes/common
-  compiler: scopes/compilers/gcc/13.3.1
-  mpi: scopes/mpi/openmpi/5.0.8/gcc-13.3.1
-  gpu: scopes/gpu/cuda/12.4.1
   platform: null
 
 paths:
-  install_tree: /shared/cse/cse-pilot/restricted/releases/example-linux/alpha-001/spack/opt
-  build_stage: /scratch/example-user/example-linux/alpha-001/build-stage
-  source_cache: /shared/cse/cse-pilot/restricted/cache/source
-  misc_cache: /shared/cse/cse-pilot/restricted/cache/misc
-  views_root: /shared/cse/cse-pilot/restricted/releases/example-linux/alpha-001/views
-  modules_root: /shared/cse/cse-pilot/restricted/releases/example-linux/alpha-001/modules
+  install_tree: /shared/cse/initial-conversion-trials/restricted/releases/example-system/trial-001/spack/opt
+  build_stage: /scratch/example-user/example-system/trial-001/build-stage
+  source_cache: /shared/cse/initial-conversion-trials/restricted/cache/source
+  misc_cache: /shared/cse/initial-conversion-trials/restricted/cache/misc
+  views_root: /shared/cse/initial-conversion-trials/restricted/releases/example-system/trial-001/views
+  modules_root: /shared/cse/initial-conversion-trials/restricted/releases/example-system/trial-001/modules
 buildcache:
-  name: cse-pilot
-  url: file:///shared/cse/cse-pilot/restricted/buildcache/example-linux/alpha-001
+  name: cse-initial-conversion-trials
+  url: file:///shared/cse/initial-conversion-trials/restricted/buildcache/example-system/trial-001
 permissions:
   group: cse
   read: group

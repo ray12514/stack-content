@@ -1,0 +1,7 @@
+{% set surface = values.shared %}
+{% set surface_key = 'shared' %}
+{% set environment_kind = 'mpi' %}
+{% set environment_name = 'mpi-' ~ values.shared.mpi.name %}
+{% set payload_specs = data.roster.specs.mpi %}
+{% set payload_toolchain = values.shared.mpi.toolchain %}
+{% include '_partials/payload-spack.yaml.j2' %}

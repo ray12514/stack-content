@@ -1,0 +1,32 @@
+#%Module1.0
+proc ModulesHelp { } {
+    puts stderr "CSE {{ surface.compiler.public_name }} environment for {{ values.system.name }} ({{ values.release }})"
+}
+module-whatis "CSE {{ surface.compiler.public_name }} environment for {{ values.system.name }}"
+
+conflict cse
+{% if surface.compiler.source == 'build' %}
+prepend-path MODULEPATH {{ values.paths.modules_root }}/{{ surface.compiler.name }}/compiler
+module load {{ surface.compiler.name }}/{{ surface.compiler.version }}
+{% else %}
+{% for module in surface.compiler.modules %}
+module load {{ module }}
+{% endfor %}
+{% endif %}
+
+set foundation {{ values.paths.views_root }}/{{ values.shared.compiler.name }}/foundation
+prepend-path PATH $foundation/bin
+prepend-path LD_LIBRARY_PATH $foundation/lib
+prepend-path LD_LIBRARY_PATH $foundation/lib64
+prepend-path CPATH $foundation/include
+prepend-path PKG_CONFIG_PATH $foundation/lib/pkgconfig
+prepend-path PKG_CONFIG_PATH $foundation/lib64/pkgconfig
+prepend-path PKG_CONFIG_PATH $foundation/share/pkgconfig
+prepend-path MANPATH $foundation/share/man
+prepend-path CMAKE_PREFIX_PATH $foundation
+
+set sharedcore {{ values.paths.modules_root }}/{{ values.shared.compiler.name }}/core
+set modulebase {{ values.paths.modules_root }}/{{ surface.compiler.name }}
+prepend-path MODULEPATH $sharedcore
+prepend-path MODULEPATH $modulebase/common
+prepend-path MODULEPATH $modulebase/lanes

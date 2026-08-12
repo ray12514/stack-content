@@ -1,7 +1,0 @@
-#%Module1.0
-module-whatis "CSE MPI lane ({{ values.mpi.name }}@{{ values.mpi.version }})"
-conflict Serial GPU
-{% for module in values.mpi.modules %}
-module load {{ module }}
-{% endfor %}
-prepend-path MODULEPATH {{ values.paths.modules_root }}/{{ values.release }}/{{ values.system.name }}/{{ values.stack.name }}/{{ values.compiler.name }}/mpi-{{ values.mpi.name }}

@@ -1,0 +1,6 @@
+{% set surface_name = values.shared.compiler.name %}
+{% set surface = values.shared %}
+{% set environment_name = 'common' %}
+{% set environment_kind = 'common' %}
+{% set module_packages = data.roster.module_packages.common %}
+{% include '_partials/modules.yaml.j2' %}

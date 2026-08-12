@@ -1,0 +1,12 @@
+#%Module1.0
+module-whatis "CSE MPI lane ({{ surface.mpi.name }}@{{ surface.mpi.version }})"
+conflict Serial
+{% if surface.mpi.source == 'build' %}
+prepend-path MODULEPATH {{ values.paths.modules_root }}/{{ surface.compiler.name }}/mpi-{{ surface.mpi.name }}-provider
+module load {{ surface.mpi.name }}/{{ surface.mpi.version }}
+{% else %}
+{% for module in surface.mpi.modules %}
+module load {{ module }}
+{% endfor %}
+{% endif %}
+prepend-path MODULEPATH {{ values.paths.modules_root }}/{{ surface.compiler.name }}/mpi-{{ surface.mpi.name }}

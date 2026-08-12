@@ -1,0 +1,12 @@
+packages:
+  {{ values.shared.compiler.name }}:
+    buildable: false
+    externals:
+      - spec: {{ (values.shared.compiler.name ~ '@' ~ values.shared.compiler.version) | yaml_scalar }}
+        prefix: {{ (values.paths.views_root ~ '/' ~ values.shared.compiler.name ~ '/compiler-modules') | yaml_scalar }}
+        modules: []
+        extra_attributes:
+          compilers:
+            c: {{ (values.paths.views_root ~ '/' ~ values.shared.compiler.name ~ '/compiler-modules/bin/gcc') | yaml_scalar }}
+            cxx: {{ (values.paths.views_root ~ '/' ~ values.shared.compiler.name ~ '/compiler-modules/bin/g++') | yaml_scalar }}
+            fortran: {{ (values.paths.views_root ~ '/' ~ values.shared.compiler.name ~ '/compiler-modules/bin/gfortran') | yaml_scalar }}

@@ -1,0 +1,4 @@
+packages:
+  mpi:
+    require:
+      - {{ (values.platform.mpi.name ~ '@' ~ values.platform.mpi.version) | yaml_scalar }}

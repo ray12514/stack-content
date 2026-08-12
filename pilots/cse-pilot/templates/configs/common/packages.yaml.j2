@@ -1,4 +1,19 @@
 packages:
+  cmake:
+    prefer:
+      - '@{{ data.roster.cmake.build_default }}'
+  zlib-api:
+    require:
+      - zlib
+  zlib:
+    require:
+      - '@1.3.1'
+  xz:
+    require:
+      - '@5.4.6'
+  zstd:
+    require:
+      - '@1.5.6'
   all:
     permissions:
       read: {{ values.permissions.read | yaml_scalar }}

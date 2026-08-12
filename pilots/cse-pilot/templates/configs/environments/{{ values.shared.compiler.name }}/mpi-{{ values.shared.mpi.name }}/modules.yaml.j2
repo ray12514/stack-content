@@ -1,0 +1,6 @@
+{% set surface_name = values.shared.compiler.name %}
+{% set surface = values.shared %}
+{% set environment_name = 'mpi-' ~ values.shared.mpi.name %}
+{% set environment_kind = 'mpi' %}
+{% set module_packages = data.roster.module_packages.mpi %}
+{% include '_partials/modules.yaml.j2' %}

@@ -1,0 +1,46 @@
+spack:
+  include::
+    - {{ (catalog.root ~ '/' ~ values.catalog_scopes.common) | yaml_scalar }}
+    - {{ (workspace.root ~ '/configs/common') | yaml_scalar }}
+    - {{ (workspace.root ~ '/configs/surfaces/shared/compiler.yaml') | yaml_scalar }}
+    - {{ (workspace.root ~ '/configs/surfaces/shared/toolchains.yaml') | yaml_scalar }}
+    - {{ (workspace.root ~ '/configs/environments/' ~ values.shared.compiler.name ~ '/core') | yaml_scalar }}
+
+  definitions:
+    - foundation:
+{% for spec in data.roster.specs.foundation %}
+        - {{ spec | yaml_scalar }}
+{% endfor %}
+    - core:
+{% for spec in data.roster.specs.core %}
+        - {{ spec | yaml_scalar }}
+{% endfor %}
+
+  specs:
+    - group: foundation
+      specs:
+        - matrix:
+            - [$foundation]
+            - [{{ ('%' ~ values.shared.compiler.toolchain) | yaml_scalar }}]
+    - group: core
+      needs: [foundation]
+      specs:
+        - matrix:
+            - [$core]
+            - [{{ ('%' ~ values.shared.compiler.toolchain) | yaml_scalar }}]
+
+  view:
+    foundation:
+      root: {{ (values.paths.views_root ~ '/' ~ values.shared.compiler.name ~ '/foundation') | yaml_scalar }}
+      link: roots
+      link_type: symlink
+      group: foundation
+      projections:
+        all: '{name}'
+    cse_modules:
+      root: {{ (values.paths.views_root ~ '/' ~ values.shared.compiler.name ~ '/core-modules') | yaml_scalar }}
+      link: roots
+      link_type: symlink
+      group: core
+      projections:
+        all: '{name}/{version}'

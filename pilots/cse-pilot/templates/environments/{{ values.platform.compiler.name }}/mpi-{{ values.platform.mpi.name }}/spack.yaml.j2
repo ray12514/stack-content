@@ -1,0 +1,7 @@
+{% set surface = values.platform %}
+{% set surface_key = 'platform' %}
+{% set environment_kind = 'mpi' %}
+{% set environment_name = 'mpi-' ~ values.platform.mpi.name %}
+{% set payload_specs = data.roster.specs.mpi %}
+{% set payload_toolchain = values.platform.mpi.toolchain %}
+{% include '_partials/payload-spack.yaml.j2' %}
