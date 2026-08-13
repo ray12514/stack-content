@@ -24,11 +24,36 @@ class Cce(Package, CompilerPackage):
         r"[Cc]ray (?:clang|C :|C\+\+ :|Fortran :) [Vv]ersion.*?(\d+(?:\.\d+)+)"
     )
 
+    debug_flags = ["-g", "-G0", "-G1", "-G2", "-Gfast"]
+
     compiler_wrapper_link_paths = {
         "c": os.path.join("cce", "craycc"),
         "cxx": os.path.join("cce", "case-insensitive", "crayCC"),
         "fortran": os.path.join("cce", "crayftn"),
     }
+
+    implicit_rpath_libs = [
+        "libalign",
+        "libcrayacc_amdgpu",
+        "libcrayacc_x86_64",
+        "libcraymath",
+        "libcraymp",
+        "libcrayompd",
+        "libcsup",
+        "libfi",
+        "libf",
+        "libmodules64",
+        "libmodules",
+        "libopenacc_amdgpu",
+        "libopenacc",
+        "libopenacc_x86_64",
+        "libpgas-shmem",
+        "libplinterface",
+        "libquadmath",
+        "libu",
+    ]
+
+    maintainers("becker33")
 
     version("21.0.0")
     version("20.0.0")
