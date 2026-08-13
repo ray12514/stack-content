@@ -3,5 +3,5 @@
 {% set environment_kind = 'mpi' %}
 {% set environment_name = 'mpi-' ~ values.shared.mpi.name %}
 {% set payload_specs = data.roster.specs.mpi %}
-{% set payload_constraint = '%' ~ values.shared.compiler.name ~ '@' ~ values.shared.compiler.version ~ ' ^' ~ values.shared.mpi.name ~ '@' ~ values.shared.mpi.version %}
+{% set payload_constraint = 'target=' ~ values.architecture.target ~ ' %' ~ values.shared.compiler.name ~ '@' ~ values.shared.compiler.version ~ ' ^' ~ values.shared.mpi.name ~ '@' ~ values.shared.mpi.version %}
 {% include '_partials/payload-spack.yaml.j2' %}

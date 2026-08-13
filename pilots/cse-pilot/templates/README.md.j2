@@ -6,6 +6,12 @@ Workspace role: `{{ values.workspace.role }}`
 
 Reviewed build node type: `{{ values.build.node_type }}`
 
+Portable CPU target: `{{ values.architecture.target }}`
+
+The target is shared by all eight environments and was validated against these
+CPU-only node types: `{{ values.architecture.node_types | join(', ') }}`. Moving
+the build to another profiled node changes the stage selection, not the target.
+
 Ordered build-stage fallbacks:
 
 {% for stage in values.paths.build_stage %}

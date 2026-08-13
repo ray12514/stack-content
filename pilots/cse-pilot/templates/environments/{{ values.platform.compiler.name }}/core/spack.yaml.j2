@@ -24,16 +24,18 @@ spack:
       specs:
         - matrix:
             - [$foundation]
-            - [{{ ('%' ~ values.platform.compiler.name ~ '@' ~ values.platform.compiler.version) | yaml_scalar }}]
+            - [{{ ('target=' ~ values.architecture.target ~ ' %' ~ values.platform.compiler.name ~ '@' ~ values.platform.compiler.version) | yaml_scalar }}]
     - group: core
       needs: [foundation]
       specs:
         - matrix:
             - [$core]
-            - [{{ ('%' ~ values.platform.compiler.name ~ '@' ~ values.platform.compiler.version) | yaml_scalar }}]
+            - [{{ ('target=' ~ values.architecture.target ~ ' %' ~ values.platform.compiler.name ~ '@' ~ values.platform.compiler.version) | yaml_scalar }}]
     - group: core-independent
       specs:
-        - $core_independent
+        - matrix:
+            - [$core_independent]
+            - [{{ ('target=' ~ values.architecture.target) | yaml_scalar }}]
 
   view:
     foundation:

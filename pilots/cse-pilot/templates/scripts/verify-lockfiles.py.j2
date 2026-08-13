@@ -12,6 +12,7 @@ from pathlib import Path
 WORKSPACE = Path(__file__).resolve().parents[1]
 BUILD_CMAKE = {{ data.roster.cmake.build_default | tojson }}
 PUBLIC_CMAKE = {{ data.roster.cmake.current | tojson }}
+EXPECTED_CPU_TARGET = {{ values.architecture.target | tojson }}
 EXPECTED_ENVIRONMENTS = {
     {{ (values.shared.compiler.name ~ '/core') | tojson }},
     {{ (values.shared.compiler.name ~ '/common') | tojson }},
@@ -140,6 +141,15 @@ def main() -> int:
             continue
 
         roots_by_group: dict[str, list[dict]] = defaultdict(list)
+        for dag_hash, node in nodes.items():
+            if node.get("external"):
+                continue
+            target = (node.get("arch") or {}).get("target")
+            if target != EXPECTED_CPU_TARGET:
+                errors.append(
+                    f"{environment}: built node {node.get('name')}@{node_version(node)} "
+                    f"({dag_hash[:7]}) targets {target!r}; expected {EXPECTED_CPU_TARGET!r}"
+                )
         for root in lock.get("roots", []):
             roots_by_group[root.get("group", "default")].append(root)
             node = nodes.get(root.get("hash"), {})
@@ -287,7 +297,7 @@ def main() -> int:
     print(
         "Lockfile verification passed: eight environments, shared producer "
         f"hashes, CMake {BUILD_CMAKE} build dependencies, NetCDF/HDF5 chains, "
-        "compiler surfaces, and MPI boundaries."
+        f"compiler surfaces, MPI boundaries, and CPU target {EXPECTED_CPU_TARGET}."
     )
     return 0
 

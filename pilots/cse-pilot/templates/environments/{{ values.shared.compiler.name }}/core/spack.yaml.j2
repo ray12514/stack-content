@@ -23,22 +23,24 @@ spack:
   specs:
     - group: compiler
       specs:
-        - {{ (values.shared.compiler.name ~ '@' ~ values.shared.compiler.version ~ " languages='c,c++,fortran' %" ~ values.shared.compiler.build_with.name ~ '@' ~ values.shared.compiler.build_with.version) | yaml_scalar }}
+        - {{ (values.shared.compiler.name ~ '@' ~ values.shared.compiler.version ~ " languages='c,c++,fortran' target=" ~ values.architecture.target ~ ' %' ~ values.shared.compiler.build_with.name ~ '@' ~ values.shared.compiler.build_with.version) | yaml_scalar }}
     - group: foundation
       needs: [compiler]
       specs:
         - matrix:
             - [$foundation]
-            - [{{ ('%' ~ values.shared.compiler.name ~ '@' ~ values.shared.compiler.version) | yaml_scalar }}]
+            - [{{ ('target=' ~ values.architecture.target ~ ' %' ~ values.shared.compiler.name ~ '@' ~ values.shared.compiler.version) | yaml_scalar }}]
     - group: core
       needs: [compiler, foundation]
       specs:
         - matrix:
             - [$core]
-            - [{{ ('%' ~ values.shared.compiler.name ~ '@' ~ values.shared.compiler.version) | yaml_scalar }}]
+            - [{{ ('target=' ~ values.architecture.target ~ ' %' ~ values.shared.compiler.name ~ '@' ~ values.shared.compiler.version) | yaml_scalar }}]
     - group: core-independent
       specs:
-        - $core_independent
+        - matrix:
+            - [$core_independent]
+            - [{{ ('target=' ~ values.architecture.target) | yaml_scalar }}]
 
   view:
     cse_compiler:

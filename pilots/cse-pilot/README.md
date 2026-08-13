@@ -41,6 +41,16 @@ It selects the scheduler when exactly one of `slurm` or `pbs` is present. Use
 `CSE_OPENMPI_FABRICS` or `CSE_OPENMPI_SCHEDULER` only to resolve a reviewed
 ambiguity; the selected dependency must still exist in the catalog.
 
+The helper resolves one portable CPU target for the whole system from the
+cataloged CPU-only build/runtime node facts. It selects the highest common
+standard target in this order: `x86_64_v3`, `x86_64_v2`, `x86_64`. It never
+selects `x86_64_v4`, a vendor microarchitecture, or the native build-node
+target for these trials. Set `CSE_CPU_TARGET` only to choose a lower reviewed
+target; the helper rejects a target that any relevant CPU-only node cannot run.
+The initialized manifests place that target on every root group and also make
+it the default requirement for dependencies. The generated lock verifier fails
+if any CSE-built node uses another target.
+
 The operator selects one reviewed build node type with
 `CSE_BUILD_NODE_TYPE`. The helper reads that node type's inspected stage facts
 from the catalog manifest, drops candidates that were unwritable, empty, or on

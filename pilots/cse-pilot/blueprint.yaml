@@ -9,6 +9,8 @@ snapshot_catalog: true
 required_values:
   - workspace.role
   - build.node_type
+  - architecture.target
+  - architecture.node_types
   - system.name
   - release
   - stack.name

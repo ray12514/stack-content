@@ -20,6 +20,9 @@ class InputError(ValueError):
     pass
 
 
+PORTABLE_CPU_TARGETS = ("x86_64_v3", "x86_64_v2", "x86_64")
+
+
 def required(name: str) -> str:
     value = os.environ.get(name, "").strip()
     if not value:
@@ -65,7 +68,11 @@ def modules_by_scope(plan: dict[str, Any]) -> dict[str, list[str]]:
 
 
 def one_scope(
-    scopes: list[dict[str, Any]], *, kind: str, name: str | None = None, version: str | None = None
+    scopes: list[dict[str, Any]],
+    *,
+    kind: str,
+    name: str | None = None,
+    version: str | None = None,
 ) -> dict[str, Any]:
     matches = [
         scope
@@ -117,7 +124,9 @@ def mpi_scope(
             continue
         if str(scope.get("version")) != version or not scope.get("compiler_ref"):
             continue
-        scope_name, scope_version = parse_ref(str(scope["compiler_ref"]), "catalog compiler_ref")
+        scope_name, scope_version = parse_ref(
+            str(scope["compiler_ref"]), "catalog compiler_ref"
+        )
         if scope_name != compiler_name:
             continue
         if name == "cray-mpich":
@@ -132,7 +141,9 @@ def mpi_scope(
         )
     return max(
         candidates,
-        key=lambda scope: version_key(parse_ref(str(scope["compiler_ref"]), "compiler_ref")[1]),
+        key=lambda scope: version_key(
+            parse_ref(str(scope["compiler_ref"]), "compiler_ref")[1]
+        ),
     )
 
 
@@ -229,11 +240,78 @@ def build_stage_paths(
     return node_type_name, ordered
 
 
+def portable_cpu_target(manifest: dict[str, Any]) -> tuple[str, list[str]]:
+    """Select one portable CPU target for every environment on the system."""
+    node_types = (manifest.get("profile_facts") or {}).get("node_types") or {}
+    if not isinstance(node_types, dict):
+        raise InputError("catalog manifest profile_facts.node_types is not a mapping")
+
+    supported_by_node: dict[str, set[str]] = {}
+    for name, node_type in node_types.items():
+        if not isinstance(node_type, dict) or node_type.get("gpu") is not None:
+            continue
+        if node_type.get("role") not in {"build_host", "runtime", "both"}:
+            continue
+        cpu = node_type.get("cpu") or {}
+        supported = {
+            str(target)
+            for target in (
+                cpu.get("detected"),
+                cpu.get("preferred"),
+                *(cpu.get("alternates") or []),
+            )
+            if target
+        }
+        if supported:
+            supported_by_node[str(name)] = supported
+
+    if not supported_by_node:
+        raise InputError(
+            "catalog has no CPU-only build/runtime node architecture facts; "
+            "re-probe the system before initializing the workspace"
+        )
+
+    common = set.intersection(*supported_by_node.values())
+    requested = os.environ.get("CSE_CPU_TARGET", "").strip()
+    if requested:
+        if requested not in PORTABLE_CPU_TARGETS:
+            allowed = ", ".join(PORTABLE_CPU_TARGETS)
+            raise InputError(
+                f"CSE_CPU_TARGET must be one portable trial target ({allowed}); "
+                f"got {requested!r}"
+            )
+        missing = sorted(
+            name
+            for name, supported in supported_by_node.items()
+            if requested not in supported
+        )
+        if missing:
+            raise InputError(
+                f"CSE_CPU_TARGET={requested} is not supported by CPU-only node type(s): "
+                f"{', '.join(missing)}"
+            )
+        return requested, sorted(supported_by_node)
+
+    for target in PORTABLE_CPU_TARGETS:
+        if target in common:
+            return target, sorted(supported_by_node)
+    details = "; ".join(
+        f"{name}={','.join(sorted(targets))}"
+        for name, targets in sorted(supported_by_node.items())
+    )
+    raise InputError(
+        "CPU-only node types have no common portable x86_64 trial target; "
+        f"review the profile or set a supported CSE_CPU_TARGET ({details})"
+    )
+
+
 def scope_external_specs(catalog: Path, relative: str) -> dict[str, list[str]]:
     data = load_mapping(catalog / relative / "packages.yaml")
     packages = data.get("packages") or {}
     if not isinstance(packages, dict):
-        raise InputError(f"expected packages mapping in {catalog / relative / 'packages.yaml'}")
+        raise InputError(
+            f"expected packages mapping in {catalog / relative / 'packages.yaml'}"
+        )
     result: dict[str, list[str]] = {}
     for name, package in packages.items():
         if not isinstance(package, dict):
@@ -246,9 +324,7 @@ def scope_external_specs(catalog: Path, relative: str) -> dict[str, list[str]]:
     return result
 
 
-def openmpi_build_spec(
-    name: str, version: str, externals: dict[str, list[str]]
-) -> str:
+def openmpi_build_spec(name: str, version: str, externals: dict[str, list[str]]) -> str:
     if name != "openmpi":
         return f"{name}@{version}"
 
@@ -267,7 +343,9 @@ def openmpi_build_spec(
                 "a verified libfabric external in the static common scope"
             )
     if fabrics == "auto":
-        raise InputError("CSE_OPENMPI_FABRICS=auto is not reproducible; select explicit fabrics")
+        raise InputError(
+            "CSE_OPENMPI_FABRICS=auto is not reproducible; select explicit fabrics"
+        )
     for fabric in fabrics.split(","):
         package = {"ofi": "libfabric", "ucx": "ucx"}.get(fabric, fabric)
         if package not in externals:
@@ -285,7 +363,9 @@ def openmpi_build_spec(
 
     scheduler = os.environ.get("CSE_OPENMPI_SCHEDULER", "").strip()
     if not scheduler:
-        scheduler_externals = sorted({name for name in ("slurm", "pbs") if name in externals})
+        scheduler_externals = sorted(
+            {name for name in ("slurm", "pbs") if name in externals}
+        )
         if len(scheduler_externals) != 1:
             raise InputError(
                 "build-sourced OpenMPI needs exactly one verified slurm or pbs external; "
@@ -308,7 +388,9 @@ def openmpi_build_spec(
         variants.extend(["~lustre", "+romio", "romio-filesystem=none"])
     if os.environ.get("CSE_OPENMPI_PMI", "disabled").strip() == "enabled":
         if scheduler != "slurm":
-            raise InputError("CSE_OPENMPI_PMI=enabled is valid only with the Slurm selection")
+            raise InputError(
+                "CSE_OPENMPI_PMI=enabled is valid only with the Slurm selection"
+            )
         variants.append("+pmi")
     else:
         variants.append("~pmi")
@@ -327,7 +409,9 @@ def mpi_values(
     common_externals: dict[str, list[str]],
 ) -> tuple[dict[str, Any], str | None]:
     if source not in {"build", "external"}:
-        raise InputError(f"{surface} MPI source must be build or external; got {source!r}")
+        raise InputError(
+            f"{surface} MPI source must be build or external; got {source!r}"
+        )
     provider_name, provider_version = parse_ref(provider_ref, f"{surface} MPI")
     compiler_name, compiler_version = parse_ref(compiler_ref, f"{surface} compiler")
     package_name = provider_name
@@ -366,7 +450,9 @@ def main() -> int:
         output = Path(required("BUILD_VALUES")).resolve()
         manifest = load_mapping(catalog / "manifest.yaml")
         plan = load_mapping(catalog / "reports" / "static-plan.yaml")
-        scopes = [item for item in manifest.get("scopes") or [] if isinstance(item, dict)]
+        scopes = [
+            item for item in manifest.get("scopes") or [] if isinstance(item, dict)
+        ]
         module_map = modules_by_scope(plan)
 
         system_name = required("SYSTEM_NAME")
@@ -426,7 +512,9 @@ def main() -> int:
         )
         platform_scopes = [scope for scope in scopes if scope.get("kind") == "platform"]
         platform_common_path = (
-            existing_scope(catalog, platform_scopes[0]) if len(platform_scopes) == 1 else None
+            existing_scope(catalog, platform_scopes[0])
+            if len(platform_scopes) == 1
+            else None
         )
         if len(platform_scopes) > 1:
             raise InputError("catalog contains more than one platform scope")
@@ -435,6 +523,7 @@ def main() -> int:
         build_node_type, build_stages = build_stage_paths(
             manifest, system_name=system_name, release=release
         )
+        cpu_target, target_node_types = portable_cpu_target(manifest)
         release_root = required("BUILD_RELEASE_ROOT").rstrip("/")
         restricted_root = required("CSE_RESTRICTED_ROOT").rstrip("/")
         values = {
@@ -444,11 +533,17 @@ def main() -> int:
             "release": release,
             "stack": {"name": "cse-initial-conversion-trials"},
             "build": {"node_type": build_node_type},
+            "architecture": {
+                "target": cpu_target,
+                "node_types": target_node_types,
+            },
             "shared": {
                 "compiler": {
                     "name": shared_compiler_name,
                     "version": shared_compiler_version,
-                    "public_name": os.environ.get("CSE_SHARED_COMPILER_PUBLIC_NAME", "GCC"),
+                    "public_name": os.environ.get(
+                        "CSE_SHARED_COMPILER_PUBLIC_NAME", "GCC"
+                    ),
                     "source": "build",
                     "modules": [],
                     "build_with": {
@@ -507,10 +602,15 @@ def main() -> int:
         output.write_text(yaml.safe_dump(values, sort_keys=False), encoding="utf-8")
         print(output)
         print(f"build node type: {build_node_type}")
+        print(f"CPU target: {cpu_target} (common to {', '.join(target_node_types)})")
         for stage in build_stages:
             print(f"build stage: {stage}")
-        print(f"shared surface: {shared_compiler_ref} + {required('CSE_SHARED_MPI_REF')}")
-        print(f"platform surface: {platform_compiler_ref} + {required('CSE_PLATFORM_MPI_REF')}")
+        print(
+            f"shared surface: {shared_compiler_ref} + {required('CSE_SHARED_MPI_REF')}"
+        )
+        print(
+            f"platform surface: {platform_compiler_ref} + {required('CSE_PLATFORM_MPI_REF')}"
+        )
         return 0
     except (InputError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
