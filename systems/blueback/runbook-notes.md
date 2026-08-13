@@ -44,6 +44,12 @@ The flavor directories are compatibility baselines, not replacement compiler
 versions. Confirm that the live profile pairs CCE 21.0.0 and the CSE GCC 12.5.0
 surface with those real supported prefixes.
 
+Keep the complete observed Cray MPICH flavor map in the profile. A flavor does
+not have to name an installed `compiler_provider`: the suffix is a same-family
+minimum baseline. In particular, CSE-built GCC 12.5.0 may consume the
+`ofi/gnu/12.3` flavor, while a GCC version below 12.3 may not. The loaded or
+default PrgEnv is review evidence only and does not narrow the supported map.
+
 ## Profile and catalog review additions
 
 In addition to the common runbook checks:
