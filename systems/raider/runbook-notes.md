@@ -25,6 +25,20 @@ gate. This file records only Raider-specific facts, choices, and findings.
 - Keep Foundation/Core/Common/Serial/MPI package intent in the CSE trial roster
   rather than the static platform catalog.
 
+## Provisional module snapshot (2026-08-12)
+
+This snapshot guides the first profile review; the live Cluster Inspector
+profile remains authoritative.
+
+- `amd/aocc/4.1.0`
+- `amd/aocl/aocl/4.1.0`
+- existing site module `penguin/openmpi/4.1.6/aocc-4.0.0`
+- existing helper module `penguin/mpi-vars/aocc`
+
+The existing OpenMPI module names AOCC 4.0.0 and therefore is not the selected
+AOCC 4.1.0 pairing. Build OpenMPI 4.1.8 with AOCC 4.1.0 for the platform MPI
+surface, and separately with the CSE GCC 12.5.0 surface.
+
 ## Profile and catalog review additions
 
 In addition to the common runbook checks:

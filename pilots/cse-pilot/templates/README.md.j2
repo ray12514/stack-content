@@ -34,7 +34,9 @@ from that fixed view path and repeat Foundation and build-tool producer groups.
 Spack 1.2 `needs` makes those concrete specs available for reuse. Review the
 generated lockfiles before installation and stop if repeated producer hashes
 differ. After all eight locks exist, run `python3 scripts/verify-lockfiles.py` from the
-workspace root. Do not begin installation unless it passes.
+workspace root. For Cray MPICH surfaces, the verifier also requires the
+inspected libfabric and Cray PMI externals in the concrete DAG. Do not begin
+installation unless it passes.
 
 The trial is CPU-only. No GPU environment or GPU module selector is rendered.
 

@@ -26,6 +26,24 @@ gate. This file records only Blueback-specific facts, choices, and findings.
 - Keep Foundation/Core/Common/Serial/MPI package intent in the CSE trial roster.
   Do not add Blueback package policy to `render-static`.
 
+## Provisional module snapshot (2026-08-12)
+
+This snapshot guides the first profile review; the live Cluster Inspector
+profile remains authoritative.
+
+- `PrgEnv-cray/8.7.0`
+- `cce/21.0.0`
+- `cray-mpich/9.1.0`
+- `libfabric/2.3.1`
+- CCE Cray MPICH flavor observed at
+  `/opt/cray/pe/mpich/9.1.0/ofi/cray/20.0`
+- GNU Cray MPICH flavor observed at
+  `/opt/cray/pe/mpich/9.1.0/ofi/gnu/12.3`
+
+The flavor directories are compatibility baselines, not replacement compiler
+versions. Confirm that the live profile pairs CCE 21.0.0 and the CSE GCC 12.5.0
+surface with those real supported prefixes.
+
 ## Profile and catalog review additions
 
 In addition to the common runbook checks:
@@ -36,6 +54,8 @@ In addition to the common runbook checks:
 - confirm the selected Cray MPICH record has the matching compiler flavor and
   real flavor prefix;
 - confirm fabric/runtime externals refer to the active CXI/Cray PE stack;
+- confirm `libfabric` is present in the common static scope and `cray-pmi` is
+  present in each Cray MPICH scope;
 - reject cross-CPE compiler/MPI combinations even when every individual module
   exists.
 

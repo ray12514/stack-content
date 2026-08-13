@@ -67,7 +67,9 @@ After all eight environments concretize, run the rendered
 `scripts/verify-lockfiles.py`. It fails if producer hashes diverge, a payload
 selects CMake 4.4.2 instead of 3.31.12, a Serial DAG contains MPI, or an MPI DAG
 does not use the provider selected for its compiler surface. It also checks the
-approved NetCDF-C/NetCDF-Fortran/NetCDF-CXX4 to HDF5 version chains.
+approved NetCDF-C/NetCDF-Fortran/NetCDF-CXX4 to HDF5 version chains. For Cray
+MPICH, it also requires the concrete DAG to retain the inspected libfabric and
+Cray PMI externals.
 
 ## Environment set
 

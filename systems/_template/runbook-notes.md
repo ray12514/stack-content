@@ -1,6 +1,6 @@
-# <System> static pilot notes
+# <System> Initial Conversion Trials notes
 
-Use `stack-planning/docs/runbook.md` for the common static-pilot procedure. This
+Use `stack-planning/docs/runbook.md` for the common trial procedure. This
 file records only the values, promotion evidence, recovery decision, and checks
 that differ for this system. Apply the matching platform acceptance checklist
 from `stack-planning/docs/`.
@@ -18,8 +18,8 @@ from `stack-planning/docs/`.
 - Reviewed profile: `systems/<system>/profile.yaml`
 - Inspector hints, if needed:
 - Static catalog release/path:
-- Restricted build values: `systems/<system>/cse-pilot-build-values.yaml`
-- Publication values: `systems/<system>/cse-pilot-publish-values.yaml`
+- Restricted build values: `systems/<system>/cse-trials-build-values.yaml`
+- Publication values: `systems/<system>/cse-trials-publish-values.yaml`
 - Active pilot roster: `pilots/cse-pilot/roster.yaml`
 - Spack release:
 - `spack-packages` release:
@@ -29,9 +29,10 @@ from `stack-planning/docs/`.
 
 ## Supported surfaces
 
-| Compiler | MPI provider/version | GPU toolkit/architecture | Expected lanes |
+| Surface | Compiler | MPI provider/version | Environments |
 |---|---|---|---|
-| | | | |
+| Shared CSE | GCC 12.5.0 | | bootstrap, Core, Common, Serial, MPI |
+| Platform | | | Common, Serial, MPI |
 
 ## Site paths
 
@@ -60,13 +61,16 @@ from `stack-planning/docs/`.
 
 ## Promotion record
 
-| Lane | Concretized | Built | Target runtime passed | Cache pushed | Cache-only published | Hashes match |
+| Environment | Concretized | Built | Target runtime passed | Cache pushed | Cache-only published | Hashes match |
 |---|---|---|---|---|---|---|
-| Core | | | | | | |
-| Common | | | | | | |
-| Serial | | | | | | |
-| MPI | | | | | | |
-| GPU | | | | | | |
+| GCC bootstrap | | | | | | |
+| GCC Core | | | | | | |
+| GCC Common | | | | | | |
+| GCC Serial | | | | | | |
+| GCC MPI | | | | | | |
+| Platform Common | | | | | | |
+| Platform Serial | | | | | | |
+| Platform MPI | | | | | | |
 
 - Signing key/policy:
 - Build-cache index verification:
@@ -82,15 +86,15 @@ commands that differ from the canonical runbook.
 
 - [ ] Profile verified against the live system
 - [ ] Static catalog reviewed against the profile
-- [ ] Restricted workspace and five native `modules.yaml` files generated
-- [ ] Five restricted lockfiles reviewed
+- [ ] Restricted workspace and eight native `modules.yaml` files generated
+- [ ] Eight restricted lockfiles reviewed
 - [ ] Serial lockfile contains no MPI implementation
 - [ ] System-provided externals are used rather than fetched
 - [ ] Every lane builds and passes its target runtime checks
 - [ ] Approved binaries and cache index are complete
 - [ ] Shared installation is cache-only and published hashes match
 - [ ] Published views and package modules regenerate cleanly
-- [ ] `cse/<Compiler>` exposes the expected lane selectors
+- [ ] Both `cse/<Compiler>` front doors expose the expected lane selectors
 - [ ] Loading a second conflicting lane fails
 - [ ] Clean login and compute sessions pass the platform checklist
 - [ ] Release owner approves publication
