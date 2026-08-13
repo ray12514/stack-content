@@ -1,28 +1,27 @@
 spack:
   include::
-    - {{ (catalog.root ~ '/' ~ values.catalog_scopes.common) | yaml_scalar }}
 {% if surface_key == 'shared' %}
-    - {{ (workspace.root ~ '/configs/surfaces/shared/compiler.yaml') | yaml_scalar }}
+    - ../../../configs/surfaces/shared/compiler.yaml
+{% endif %}
+    - {{ ('../../../catalog/' ~ values.catalog_scopes.common) | yaml_scalar }}
+{% if surface_key == 'shared' %}
+    - {{ ('../../../catalog/' ~ values.shared.catalog_scopes.compiler) | yaml_scalar }}
 {% elif surface.compiler.source == 'external' %}
-    - {{ (catalog.root ~ '/' ~ surface.catalog_scopes.compiler) | yaml_scalar }}
-    - {{ (workspace.root ~ '/configs/surfaces/shared/compiler.yaml') | yaml_scalar }}
+    - {{ ('../../../catalog/' ~ surface.catalog_scopes.compiler) | yaml_scalar }}
 {% endif %}
 {% if environment_kind == 'mpi' and surface.mpi.source == 'external' %}
-    - {{ (catalog.root ~ '/' ~ surface.catalog_scopes.mpi) | yaml_scalar }}
+    - {{ ('../../../catalog/' ~ surface.catalog_scopes.mpi) | yaml_scalar }}
 {% endif %}
 {% if values.catalog_scopes.platform %}
-    - {{ (catalog.root ~ '/' ~ values.catalog_scopes.platform) | yaml_scalar }}
+    - {{ ('../../../catalog/' ~ values.catalog_scopes.platform) | yaml_scalar }}
 {% endif %}
-    - {{ (workspace.root ~ '/configs/common') | yaml_scalar }}
-    - {{ (workspace.root ~ '/configs/surfaces/shared/toolchains.yaml') | yaml_scalar }}
+    - ../../../configs/common
 {% if environment_kind == 'mpi' and surface_key == 'shared' %}
-    - {{ (workspace.root ~ '/configs/surfaces/shared/packages.yaml') | yaml_scalar }}
+    - ../../../configs/surfaces/shared/packages.yaml
 {% elif environment_kind == 'mpi' %}
-    - {{ (workspace.root ~ '/configs/surfaces/platform') | yaml_scalar }}
-{% elif surface_key == 'platform' %}
-    - {{ (workspace.root ~ '/configs/surfaces/platform/toolchains.yaml') | yaml_scalar }}
+    - ../../../configs/surfaces/platform/packages.yaml
 {% endif %}
-    - {{ (workspace.root ~ '/configs/environments/' ~ surface.compiler.name ~ '/' ~ environment_name) | yaml_scalar }}
+    - {{ ('../../../configs/environments/' ~ surface.compiler.name ~ '/' ~ environment_name) | yaml_scalar }}
 
   definitions:
     - foundation:
@@ -39,32 +38,55 @@ spack:
 {% endfor %}
 
   specs:
+{% if surface.compiler.source == 'build' %}
+    - group: compiler
+      specs:
+        - {{ (surface.compiler.name ~ '@' ~ surface.compiler.version ~ " languages='c,c++,fortran' %" ~ surface.compiler.build_with.name ~ '@' ~ surface.compiler.build_with.version) | yaml_scalar }}
+{% endif %}
     - group: foundation
+{% if surface.compiler.source == 'build' %}
+      needs: [compiler]
+{% endif %}
       specs:
         - matrix:
             - [$foundation]
-            - [{{ ('%' ~ values.shared.compiler.toolchain) | yaml_scalar }}]
+            - [{{ ('%' ~ surface.compiler.name ~ '@' ~ surface.compiler.version) | yaml_scalar }}]
     - group: build-tools
+{% if surface.compiler.source == 'build' %}
+      needs: [compiler, foundation]
+{% else %}
       needs: [foundation]
+{% endif %}
       specs:
         - matrix:
             - [$build_tools]
-            - [{{ ('%' ~ values.shared.compiler.toolchain) | yaml_scalar }}]
+            - [{{ ('%' ~ surface.compiler.name ~ '@' ~ surface.compiler.version) | yaml_scalar }}]
 {% if environment_kind == 'mpi' and surface.mpi.source == 'build' %}
     - group: mpi
+{% if surface.compiler.source == 'build' %}
+      needs: [compiler, foundation, build-tools]
+{% else %}
+      needs: [foundation, build-tools]
+{% endif %}
       specs:
-        - {{ (surface.mpi.name ~ '@' ~ surface.mpi.version ~ ' %' ~ surface.compiler.toolchain) | yaml_scalar }}
+        - {{ (surface.mpi.spec ~ ' %' ~ surface.compiler.name ~ '@' ~ surface.compiler.version) | yaml_scalar }}
 {% endif %}
     - group: payload
 {% if environment_kind == 'mpi' and surface.mpi.source == 'build' %}
+{% if surface.compiler.source == 'build' %}
+      needs: [compiler, foundation, build-tools, mpi]
+{% else %}
       needs: [foundation, build-tools, mpi]
+{% endif %}
+{% elif surface.compiler.source == 'build' %}
+      needs: [compiler, foundation, build-tools]
 {% else %}
       needs: [foundation, build-tools]
 {% endif %}
       specs:
         - matrix:
             - [$payload]
-            - [{{ ('%' ~ payload_toolchain) | yaml_scalar }}]
+            - [{{ payload_constraint | yaml_scalar }}]
 
   view:
 {% if environment_kind == 'mpi' and surface.mpi.source == 'build' %}

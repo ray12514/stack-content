@@ -13,11 +13,11 @@ WORKSPACE = Path(__file__).resolve().parents[1]
 BUILD_CMAKE = {{ data.roster.cmake.build_default | tojson }}
 PUBLIC_CMAKE = {{ data.roster.cmake.current | tojson }}
 EXPECTED_ENVIRONMENTS = {
-    {{ (values.shared.compiler.name ~ '/bootstrap') | tojson }},
     {{ (values.shared.compiler.name ~ '/core') | tojson }},
     {{ (values.shared.compiler.name ~ '/common') | tojson }},
     {{ (values.shared.compiler.name ~ '/serial') | tojson }},
     {{ (values.shared.compiler.name ~ '/mpi-' ~ values.shared.mpi.name) | tojson }},
+    {{ (values.platform.compiler.name ~ '/core') | tojson }},
     {{ (values.platform.compiler.name ~ '/common') | tojson }},
     {{ (values.platform.compiler.name ~ '/serial') | tojson }},
     {{ (values.platform.compiler.name ~ '/mpi-' ~ values.platform.mpi.name) | tojson }},
@@ -41,8 +41,8 @@ COMPILER_BY_SURFACE = {
         {{ values.platform.compiler.name | tojson }}, {{ values.platform.compiler.version | tojson }}
     ),
 }
-BOOTSTRAP_COMPILER = (
-    {{ values.platform.compiler.name | tojson }}, {{ values.platform.compiler.version | tojson }}
+GCC_BUILD_COMPILER = (
+    {{ values.shared.compiler.build_with.name | tojson }}, {{ values.shared.compiler.build_with.version | tojson }}
 )
 NETCDF_CHAINS = {
     ("netcdf-c", "4.9.2"): ("4.9.2", "1.10.6"),
@@ -125,8 +125,9 @@ def main() -> int:
     if extra:
         errors.append(f"unexpected lockfiles: {', '.join(sorted(extra))}")
 
-    reused_hashes: dict[tuple[str, str], set[str]] = defaultdict(set)
-    language_provider_hashes: dict[tuple[str, str], set[str]] = defaultdict(set)
+    reused_hashes: dict[tuple[str, str, str], set[str]] = defaultdict(set)
+    language_provider_hashes: dict[tuple[str, str, str], set[str]] = defaultdict(set)
+    gcc_producer_hashes: set[str] = set()
     cmake_roots_by_environment: dict[str, set[str]] = defaultdict(set)
 
     for path in lock_paths:
@@ -145,25 +146,24 @@ def main() -> int:
             name = node.get("name")
             version = node_version(node)
             if root.get("group") == "foundation":
-                reused_hashes[(name, version)].add(root.get("hash"))
+                reused_hashes[(surface, name, version)].add(root.get("hash"))
             if name == "cmake" and root.get("group") in {"core", "build-tools"}:
-                reused_hashes[(name, version)].add(root.get("hash"))
+                reused_hashes[(surface, name, version)].add(root.get("hash"))
                 cmake_roots_by_environment[environment].add(version)
 
             providers = direct_language_providers(node, nodes)
             for provider_hash in direct_language_provider_hashes(node):
                 provider = nodes.get(provider_hash, {})
                 language_provider_hashes[
-                    (provider.get("name", ""), node_version(provider))
+                    (surface, provider.get("name", ""), node_version(provider))
                 ].add(provider_hash)
             group = root.get("group")
             if group == "compiler":
-                expected_provider = BOOTSTRAP_COMPILER
-            elif group == "foundation":
-                expected_provider = COMPILER_BY_SURFACE[{{ values.shared.compiler.name | tojson }}]
-            elif group in {"build-tools", "core"}:
-                expected_provider = COMPILER_BY_SURFACE[{{ values.shared.compiler.name | tojson }}]
-            elif group in {"payload", "mpi"}:
+                expected_provider = GCC_BUILD_COMPILER
+                if surface != {{ values.shared.compiler.name | tojson }}:
+                    errors.append(f"{environment}: external surface has a compiler producer")
+                gcc_producer_hashes.add(root.get("hash"))
+            elif group in {"foundation", "build-tools", "core", "payload", "mpi"}:
                 expected_provider = COMPILER_BY_SURFACE[surface]
             else:
                 expected_provider = None
@@ -173,9 +173,7 @@ def main() -> int:
                     f"provider(s) {sorted(providers)}; expected {expected_provider}"
                 )
 
-        expected_cmake_roots = (
-            set() if lane == "bootstrap" else {BUILD_CMAKE, PUBLIC_CMAKE}
-        )
+        expected_cmake_roots = {BUILD_CMAKE, PUBLIC_CMAKE}
         if cmake_roots_by_environment[environment] != expected_cmake_roots:
             errors.append(
                 f"{environment}: CMake roots are "
@@ -256,14 +254,21 @@ def main() -> int:
                     f"{sorted(cmake_versions)}; expected only {BUILD_CMAKE}"
                 )
 
-    for (name, version), hashes in sorted(reused_hashes.items()):
+    for (surface, name, version), hashes in sorted(reused_hashes.items()):
         if len(hashes) != 1:
             errors.append(
-                f"shared producer {name}@{version} has {len(hashes)} hashes: "
+                f"{surface} producer {name}@{version} has {len(hashes)} hashes: "
                 f"{', '.join(sorted(hashes))}"
             )
 
+    if len(gcc_producer_hashes) != 1:
+        errors.append(
+            "repeated GCC producer roots have hashes "
+            f"{sorted(gcc_producer_hashes)}; expected one"
+        )
+
     shared_compiler_key = (
+        {{ values.shared.compiler.name | tojson }},
         {{ values.shared.compiler.name | tojson }},
         {{ values.shared.compiler.version | tojson }},
     )

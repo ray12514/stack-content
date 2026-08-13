@@ -67,6 +67,40 @@ In addition to the common runbook checks:
 
 ## Restricted build and cache gates
 
+Use this reviewed Step 7 selection:
+
+```bash
+export CSE_SHARED_COMPILER_REF="gcc@12.5.0"
+export CSE_SHARED_MPI_REF="cray-mpich@9.1.0"
+export CSE_SHARED_MPI_SOURCE="external"
+export CSE_PLATFORM_COMPILER_REF="cce@21.0.0"
+export CSE_PLATFORM_COMPILER_PUBLIC_NAME="CCE"
+export CSE_PLATFORM_MPI_REF="cray-mpich@9.1.0"
+export CSE_PLATFORM_MPI_SOURCE="external"
+export CSE_BUILD_NODE_TYPE="<reviewed-Blueback-build-node-type>"
+export BUILD_JOBS="<approved-job-count>"
+```
+
+These are the only required Blueback-specific Step 7 selections. The helper
+normally selects the newest verified installed GCC older than 12.5.0 as the
+compiler used to build GCC 12.5.0. If catalog review requires another installed
+compiler, set `CSE_SHARED_COMPILER_SEED_REF="<provider>@<version>"` explicitly.
+This seed compiler is separate from the Cray MPICH flavor selection.
+
+Choose `CSE_BUILD_NODE_TYPE` from the actual Blueback profile manifest. Use the
+compute-node key when the packages will be built in a compute allocation. The
+helper emits the reviewed node's writable temporary and scratch candidates,
+followed by the builder's `${WORKDIR}` fallback; no Blueback stage path is
+typed manually here.
+
+For MPI, the helper must select the GNU baseline scope for the CSE GCC surface
+and the CCE-compatible scope for the CCE surface. For the provisional snapshot
+those MPI flavor paths end in `gcc-12.3` and `cce-20.0`, respectively; the
+latter is the MPICH flavor baseline for the selected CCE 21.0.0 compiler. You do
+not type either scope path. You provide `cray-mpich@9.1.0` for both MPI refs;
+the helper selects the compatible catalog scope and fails rather than
+substituting one surface's Cray MPICH prefix for the other.
+
 - Cray MPICH remains a non-buildable external at its live prefix.
 - Both Serial environments contain no MPI implementation.
 - Each MPI environment uses the Cray MPICH flavor matched to its compiler

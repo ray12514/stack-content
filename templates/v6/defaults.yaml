@@ -32,6 +32,10 @@ spack:
 externals:
   openssl: system
   curl: system
+  ucx: system
+  slurm: system
+  pbs: system
+  lustre: system
   cray-libsci: system
   fabric_userspace: prefer_platform
 

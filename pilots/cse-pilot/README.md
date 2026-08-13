@@ -1,27 +1,60 @@
 # CSE Initial Conversion Trials workspace
 
-This blueprint combines a reviewed `render-static` catalog with the approved
-CPU-only trial package roster. It renders one GCC 12.5 bootstrap environment,
-one shared GCC Core environment, and Common, Serial, and MPI environments for
-the CSE GCC and the system's platform compiler surfaces.
+This blueprint combines one reviewed `render-static` catalog with the approved
+CPU-only trial package roster. It renders Core, Common, Serial, and MPI
+environments for the CSE GCC 12.5 surface and the selected platform-compiler
+surface. GPU work is out of scope.
 
-The initializer does not probe the system or select a baseline compiler. Copy
-`site-values.example.yaml`, then enter the exact compiler, MPI, module, prefix,
-and scope choices from the reviewed static catalog. Use each recommendation's
-`package` value as the corresponding `name` in the values file; the scope path
-continues to use the observed provider name. This distinction matters for
-Classic Intel (`intel-oneapi-compilers-classic`) and Intel MPI
-(`intel-oneapi-mpi`). On non-Cray systems,
-OpenMPI 4.1.8 is rendered as a build producer for both compiler surfaces. On
-Cray systems, each surface selects the matching site Cray MPICH 9.x scope and
-module chain.
+Each environment is self-contained. A GCC environment contains a `compiler`
+group followed by Foundation, Core/build-tool, MPI-provider when needed, and
+payload groups connected with Spack 1.2 `needs`. An external-compiler
+environment starts at Foundation. Nothing registers a built GCC view as an
+external compiler.
 
-The selected platform compiler scope is the explicit compiler for the GCC
-12.5.0 bootstrap environment, so concretization does not depend on automatic
-compiler discovery or shell state. Build and install that environment first,
-then regenerate its `cse_compiler` view. The other seven environments consume
-GCC 12.5.0 from that fixed view path as a non-buildable external. Foundation,
-Core/build tools, and the CSE GCC payloads bind to that compiler explicitly.
+The same GCC producer spec is repeated in all four GCC environments. Identical
+configuration produces one GCC hash. The shared Spack store reuses that hash;
+on filesystems with working prefix locks, concurrent installs wait for the
+same prefix instead of rebuilding it. Run the generated lockfile verifier
+before installation and run the lock smoke test on the real shared filesystem
+before starting concurrent Spack processes. Sequential Core, Common, Serial,
+then MPI installation is the default trial sequence.
+
+GCC still needs an already available compiler to build GCC itself. The values
+helper selects the newest verified older GCC scope from the static catalog and
+records it under `shared.compiler.build_with`. This is a direct compiler
+dependency in each GCC environment, not a separate preparatory environment.
+
+The initializer does not probe the machine. `scripts/create-build-values.py`
+resolves reviewed provider selections against the static catalog. For a
+build-sourced OpenMPI it requires verified development externals in the common
+scope and emits explicit variants:
+
+- verified UCX with thread-multiple support, or verified libfabric/OFI, never
+  `fabrics=auto`;
+- `schedulers=slurm` or `schedulers=tm` for PBS;
+- Lustre and ROMIO only when the Lustre development external was verified;
+- PMI only when `CSE_OPENMPI_PMI=enabled` was explicitly reviewed.
+
+The helper automatically selects UCX when the static common scope contains a
+`ucx+thread_multiple` external; otherwise it selects verified libfabric/OFI.
+It selects the scheduler when exactly one of `slurm` or `pbs` is present. Use
+`CSE_OPENMPI_FABRICS` or `CSE_OPENMPI_SCHEDULER` only to resolve a reviewed
+ambiguity; the selected dependency must still exist in the catalog.
+
+The operator selects one reviewed build node type with
+`CSE_BUILD_NODE_TYPE`. The helper reads that node type's inspected stage facts
+from the catalog manifest, drops candidates that were unwritable, empty, or on
+a known `noexec` mount, and emits a complete ordered Spack fallback list:
+
+1. writable temporary or node-local storage;
+2. other writable inspected scratch paths;
+3. `${WORKDIR}` as the final fallback.
+
+Each inspected path is namespaced by the current Spack user, system, and trial
+release. The generated setup script requires the builder's `WORKDIR` to be an
+absolute writable directory. This keeps the workspace portable between CSE
+builders while preventing an unset variable from becoming an unintended
+relative stage path.
 
 ```sh
 stack-composer init-workspace \
@@ -31,57 +64,20 @@ stack-composer init-workspace \
   --output restricted/workspaces/<system>/initial-conversion-trials/<release>
 ```
 
-The restricted and publication values retain identical package and provider
-intent. They differ only in `workspace.role` and deployment paths. Publication
-copies the approved lockfiles and installs with `--only-concrete
---use-buildcache=only`; it never reconcretizes or builds from source.
+`init-workspace` snapshots the catalog under `catalog/`; every generated
+environment uses relative includes. Hand the entire initialized workspace and
+its reviewed lockfiles to the builder.
 
-## Producer and reuse behavior
+The selected package-build CMake is 3.31.12. CMake 4.4.2 is the second public
+version. The workspace overlay recipe adds those two versions to the pinned
+`spack-packages` generation.
 
-The bootstrap and payload workspaces use this sequence:
+After all eight environments concretize, run:
 
-1. build GCC 12.5 with the selected platform compiler;
-2. expose that exact installation at the fixed GCC compiler view;
-3. build GCC-built Foundation and Core/build tools, including CMake 3.31.12
-   and 4.4.2;
-4. build a surface-specific MPI producer when the selected MPI source is
-   `build`;
-5. build each payload with its explicit compiler or compiler-plus-MPI
-   toolchain.
+```sh
+python3 scripts/verify-lockfiles.py
+```
 
-The fixed compiler view separates compiler bootstrap from downstream
-concretization. This is required because Spack accepts only external or already
-concrete language providers for a new solve. Foundation remains single-version,
-ABI-stable, and non-modular. Spack 1.2 `needs` orders and reuses Foundation,
-build-tool, MPI, and payload groups within each downstream environment. The
-selected CMake dependency for trial package builds is 3.31.12.
-CMake 4.4.2 is installed as the second public version but is not the default
-package build dependency.
-
-The shared Spack store prevents rebuilding an already installed concrete hash.
-The lockfiles remain the acceptance boundary: the downstream external GCC
-identity and repeated Foundation and build-tool producers must have matching
-hashes before package installation starts.
-
-After all eight environments concretize, run the rendered
-`scripts/verify-lockfiles.py`. It fails if producer hashes diverge, a payload
-selects CMake 4.4.2 instead of 3.31.12, a Serial DAG contains MPI, or an MPI DAG
-does not use the provider selected for its compiler surface. It also checks the
-approved NetCDF-C/NetCDF-Fortran/NetCDF-CXX4 to HDF5 version chains. For Cray
-MPICH, it also requires the concrete DAG to retain the inspected libfabric and
-Cray PMI externals.
-
-## Environment set
-
-The initializer renders eight independent environments:
-
-1. GCC bootstrap;
-2. shared GCC Core;
-3. GCC Common;
-4. GCC Serial;
-5. GCC MPI;
-6. platform-compiler Common;
-7. platform-compiler Serial;
-8. platform-compiler MPI.
-
-GPU work is outside the Initial Conversion Trials and is not rendered.
+The verifier checks repeated producer hashes, compiler-provider bindings,
+CMake selection, Serial/MPI separation, MPI provider selection, and the
+approved NetCDF/HDF5 version chains.

@@ -1,5 +1,5 @@
 modules:
-{% if environment_kind == 'bootstrap' %}
+{% if environment_kind == 'core' and surface.compiler.source == 'build' %}
   compiler_producer:
     enable: [tcl]
     use_view: cse_compiler
@@ -9,7 +9,7 @@ modules:
     tcl:
       hash_length: 0
       exclude_implicits: true
-      include: [{{ values.shared.compiler.name }}]
+      include: [{{ surface.compiler.name }}]
       projections:
         all: '{name}/{version}'
       all:
@@ -31,6 +31,21 @@ modules:
       all:
         autoload: none
 {% endif %}
+{% if environment_kind == 'core' %}
+  core_independent:
+    enable: [tcl]
+    arch_folder: false
+    roots:
+      tcl: {{ (values.paths.modules_root ~ '/' ~ surface_name ~ '/' ~ environment_name) | yaml_scalar }}
+    tcl:
+      hash_length: 0
+      exclude_implicits: true
+      include: {{ data.roster.module_packages.core_independent | yaml_flow }}
+      projections:
+        all: '{name}/{version}'
+      all:
+        autoload: none
+{% endif %}
   prefix_inspections:
     bin: [PATH]
     lib: [LD_LIBRARY_PATH]
@@ -41,7 +56,6 @@ modules:
     share/pkgconfig: [PKG_CONFIG_PATH]
     share/man: [MANPATH]
     '.': [CMAKE_PREFIX_PATH]
-{% if environment_kind != 'bootstrap' %}
   default:
     enable: [tcl]
     use_view: cse_modules
@@ -58,4 +72,3 @@ modules:
         all: '{name}/{version}'
       all:
         autoload: none
-{% endif %}

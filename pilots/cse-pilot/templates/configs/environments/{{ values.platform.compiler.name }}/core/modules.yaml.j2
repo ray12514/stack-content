@@ -1,0 +1,6 @@
+{% set surface_name = values.platform.compiler.name %}
+{% set surface = values.platform %}
+{% set environment_name = 'core' %}
+{% set environment_kind = 'core' %}
+{% set module_packages = data.roster.module_packages.core %}
+{% include '_partials/modules.yaml.j2' %}

@@ -19,6 +19,12 @@ from `stack-planning/docs/`.
 - Inspector hints, if needed:
 - Static catalog release/path:
 - Restricted build values: `systems/<system>/cse-trials-build-values.yaml`
+- Step 7 provider exports:
+  - shared compiler/MPI:
+  - platform compiler/MPI:
+  - MPI source choices (`external` or `build`):
+  - reviewed build node type and job count:
+  - generated temp/scratch/`${WORKDIR}` stage order:
 - Publication values: `systems/<system>/cse-trials-publish-values.yaml`
 - Active pilot roster: `pilots/cse-pilot/roster.yaml`
 - Spack release:
@@ -31,8 +37,8 @@ from `stack-planning/docs/`.
 
 | Surface | Compiler | MPI provider/version | Environments |
 |---|---|---|---|
-| Shared CSE | GCC 12.5.0 | | bootstrap, Core, Common, Serial, MPI |
-| Platform | | | Common, Serial, MPI |
+| Shared CSE | GCC 12.5.0 | | Core, Common, Serial, MPI |
+| Platform | | | Core, Common, Serial, MPI |
 
 ## Site paths
 
@@ -63,11 +69,11 @@ from `stack-planning/docs/`.
 
 | Environment | Concretized | Built | Target runtime passed | Cache pushed | Cache-only published | Hashes match |
 |---|---|---|---|---|---|---|
-| GCC bootstrap | | | | | | |
 | GCC Core | | | | | | |
 | GCC Common | | | | | | |
 | GCC Serial | | | | | | |
 | GCC MPI | | | | | | |
+| Platform Core | | | | | | |
 | Platform Common | | | | | | |
 | Platform Serial | | | | | | |
 | Platform MPI | | | | | | |

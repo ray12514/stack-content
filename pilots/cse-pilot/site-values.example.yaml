@@ -1,38 +1,45 @@
 schema_version: 1
+# Reference shape only. Operators use scripts/create-build-values.py with the
+# exports in the common runbook and system note; do not copy and fill this file
+# by hand for an Initial Conversion Trial.
 workspace:
   role: build
+build:
+  node_type: cpu_compute
 system:
   name: example-system
 release: trial-001
 stack:
   name: cse-initial-conversion-trials
 
-# Shared compiler and common CSE compiler surface. GCC 12.5.0 is built once in
-# the bootstrap environment on every trial system. The other environments use
-# its fixed compiler view as an external and reuse Foundation/Core build hashes.
+# CSE GCC compiler surface. Every GCC environment repeats the same compiler
+# producer group and binds its Foundation, build tools, and payload to it.
 shared:
   compiler:
     name: gcc
     version: 12.5.0
-    toolchain: cse_gcc1250
     public_name: GCC
     source: build
     modules: []
+    build_with:
+      name: gcc
+      version: 11.4.0
   mpi:
     name: openmpi
     version: 4.1.8
-    toolchain: cse_gcc1250_openmpi418
     source: build
     modules: []
+    spec: openmpi@4.1.8 fabrics=ucx schedulers=slurm ~rsh ~lustre +romio romio-filesystem=none ~pmi
   catalog_scopes:
-    compiler: null
+    compiler: scopes/compilers/gcc/11.4.0
     mpi: null
 
 # Replace this example with the exact platform compiler and compatible MPI
 # pairing selected from the static catalog. On a Cray system both are normally
 # external. On a non-Cray system the compiler is external and OpenMPI 4.1.8 is
-# built with it. The compiler scope also supplies the bootstrap compiler used
-# to build GCC 12.5.0; the workspace never discovers one from ambient state.
+# built with it. `shared.compiler.build_with` and its catalog scope select the
+# external compiler used to build GCC; the workspace never discovers one from
+# ambient state.
 # Use the static manifest's `package` value for each `name`. For Classic Intel
 # those values are `intel-oneapi-compilers-classic` and `intel-oneapi-mpi`,
 # while the catalog scope paths remain under `intel` and `intel-mpi`.
@@ -40,16 +47,15 @@ platform:
   compiler:
     name: aocc
     version: 4.2.0
-    toolchain: platform_aocc420
     public_name: AOCC
     source: external
     modules: [aocc/4.2.0]
   mpi:
     name: openmpi
     version: 4.1.8
-    toolchain: platform_aocc420_openmpi418
     source: build
     modules: []
+    spec: openmpi@4.1.8 fabrics=ucx schedulers=slurm ~rsh ~lustre +romio romio-filesystem=none ~pmi
   catalog_scopes:
     compiler: scopes/compilers/aocc/4.2.0
     mpi: null
@@ -60,7 +66,10 @@ catalog_scopes:
 
 paths:
   install_tree: /shared/cse/initial-conversion-trials/restricted/releases/example-system/trial-001/spack/opt
-  build_stage: /scratch/example-user/example-system/trial-001/build-stage
+  build_stage:
+    - $tempdir/$user/spack-stage/example-system/trial-001
+    - /scratch/$user/spack-stage/example-system/trial-001
+    - ${WORKDIR}/cse-spack-stage/example-system/trial-001
   source_cache: /shared/cse/initial-conversion-trials/restricted/cache/source
   misc_cache: /shared/cse/initial-conversion-trials/restricted/cache/misc
   views_root: /shared/cse/initial-conversion-trials/restricted/releases/example-system/trial-001/views

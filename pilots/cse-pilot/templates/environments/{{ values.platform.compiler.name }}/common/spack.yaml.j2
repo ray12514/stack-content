@@ -3,5 +3,5 @@
 {% set environment_kind = 'common' %}
 {% set environment_name = 'common' %}
 {% set payload_specs = data.roster.specs.common %}
-{% set payload_toolchain = values.platform.compiler.toolchain %}
+{% set payload_constraint = '%' ~ values.platform.compiler.name ~ '@' ~ values.platform.compiler.version %}
 {% include '_partials/payload-spack.yaml.j2' %}

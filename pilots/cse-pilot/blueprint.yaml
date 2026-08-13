@@ -2,38 +2,40 @@ schema_version: 1
 name: cse-initial-conversion-trials
 description: |
   CPU-only Spack 1.2 workspace initialized from an explicit static platform
-  catalog. It renders one GCC bootstrap environment, one shared GCC Core
-  environment, and Common, Serial, and MPI environments for both the CSE GCC
-  and platform compiler surfaces.
+  catalog. It renders self-contained Core, Common, Serial, and MPI environments
+  for both the CSE GCC and platform compiler surfaces.
 template_root: templates
+snapshot_catalog: true
 required_values:
   - workspace.role
+  - build.node_type
   - system.name
   - release
   - stack.name
   - shared.compiler.name
   - shared.compiler.version
-  - shared.compiler.toolchain
   - shared.compiler.public_name
   - shared.compiler.source
   - shared.compiler.modules
+  - shared.compiler.build_with.name
+  - shared.compiler.build_with.version
+  - shared.catalog_scopes.compiler
   - shared.mpi.name
   - shared.mpi.version
-  - shared.mpi.toolchain
   - shared.mpi.source
   - shared.mpi.modules
+  - shared.mpi.spec
   - platform.compiler.name
   - platform.compiler.version
-  - platform.compiler.toolchain
   - platform.compiler.public_name
   - platform.compiler.source
   - platform.compiler.modules
   - platform.catalog_scopes.compiler
   - platform.mpi.name
   - platform.mpi.version
-  - platform.mpi.toolchain
   - platform.mpi.source
   - platform.mpi.modules
+  - platform.mpi.spec
   - catalog_scopes.common
   - paths.install_tree
   - paths.build_stage

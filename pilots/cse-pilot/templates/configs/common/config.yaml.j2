@@ -2,8 +2,11 @@ config:
   install_tree:
     root: {{ values.paths.install_tree | yaml_scalar }}
     padded_length: 128
-  build_stage:
-    - {{ values.paths.build_stage | yaml_scalar }}
+  build_stage::
+{% for stage in values.paths.build_stage %}
+    - {{ stage | yaml_scalar }}
+{% endfor %}
   source_cache: {{ values.paths.source_cache | yaml_scalar }}
   misc_cache: {{ values.paths.misc_cache | yaml_scalar }}
   build_jobs: {{ values.build_jobs }}
+  locks: true

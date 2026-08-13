@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+# Names and ordering for the initialized CSE trial workspace. This file does
+# not activate Spack or load platform modules; the builder does those explicitly.
+: "${WORKDIR:?WORKDIR must name the builder work directory}"
+case "$WORKDIR" in
+  /*) ;;
+  *) echo "WORKDIR must be an absolute path: $WORKDIR" >&2; return 2 2>/dev/null || exit 2 ;;
+esac
+if [[ ! -d "$WORKDIR" || ! -w "$WORKDIR" || ! -x "$WORKDIR" ]]; then
+  echo "WORKDIR must exist and be writable/searchable: $WORKDIR" >&2
+  return 2 2>/dev/null || exit 2
+fi
+
+export CSE_BUILD_NODE_TYPE={{ values.build.node_type | yaml_scalar }}
+export SHARED_COMPILER_NAME={{ values.shared.compiler.name | yaml_scalar }}
+export SHARED_MPI_NAME={{ values.shared.mpi.name | yaml_scalar }}
+export PLATFORM_COMPILER_NAME={{ values.platform.compiler.name | yaml_scalar }}
+export PLATFORM_MPI_NAME={{ values.platform.mpi.name | yaml_scalar }}
+export BUILD_JOBS={{ values.build_jobs }}

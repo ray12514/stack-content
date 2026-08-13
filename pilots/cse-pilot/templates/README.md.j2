@@ -4,49 +4,49 @@ Release: `{{ values.release }}`
 
 Workspace role: `{{ values.workspace.role }}`
 
-Static catalog: `{{ catalog.root }}`
+Reviewed build node type: `{{ values.build.node_type }}`
+
+Ordered build-stage fallbacks:
+
+{% for stage in values.paths.build_stage %}
+- `{{ stage }}`
+{% endfor %}
+
+Static catalog snapshot: `catalog/`
 
 Selected surfaces:
 
-- shared compiler and producer layer: `{{ values.shared.compiler.name }}@{{ values.shared.compiler.version }}` (`build`)
-- shared-surface MPI: `{{ values.shared.mpi.name }}@{{ values.shared.mpi.version }}` (`{{ values.shared.mpi.source }}`)
-- platform compiler: `{{ values.platform.compiler.name }}@{{ values.platform.compiler.version }}` (`external`)
-- platform-surface MPI: `{{ values.platform.mpi.name }}@{{ values.platform.mpi.version }}` (`{{ values.platform.mpi.source }}`)
-- default package build CMake: `{{ data.roster.cmake.build_default }}`
-- additional public CMake: `{{ data.roster.cmake.current }}`
-
-Private CSE build cache: `{{ values.buildcache.url }}`
+- `{{ values.shared.compiler.name }}@{{ values.shared.compiler.version }}` + `{{ values.shared.mpi.name }}@{{ values.shared.mpi.version }}`
+- `{{ values.platform.compiler.name }}@{{ values.platform.compiler.version }}` + `{{ values.platform.mpi.name }}@{{ values.platform.mpi.version }}`
+- package-build CMake: `{{ data.roster.cmake.build_default }}`
+- second public CMake: `{{ data.roster.cmake.current }}`
 
 Build and concretization order:
 
-1. `environments/{{ values.shared.compiler.name }}/bootstrap`
-2. `environments/{{ values.shared.compiler.name }}/core`
-3. `environments/{{ values.shared.compiler.name }}/common`
-4. `environments/{{ values.shared.compiler.name }}/serial`
-5. `environments/{{ values.shared.compiler.name }}/mpi-{{ values.shared.mpi.name }}`
+1. `environments/{{ values.shared.compiler.name }}/core`
+2. `environments/{{ values.shared.compiler.name }}/common`
+3. `environments/{{ values.shared.compiler.name }}/serial`
+4. `environments/{{ values.shared.compiler.name }}/mpi-{{ values.shared.mpi.name }}`
+5. `environments/{{ values.platform.compiler.name }}/core`
 6. `environments/{{ values.platform.compiler.name }}/common`
 7. `environments/{{ values.platform.compiler.name }}/serial`
 8. `environments/{{ values.platform.compiler.name }}/mpi-{{ values.platform.mpi.name }}`
 
-Concretize, install, and regenerate the view for the GCC bootstrap environment
-before concretizing the other seven. The downstream environments consume GCC
-from that fixed view path and repeat Foundation and build-tool producer groups.
-Spack 1.2 `needs` makes those concrete specs available for reuse. Review the
-generated lockfiles before installation and stop if repeated producer hashes
-differ. After all eight locks exist, run `python3 scripts/verify-lockfiles.py` from the
-workspace root. For Cray MPICH surfaces, the verifier also requires the
-inspected libfabric and Cray PMI externals in the concrete DAG. Do not begin
-installation unless it passes.
+Every GCC environment repeats the same compiler producer group. Every
+environment builds its own Foundation and Core/build-tool roots with its own
+compiler surface. Concretize all eight, then run
+`python3 scripts/verify-lockfiles.py`. Do not install if it reports different
+GCC hashes or incorrect language providers.
 
-The trial is CPU-only. No GPU environment or GPU module selector is rendered.
+Sequential installation in the order above is the default. Concurrent
+installation is allowed only after the selected shared install tree passes the
+filesystem prefix-lock smoke test.
 
-{% if values.workspace.role == 'build' %}
-This is the restricted build and validation workspace. Concretize here, review
-all eight lockfiles, build from source as needed, exercise every surface on the
-target system, and push only approved concrete specs to the private CSE build
-cache.
-{% else %}
-This is the publication workspace. Copy the approved `spack.lock` from each
-matching restricted environment and install with `--only-concrete
---use-buildcache=only`. Do not concretize or fall back to source builds.
-{% endif %}
+Build-sourced MPI specs are explicit:
+
+- GCC: `{{ values.shared.mpi.spec }}`
+- platform: `{{ values.platform.mpi.spec }}`
+
+Private CSE build cache: `{{ values.buildcache.url }}`
+
+The trial is CPU-only. No GPU environment is rendered.
