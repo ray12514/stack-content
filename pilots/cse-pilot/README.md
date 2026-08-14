@@ -65,8 +65,11 @@ environment.
 The restricted trial workspace is collaborative. Generated package policy uses
 group `cse` with group read and write access. The surrounding workspace,
 caches, build cache, views, modules, evidence, and release roots must use
-setgid group-writable directories or an equivalent default ACL. The published
-release becomes group-read-only only after promotion is complete.
+setgid group-writable directories or an equivalent default ACL. Publication
+values use `read: world` and `write: user`; after promotion, consumer-facing
+directories and executables are readable/searchable/executable by users and
+ordinary files are readable, while group and other write access is disabled.
+The private build cache remains below the restricted root.
 
 For external Cray MPICH, the compiler scope and MPI scope intentionally carry
 different version semantics. The compiler scope names the exact selected

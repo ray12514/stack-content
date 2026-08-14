@@ -21,8 +21,16 @@ case " $(id -Gn) " in
     ;;
 esac
 
-# Keep all non-Spack workspace artifacts collaborative and private to CSE.
+{% if values.permissions.write == 'group' %}
+# Restricted build workspace: collaborative and private to CSE.
 umask 0007
+{% elif values.permissions.read == 'world' %}
+# Publication workspace: consumer-readable, writable only by its owner.
+umask 0022
+{% else %}
+# Owner-writable, group-readable workspace.
+umask 0027
+{% endif %}
 
 export CSE_BUILD_NODE_TYPE={{ values.build.node_type | yaml_scalar }}
 export CSE_CPU_TARGET={{ values.architecture.target | yaml_scalar }}
