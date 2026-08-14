@@ -597,7 +597,7 @@ def main() -> int:
             "permissions": {
                 "group": os.environ.get("CSE_GROUP", "cse"),
                 "read": "group",
-                "write": "user",
+                "write": "group",
             },
             "build_jobs": int(required("BUILD_JOBS")),
             "package_repo": {

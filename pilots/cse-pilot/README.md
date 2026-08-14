@@ -62,6 +62,12 @@ deprecated versions so this explicit trial root can concretize; the lock
 verifier requires all three approved Python roots in each compiler's Core
 environment.
 
+The restricted trial workspace is collaborative. Generated package policy uses
+group `cse` with group read and write access. The surrounding workspace,
+caches, build cache, views, modules, evidence, and release roots must use
+setgid group-writable directories or an equivalent default ACL. The published
+release becomes group-read-only only after promotion is complete.
+
 For external Cray MPICH, the compiler scope and MPI scope intentionally carry
 different version semantics. The compiler scope names the exact selected
 compiler. The MPI scope names the physical product-tree flavor baseline, such

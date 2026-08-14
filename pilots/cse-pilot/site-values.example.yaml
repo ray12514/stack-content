@@ -90,7 +90,7 @@ buildcache:
 permissions:
   group: cse
   read: group
-  write: user
+  write: group
 build_jobs: 16
 
 package_repo:
