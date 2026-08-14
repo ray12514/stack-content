@@ -41,7 +41,9 @@ Build and concretization order:
 Every GCC environment repeats the same compiler producer group. Every
 environment builds its own Foundation and Core/build-tool roots with its own
 compiler surface. Concretize all eight, then run
-`python3 scripts/verify-lockfiles.py`. Do not install if it reports different
+`"$CSE_PYTHON" scripts/verify-lockfiles.py`. `CSE_PYTHON` is the reviewed
+control-plane interpreter selected by the runbook; do not fall back to an
+ambient `python` or `python3`. Do not install if verification reports different
 GCC hashes or incorrect language providers.
 
 Sequential installation in the order above is the default. Concurrent
