@@ -14,8 +14,11 @@ packages:
   zstd:
     require:
       - '@1.5.6 target={{ values.architecture.target }}'
-  all:
+  miniforge3:
     require:
+      - target={{ values.architecture.binary_target }}
+  all:
+    prefer:
       - target={{ values.architecture.target }}
     permissions:
       read: {{ values.permissions.read | yaml_scalar }}

@@ -10,6 +10,7 @@ required_values:
   - workspace.role
   - build.node_type
   - architecture.target
+  - architecture.binary_target
   - architecture.node_types
   - system.name
   - release

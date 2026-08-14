@@ -21,6 +21,11 @@ class InputError(ValueError):
 
 
 PORTABLE_CPU_TARGETS = ("x86_64_v3", "x86_64_v2", "x86_64")
+GENERIC_BINARY_TARGETS = {
+    "x86_64_v3": "x86_64",
+    "x86_64_v2": "x86_64",
+    "x86_64": "x86_64",
+}
 
 
 def required(name: str) -> str:
@@ -524,6 +529,7 @@ def main() -> int:
             manifest, system_name=system_name, release=release
         )
         cpu_target, target_node_types = portable_cpu_target(manifest)
+        generic_binary_target = GENERIC_BINARY_TARGETS[cpu_target]
         release_root = required("BUILD_RELEASE_ROOT").rstrip("/")
         restricted_root = required("CSE_RESTRICTED_ROOT").rstrip("/")
         values = {
@@ -535,6 +541,7 @@ def main() -> int:
             "build": {"node_type": build_node_type},
             "architecture": {
                 "target": cpu_target,
+                "binary_target": generic_binary_target,
                 "node_types": target_node_types,
             },
             "shared": {

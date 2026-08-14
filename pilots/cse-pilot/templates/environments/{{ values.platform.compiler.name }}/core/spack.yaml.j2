@@ -35,7 +35,7 @@ spack:
       specs:
         - matrix:
             - [$core_independent]
-            - [{{ ('target=' ~ values.architecture.target) | yaml_scalar }}]
+            - [{{ ('target=' ~ values.architecture.binary_target) | yaml_scalar }}]
 
   view:
     foundation:

@@ -47,9 +47,12 @@ standard target in this order: `x86_64_v3`, `x86_64_v2`, `x86_64`. It never
 selects `x86_64_v4`, a vendor microarchitecture, or the native build-node
 target for these trials. Set `CSE_CPU_TARGET` only to choose a lower reviewed
 target; the helper rejects a target that any relevant CPU-only node cannot run.
-The initialized manifests place that target on every root group and also make
-it the default requirement for dependencies. The generated lock verifier fails
-if any CSE-built node uses another target.
+The initialized manifests place that target on every source-built root group
+and make it the default preference for dependencies. Architecture-specific
+prebuilt distributions are explicit exceptions: Miniforge uses the generic
+`x86_64` family target instead of an `x86_64_v2` or `x86_64_v3`
+microarchitecture. The generated lock verifier rejects any other target
+difference.
 
 For external Cray MPICH, the compiler scope and MPI scope intentionally carry
 different version semantics. The compiler scope names the exact selected
