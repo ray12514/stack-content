@@ -7,8 +7,9 @@ workspace:
 build:
   node_type: cpu_compute
 architecture:
-  # One target for every compiler surface and lane. The helper selects the
-  # highest common portable target, capped at x86_64_v3.
+  # One target for every source-built root. The helper selects the highest
+  # common portable target, capped at x86_64_v3. Platform externals retain
+  # their inspected architecture and are not rebuilt for this target.
   target: x86_64_v3
   # Generic family target for architecture-specific prebuilt distributions.
   binary_target: x86_64

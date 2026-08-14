@@ -35,6 +35,10 @@ MPI_BY_SURFACE = {
         {{ values.platform.mpi.name | tojson }}, {{ values.platform.mpi.version | tojson }}
     ),
 }
+MPI_SOURCE_BY_SURFACE = {
+    {{ values.shared.compiler.name | tojson }}: {{ values.shared.mpi.source | tojson }},
+    {{ values.platform.compiler.name | tojson }}: {{ values.platform.mpi.source | tojson }},
+}
 MPI_RUNTIME_DEPENDENCIES = {
     "cray-mpich": {"libfabric", "cray-pmi"},
 }
@@ -264,12 +268,13 @@ def main() -> int:
                         f"{environment}: MPI root {root.get('spec')} resolves "
                         f"{mpi_name} versions {sorted(versions)}; expected {mpi_version}"
                     )
-                for dependency_name in MPI_RUNTIME_DEPENDENCIES.get(mpi_name, set()):
-                    if not package_versions(graph, nodes, dependency_name):
-                        errors.append(
-                            f"{environment}: MPI root {root.get('spec')} does not "
-                            f"reach required runtime {dependency_name}"
-                        )
+                if MPI_SOURCE_BY_SURFACE[surface] == "build":
+                    for dependency_name in MPI_RUNTIME_DEPENDENCIES.get(mpi_name, set()):
+                        if not package_versions(graph, nodes, dependency_name):
+                            errors.append(
+                                f"{environment}: MPI root {root.get('spec')} does not "
+                                f"reach required runtime {dependency_name}"
+                            )
 
         for root in payload_roots:
             graph = reachable(root["hash"], nodes)

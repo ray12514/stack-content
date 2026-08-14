@@ -48,11 +48,12 @@ selects `x86_64_v4`, a vendor microarchitecture, or the native build-node
 target for these trials. Set `CSE_CPU_TARGET` only to choose a lower reviewed
 target; the helper rejects a target that any relevant CPU-only node cannot run.
 The initialized manifests place that target on every source-built root group
-and make it the default preference for dependencies. Architecture-specific
-prebuilt distributions are explicit exceptions: Miniforge uses the generic
-`x86_64` family target instead of an `x86_64_v2` or `x86_64_v3`
-microarchitecture. The generated lock verifier rejects any other target
-difference.
+and make it the default preference for dependencies. Platform externals keep
+their inspected architecture; the workspace does not require an external MPI
+provider to claim the source-build target. Architecture-specific prebuilt
+distributions are explicit exceptions: Miniforge uses the generic `x86_64`
+family target instead of an `x86_64_v2` or `x86_64_v3` microarchitecture. The
+generated lock verifier enforces target policy on built nodes.
 
 The approved Core roster includes Python 3.8.20, 3.10.20, and 3.12.13.
 Python 3.8.20 is marked deprecated in the pinned package recipe because that

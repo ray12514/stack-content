@@ -1,4 +1,8 @@
 packages:
   mpi:
     require:
+{% if values.shared.mpi.source == 'build' %}
       - {{ (values.shared.mpi.name ~ '@' ~ values.shared.mpi.version ~ ' target=' ~ values.architecture.target) | yaml_scalar }}
+{% else %}
+      - {{ (values.shared.mpi.name ~ '@' ~ values.shared.mpi.version) | yaml_scalar }}
+{% endif %}
