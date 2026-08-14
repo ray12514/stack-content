@@ -12,6 +12,7 @@ from pathlib import Path
 WORKSPACE = Path(__file__).resolve().parents[1]
 BUILD_CMAKE = {{ data.roster.cmake.build_default | tojson }}
 PUBLIC_CMAKE = {{ data.roster.cmake.current | tojson }}
+EXPECTED_PYTHON_VERSIONS = {"3.8.20", "3.10.20", "3.12.13"}
 EXPECTED_CPU_TARGET = {{ values.architecture.target | tojson }}
 BINARY_TARGET_EXCEPTIONS = {
     "miniforge3": {{ values.architecture.binary_target | tojson }},
@@ -133,6 +134,7 @@ def main() -> int:
     language_provider_hashes: dict[tuple[str, str, str], set[str]] = defaultdict(set)
     gcc_producer_hashes: set[str] = set()
     cmake_roots_by_environment: dict[str, set[str]] = defaultdict(set)
+    python_roots_by_environment: dict[str, set[str]] = defaultdict(set)
 
     for path in lock_paths:
         environment = str(path.parent.relative_to(WORKSPACE / "environments"))
@@ -166,6 +168,8 @@ def main() -> int:
             if name == "cmake" and root.get("group") in {"core", "build-tools"}:
                 reused_hashes[(surface, name, version)].add(root.get("hash"))
                 cmake_roots_by_environment[environment].add(version)
+            if name == "python" and root.get("group") == "core":
+                python_roots_by_environment[environment].add(version)
 
             providers = direct_language_providers(node, nodes)
             for provider_hash in direct_language_provider_hashes(node):
@@ -195,6 +199,12 @@ def main() -> int:
                 f"{environment}: CMake roots are "
                 f"{sorted(cmake_roots_by_environment[environment])}; expected "
                 f"{sorted(expected_cmake_roots)}"
+            )
+        if python_roots_by_environment[environment] != EXPECTED_PYTHON_VERSIONS:
+            errors.append(
+                f"{environment}: Python roots are "
+                f"{sorted(python_roots_by_environment[environment])}; expected "
+                f"{sorted(EXPECTED_PYTHON_VERSIONS)}"
             )
 
         payload_roots = roots_by_group.get("payload", [])
@@ -302,7 +312,8 @@ def main() -> int:
 
     print(
         "Lockfile verification passed: eight environments, shared producer "
-        f"hashes, CMake {BUILD_CMAKE} build dependencies, NetCDF/HDF5 chains, "
+        f"hashes, CMake {BUILD_CMAKE} build dependencies, Python roots "
+        f"{sorted(EXPECTED_PYTHON_VERSIONS)}, NetCDF/HDF5 chains, "
         f"compiler surfaces, MPI boundaries, CPU target {EXPECTED_CPU_TARGET}, "
         "and reviewed binary-target exceptions."
     )

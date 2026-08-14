@@ -54,6 +54,12 @@ prebuilt distributions are explicit exceptions: Miniforge uses the generic
 microarchitecture. The generated lock verifier rejects any other target
 difference.
 
+The approved Core roster includes Python 3.8.20, 3.10.20, and 3.12.13.
+Python 3.8.20 is marked deprecated in the pinned package recipe because that
+release line is end-of-life. The generated `config.yaml` deliberately enables
+deprecated versions so this explicit trial root can concretize; the lock
+verifier requires all three approved Python roots.
+
 For external Cray MPICH, the compiler scope and MPI scope intentionally carry
 different version semantics. The compiler scope names the exact selected
 compiler. The MPI scope names the physical product-tree flavor baseline, such
