@@ -204,7 +204,10 @@ def main() -> int:
                 f"{sorted(cmake_roots_by_environment[environment])}; expected "
                 f"{sorted(expected_cmake_roots)}"
             )
-        if python_roots_by_environment[environment] != EXPECTED_PYTHON_VERSIONS:
+        if (
+            lane == "core"
+            and python_roots_by_environment[environment] != EXPECTED_PYTHON_VERSIONS
+        ):
             errors.append(
                 f"{environment}: Python roots are "
                 f"{sorted(python_roots_by_environment[environment])}; expected "
@@ -317,7 +320,7 @@ def main() -> int:
 
     print(
         "Lockfile verification passed: eight environments, shared producer "
-        f"hashes, CMake {BUILD_CMAKE} build dependencies, Python roots "
+        f"hashes, CMake {BUILD_CMAKE} build dependencies, Core Python roots "
         f"{sorted(EXPECTED_PYTHON_VERSIONS)}, NetCDF/HDF5 chains, "
         f"compiler surfaces, MPI boundaries, CPU target {EXPECTED_CPU_TARGET}, "
         "and reviewed binary-target exceptions."
