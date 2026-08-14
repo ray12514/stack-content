@@ -51,6 +51,12 @@ The initialized manifests place that target on every root group and also make
 it the default requirement for dependencies. The generated lock verifier fails
 if any CSE-built node uses another target.
 
+For external Cray MPICH, the compiler scope and MPI scope intentionally carry
+different version semantics. The compiler scope names the exact selected
+compiler. The MPI scope names the physical product-tree flavor baseline, such
+as `gcc-12.3` or `cce-20.0`. The helper accepts that scope only when the selected
+compiler is from the same family and is at or above the baseline.
+
 The operator selects one reviewed build node type with
 `CSE_BUILD_NODE_TYPE`. The helper reads that node type's inspected stage facts
 from the catalog manifest, drops candidates that were unwritable, empty, or on
