@@ -174,7 +174,7 @@ prepare_shared_parent() {
     [ -d "$tools_root" ] && [ -w "$tools_root" ] || return 1
     mkdir -p "$parent"
     chgrp "$CSE_RECORDED_GROUP" "$parent"
-    chmod 2775 "$parent"
+    chmod 2770 "$parent"
   fi
   [ -w "$parent" ]
 }
@@ -205,8 +205,8 @@ provision_spack() {
 
   if [ "$SELECTED_SPACK_MODE" = shared ]; then
     chgrp -R "$CSE_RECORDED_GROUP" "$SPACK_ROOT"
-    chmod -R g+rX,o-rwx "$SPACK_ROOT"
-    chmod -R a-w "$SPACK_ROOT"
+    chmod -R u+rX,g+rX,o-rwx,a-w "$SPACK_ROOT"
+    find "$SPACK_ROOT" -xdev -type d -exec chmod g-s {} +
   fi
 }
 
@@ -227,10 +227,14 @@ verify_spack() {
     "Spack checkout contains ignored mutable state"
 
   if [ "$SELECTED_SPACK_MODE" = shared ]; then
-    local path
+    local path setgid_path
     while IFS= read -r -d '' path; do
       [ ! -w "$path" ] || fail "shared Spack checkout is writable: $path"
     done < <(find "$CSE_SPACK_CANONICAL_ROOT" -xdev -print0)
+    setgid_path="$(find "$CSE_SPACK_CANONICAL_ROOT" -xdev -type d \
+      -perm -2000 -print -quit)"
+    [ -z "$setgid_path" ] || fail \
+      "shared Spack checkout contains an unexpected setgid directory: $setgid_path"
   fi
 }
 
