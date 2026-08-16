@@ -1,0 +1,13 @@
+# shellcheck shell=bash
+# shellcheck disable=SC1091
+
+source "$SPACK_ROOT/share/spack/setup-env.sh"
+source "$CSE_BUILD_WORKSPACE/env/setup-build-env.sh"
+cd "$CSE_BUILD_WORKSPACE" || exit 2
+
+printf '\nCSE build workspace is active.\n'
+printf 'Workspace: %s\n' "$CSE_BUILD_WORKSPACE"
+printf 'Spack: %s\n' "$SPACK_ROOT"
+printf 'Run ./cse-build --help for status, concretize, fetch, and install actions.\n\n'
+
+PS1="[cse:{{ values.system.name }}:{{ values.release }}] ${PS1:-\\u@\\h:\\w\\$ }"

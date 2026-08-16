@@ -1,0 +1,427 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC1091
+
+set -euo pipefail
+
+CSE_WORKSPACE_ROOT="$(
+  cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P
+)"
+readonly CSE_WORKSPACE_ROOT
+readonly CSE_RECORDED_SYSTEM={{ values.system.name | yaml_scalar }}
+readonly CSE_RECORDED_RELEASE={{ values.release | yaml_scalar }}
+readonly CSE_RECORDED_ROLE={{ values.workspace.role | yaml_scalar }}
+readonly CSE_RECORDED_GROUP={{ values.permissions.group | yaml_scalar }}
+readonly CSE_RECORDED_SPACK_SOURCE={{ values.spack.source | yaml_scalar }}
+readonly CSE_RECORDED_SPACK_VERSION={{ values.spack.version | yaml_scalar }}
+readonly CSE_RECORDED_SPACK_TAG={{ values.spack.tag | yaml_scalar }}
+readonly CSE_RECORDED_SPACK_COMMIT={{ values.spack.commit | yaml_scalar }}
+readonly CSE_RECORDED_SPACK_MODE={{ values.spack.default_mode | yaml_scalar }}
+readonly CSE_RECORDED_SHARED_SPACK_ROOT={{ values.spack.shared_root | yaml_scalar }}
+readonly CSE_RECORDED_INITIAL_SPACK_ROOT={{ values.spack.initial_root | yaml_scalar }}
+
+ACTION="tmux"
+REQUESTED_SPACK_MODE="auto"
+ACTION_SET=0
+
+usage() {
+  cat <<'EOF'
+Usage: ./cse-build [ACTION] [--spack-mode auto|shared|local]
+
+Actions:
+  tmux        Create or reattach the release build session (default).
+  shell       Enter a prepared interactive build shell without tmux.
+  status      Show lockfile and installation status.
+  concretize  Concretize only environments that do not have a lockfile.
+  verify      Verify configuration scopes and all existing lockfiles.
+  fetch       Fetch all sources for the locked environments.
+  install     Install, regenerate views, and refresh modules in order.
+
+Spack selection:
+  auto        Use the recorded checkout when accessible; otherwise follow the
+              workspace's recorded shared/local preference (default).
+  shared      Use or provision the recorded shared CSE checkout.
+  local       Use or provision $HOME/STACK_TESTING/spack/<version>.
+
+See ./BUILDER-HANDOFF.md for the exact Spack commands behind each action.
+EOF
+}
+
+fail() {
+  printf 'cse-build: %s\n' "$*" >&2
+  exit 2
+}
+
+note() {
+  printf 'cse-build: %s\n' "$*"
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    tmux|shell|status|concretize|verify|fetch|install)
+      [ "$ACTION_SET" -eq 0 ] || fail "only one action may be selected"
+      ACTION="$1"
+      ACTION_SET=1
+      ;;
+    --spack-mode)
+      shift
+      [ "$#" -gt 0 ] || fail "--spack-mode requires auto, shared, or local"
+      REQUESTED_SPACK_MODE="$1"
+      ;;
+    --spack-mode=*)
+      REQUESTED_SPACK_MODE="${1#*=}"
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "unknown argument: $1"
+      ;;
+  esac
+  shift
+done
+
+case "$REQUESTED_SPACK_MODE" in
+  auto|shared|local) ;;
+  *) fail "--spack-mode must be auto, shared, or local" ;;
+esac
+
+if [ "$CSE_RECORDED_ROLE" != build ]; then
+  case "$ACTION" in
+    concretize|fetch|install)
+      fail "$ACTION is disabled for a publication workspace; use the cache-only \
+publication procedure"
+      ;;
+  esac
+fi
+
+[ -z "${SPACK_ENV:-}" ] || fail \
+  "start from a shell with no active Spack environment: $SPACK_ENV"
+: "${HOME:?HOME must be set}"
+: "${USER:?USER must be set}"
+: "${WORKDIR:?WORKDIR must be set by the site environment}"
+
+case "$WORKDIR" in
+  /*) ;;
+  *) fail "WORKDIR must be absolute: $WORKDIR" ;;
+esac
+[ -d "$WORKDIR" ] && [ -w "$WORKDIR" ] && [ -x "$WORKDIR" ] || fail \
+  "WORKDIR must exist and be writable/searchable: $WORKDIR"
+[ -r "$CSE_WORKSPACE_ROOT/workspace-manifest.yaml" ] || fail \
+  "workspace manifest is missing under $CSE_WORKSPACE_ROOT"
+[ -r "$CSE_WORKSPACE_ROOT/env/setup-build-env.sh" ] || fail \
+  "workspace setup is missing under $CSE_WORKSPACE_ROOT"
+[ -w "$CSE_WORKSPACE_ROOT" ] || fail \
+  "workspace is not writable by $USER: $CSE_WORKSPACE_ROOT"
+
+case " $(id -Gn) " in
+  *" $CSE_RECORDED_GROUP "*) ;;
+  *) fail "builder is not in required group $CSE_RECORDED_GROUP" ;;
+esac
+
+readonly CSE_LOCAL_SPACK_ROOT="$HOME/STACK_TESTING/spack/$CSE_RECORDED_SPACK_VERSION"
+SELECTED_SPACK_MODE="$REQUESTED_SPACK_MODE"
+INHERITED_SPACK_MODE="${CSE_SPACK_MODE_SELECTED:-}"
+case "$INHERITED_SPACK_MODE" in
+  ""|shared|local) ;;
+  *) fail "invalid inherited CSE Spack mode: $INHERITED_SPACK_MODE" ;;
+esac
+
+if [ "$SELECTED_SPACK_MODE" = auto ]; then
+  if [ "$INHERITED_SPACK_MODE" = shared ] &&
+     [ "${SPACK_ROOT:-}" = "$CSE_RECORDED_SHARED_SPACK_ROOT" ] &&
+     [ -r "$CSE_RECORDED_SHARED_SPACK_ROOT/bin/spack" ]; then
+    SELECTED_SPACK_MODE="shared"
+    SPACK_ROOT="$CSE_RECORDED_SHARED_SPACK_ROOT"
+  elif [ "$INHERITED_SPACK_MODE" = local ] &&
+       [ "${SPACK_ROOT:-}" = "$CSE_LOCAL_SPACK_ROOT" ] &&
+       [ -r "$CSE_LOCAL_SPACK_ROOT/bin/spack" ]; then
+    SELECTED_SPACK_MODE="local"
+    SPACK_ROOT="$CSE_LOCAL_SPACK_ROOT"
+  elif [ "$CSE_RECORDED_INITIAL_SPACK_ROOT" = \
+       "$CSE_RECORDED_SHARED_SPACK_ROOT" ] &&
+     [ -r "$CSE_RECORDED_SHARED_SPACK_ROOT/bin/spack" ]; then
+    SELECTED_SPACK_MODE="shared"
+    SPACK_ROOT="$CSE_RECORDED_SHARED_SPACK_ROOT"
+  elif [ "$CSE_RECORDED_INITIAL_SPACK_ROOT" = "$CSE_LOCAL_SPACK_ROOT" ] &&
+       [ -r "$CSE_LOCAL_SPACK_ROOT/bin/spack" ]; then
+    SELECTED_SPACK_MODE="local"
+    SPACK_ROOT="$CSE_LOCAL_SPACK_ROOT"
+  elif [ "$CSE_RECORDED_SPACK_MODE" = shared ] &&
+       { [ ! -e "$CSE_RECORDED_SHARED_SPACK_ROOT" ] ||
+         [ -r "$CSE_RECORDED_SHARED_SPACK_ROOT/bin/spack" ]; }; then
+    SELECTED_SPACK_MODE="shared"
+    SPACK_ROOT="$CSE_RECORDED_SHARED_SPACK_ROOT"
+  else
+    SELECTED_SPACK_MODE="local"
+    SPACK_ROOT="$CSE_LOCAL_SPACK_ROOT"
+  fi
+elif [ "$SELECTED_SPACK_MODE" = shared ]; then
+  SPACK_ROOT="$CSE_RECORDED_SHARED_SPACK_ROOT"
+else
+  SPACK_ROOT="$CSE_LOCAL_SPACK_ROOT"
+fi
+
+export SPACK_ROOT
+export SPACK_DISABLE_LOCAL_CONFIG=true
+export PYTHONDONTWRITEBYTECODE=1
+
+prepare_shared_parent() {
+  local parent tools_root
+  parent="$(dirname "$SPACK_ROOT")"
+  tools_root="$(dirname "$parent")"
+  if [ ! -d "$parent" ]; then
+    [ -d "$tools_root" ] && [ -w "$tools_root" ] || return 1
+    mkdir -p "$parent"
+    chgrp "$CSE_RECORDED_GROUP" "$parent"
+    chmod 2775 "$parent"
+  fi
+  [ -w "$parent" ]
+}
+
+provision_spack() {
+  [ ! -e "$SPACK_ROOT" ] || fail \
+    "Spack root exists but is incomplete: $SPACK_ROOT"
+
+  if [ "$SELECTED_SPACK_MODE" = shared ]; then
+    if ! prepare_shared_parent; then
+      if [ "$REQUESTED_SPACK_MODE" = auto ]; then
+        note "shared checkout cannot be provisioned; using the builder-local checkout"
+        SELECTED_SPACK_MODE="local"
+        SPACK_ROOT="$CSE_LOCAL_SPACK_ROOT"
+        export SPACK_ROOT
+        provision_spack
+        return
+      fi
+      fail "shared Spack parent is not an authorized writable CSE path: $(dirname "$SPACK_ROOT")"
+    fi
+  else
+    mkdir -p "$(dirname "$SPACK_ROOT")"
+  fi
+
+  note "provisioning Spack $CSE_RECORDED_SPACK_TAG at $SPACK_ROOT"
+  git clone --branch "$CSE_RECORDED_SPACK_TAG" --depth 1 \
+    "$CSE_RECORDED_SPACK_SOURCE" "$SPACK_ROOT"
+
+  if [ "$SELECTED_SPACK_MODE" = shared ]; then
+    chgrp -R "$CSE_RECORDED_GROUP" "$SPACK_ROOT"
+    chmod -R g+rX,o-rwx "$SPACK_ROOT"
+    chmod -R a-w "$SPACK_ROOT"
+  fi
+}
+
+verify_spack() {
+  [ -d "$SPACK_ROOT/.git" ] || fail "not a Spack Git checkout: $SPACK_ROOT"
+  [ "$(git -C "$SPACK_ROOT" remote get-url origin)" = \
+    "$CSE_RECORDED_SPACK_SOURCE" ] || fail "Spack source does not match the workspace"
+  [ "$(git -C "$SPACK_ROOT" rev-parse HEAD)" = \
+    "$CSE_RECORDED_SPACK_COMMIT" ] || fail "Spack commit does not match the workspace"
+  [ "$(git -C "$SPACK_ROOT" rev-parse \
+    "${CSE_RECORDED_SPACK_TAG}^{commit}")" = \
+    "$CSE_RECORDED_SPACK_COMMIT" ] || fail \
+    "Spack tag does not resolve to the workspace commit"
+  [ -z "$(GIT_OPTIONAL_LOCKS=0 git -C "$SPACK_ROOT" \
+    status --porcelain --untracked-files=all)" ] || fail "Spack checkout is dirty"
+  [ -z "$(git -C "$SPACK_ROOT" \
+    ls-files --others --ignored --exclude-standard)" ] || fail \
+    "Spack checkout contains ignored mutable state"
+
+  if [ "$SELECTED_SPACK_MODE" = shared ]; then
+    local path
+    while IFS= read -r -d '' path; do
+      [ ! -w "$path" ] || fail "shared Spack checkout is writable: $path"
+    done < <(find "$CSE_SPACK_CANONICAL_ROOT" -xdev -print0)
+  fi
+}
+
+[ -e "$SPACK_ROOT" ] || provision_spack
+CSE_SPACK_CANONICAL_ROOT="$(cd "$SPACK_ROOT" && pwd -P)"
+readonly CSE_SPACK_CANONICAL_ROOT
+if [ "$SELECTED_SPACK_MODE" = shared ] &&
+   [ "$CSE_SPACK_CANONICAL_ROOT" != "$SPACK_ROOT" ]; then
+  fail "shared Spack root must not resolve through a symlink: $SPACK_ROOT"
+fi
+verify_spack
+
+export SPACK_USER_STATE_ROOT="$WORKDIR/$USER/cse-spack/$CSE_RECORDED_SYSTEM/$CSE_RECORDED_SPACK_VERSION"
+export SPACK_USER_CACHE_PATH="$SPACK_USER_STATE_ROOT/cache"
+export SPACK_GNUPGHOME="$SPACK_USER_STATE_ROOT/gpg"
+install -d -m 0700 "$SPACK_USER_CACHE_PATH" "$SPACK_GNUPGHOME"
+
+source "$SPACK_ROOT/share/spack/setup-env.sh"
+SPACK_VERSION_OUTPUT="$(spack --version)"
+[ "${SPACK_VERSION_OUTPUT%% *}" = "$CSE_RECORDED_SPACK_VERSION" ] || fail \
+  "activated Spack version does not match $CSE_RECORDED_SPACK_VERSION"
+source "$CSE_WORKSPACE_ROOT/env/setup-build-env.sh"
+
+export CSE_BUILD_WORKSPACE="$CSE_WORKSPACE_ROOT"
+export CSE_SPACK_MODE_SELECTED="$SELECTED_SPACK_MODE"
+
+CSE_ENVIRONMENTS=(
+  "$SHARED_COMPILER_NAME/core"
+  "$SHARED_COMPILER_NAME/common"
+  "$SHARED_COMPILER_NAME/serial"
+  "$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"
+  "$PLATFORM_COMPILER_NAME/core"
+  "$PLATFORM_COMPILER_NAME/common"
+  "$PLATFORM_COMPILER_NAME/serial"
+  "$PLATFORM_COMPILER_NAME/mpi-$PLATFORM_MPI_NAME"
+)
+readonly CSE_ENVIRONMENT_COUNT=8
+
+checkpoint_summary() {
+  local environment lock_count=0
+  for environment in "${CSE_ENVIRONMENTS[@]}"; do
+    if [ -f "$CSE_WORKSPACE_ROOT/environments/$environment/spack.lock" ]; then
+      lock_count=$((lock_count + 1))
+    fi
+  done
+  printf 'Workspace: %s\n' "$CSE_WORKSPACE_ROOT"
+  printf 'System/release: %s / %s\n' \
+    "$CSE_RECORDED_SYSTEM" "$CSE_RECORDED_RELEASE"
+  printf 'Spack: %s (%s)\n' "$SPACK_ROOT" "$SELECTED_SPACK_MODE"
+  printf 'Concrete locks: %s/%s\n' "$lock_count" "$CSE_ENVIRONMENT_COUNT"
+  if [ "$lock_count" -eq 0 ]; then
+    printf 'Next action: ./cse-build concretize\n'
+  elif [ "$lock_count" -eq "$CSE_ENVIRONMENT_COUNT" ]; then
+    printf 'Next actions: ./cse-build verify, fetch, or install\n'
+  else
+    printf 'Next action: ./cse-build concretize (only missing locks are created)\n'
+  fi
+}
+
+require_all_locks() {
+  local environment missing=0
+  for environment in "${CSE_ENVIRONMENTS[@]}"; do
+    if [ ! -f "$CSE_WORKSPACE_ROOT/environments/$environment/spack.lock" ]; then
+      printf 'Missing lock: %s\n' "$environment" >&2
+      missing=1
+    fi
+  done
+  [ "$missing" -eq 0 ] || fail "not all environments are concretized"
+}
+
+verify_scopes() {
+  local environment generated_scope_count scope_output scope_path
+  scope_output="$(COLUMNS=512 spack config scopes -vp)"
+  if grep -Eq \
+    '^(user|system)[[:space:]]+[^[:space:]]+[[:space:]]+active([[:space:]]|$)' \
+    <<<"$scope_output"; then
+    fail "unexpected active user/system Spack configuration scope"
+  fi
+
+  for environment in "${CSE_ENVIRONMENTS[@]}"; do
+    scope_output="$(COLUMNS=512 spack \
+      -e "$CSE_WORKSPACE_ROOT/environments/$environment" config scopes -vp)"
+    if grep -Eq \
+      '^(user|system|site)[[:space:]]+[^[:space:]]+[[:space:]]+active([[:space:]]|$)' \
+      <<<"$scope_output"; then
+      fail "unexpected active ambient scope in $environment"
+    fi
+
+    generated_scope_count="$(awk -v root="$CSE_WORKSPACE_ROOT/" \
+      '$2 ~ /include/ && $3 == "active" && index($4, root) == 1 {count++} \
+       END {print count + 0}' <<<"$scope_output")"
+    [ "$generated_scope_count" -gt 0 ] || fail \
+      "no active workspace include scope in $environment"
+
+    while IFS= read -r scope_path; do
+      case "$scope_path" in
+        "$CSE_WORKSPACE_ROOT"/*|"$SPACK_ROOT"/etc/spack/defaults/*|\
+          "$CSE_SPACK_CANONICAL_ROOT"/etc/spack/defaults/*) ;;
+        *) fail "unexpected active include path in $environment: $scope_path" ;;
+      esac
+    done < <(awk '$2 ~ /include/ && $3 == "active" {print $4}' \
+      <<<"$scope_output")
+  done
+}
+
+verify_locks() {
+  require_all_locks
+  spack python "$CSE_WORKSPACE_ROOT/scripts/verify-lockfiles.py"
+}
+
+show_status() {
+  local environment
+  checkpoint_summary
+  for environment in "${CSE_ENVIRONMENTS[@]}"; do
+    printf '\n[%s]\n' "$environment"
+    if [ -f "$CSE_WORKSPACE_ROOT/environments/$environment/spack.lock" ]; then
+      spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" find -lv
+    else
+      printf 'not concretized\n'
+    fi
+  done
+}
+
+concretize_missing() {
+  local environment
+  for environment in "${CSE_ENVIRONMENTS[@]}"; do
+    if [ -f "$CSE_WORKSPACE_ROOT/environments/$environment/spack.lock" ]; then
+      note "keeping existing lock: $environment"
+      continue
+    fi
+    note "concretizing $environment"
+    spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" \
+      concretize --fresh -j 1
+  done
+  verify_locks
+}
+
+fetch_all() {
+  local environment
+  verify_locks
+  for environment in "${CSE_ENVIRONMENTS[@]}"; do
+    note "fetching $environment"
+    spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" fetch -D
+  done
+}
+
+install_all() {
+  local environment
+  verify_locks
+  for environment in "${CSE_ENVIRONMENTS[@]}"; do
+    note "building $environment"
+    spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" fetch -D
+    spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" \
+      install --only-concrete -j "$BUILD_JOBS" --fail-fast
+    spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" \
+      env view regenerate
+    spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" \
+      module tcl refresh --delete-tree -y
+  done
+}
+
+verify_scopes
+
+case "$ACTION" in
+  tmux)
+    checkpoint_summary
+    if [ -n "${TMUX:-}" ]; then
+      note "already inside tmux; opening the prepared shell in this session"
+      exec bash --noprofile \
+        --rcfile "$CSE_WORKSPACE_ROOT/env/workspace-shell.rc" -i
+    elif command -v tmux >/dev/null 2>&1; then
+      readonly CSE_TMUX_SESSION="cse-$CSE_RECORDED_SYSTEM-$CSE_RECORDED_RELEASE"
+      note "creating or attaching tmux session $CSE_TMUX_SESSION"
+      exec tmux new-session -A -s "$CSE_TMUX_SESSION" \
+        -c "$CSE_WORKSPACE_ROOT" \
+        "exec bash --noprofile --rcfile \"$CSE_WORKSPACE_ROOT/env/workspace-shell.rc\" -i"
+    else
+      note "tmux is unavailable; opening the prepared shell directly"
+      exec bash --noprofile \
+        --rcfile "$CSE_WORKSPACE_ROOT/env/workspace-shell.rc" -i
+    fi
+    ;;
+  shell)
+    checkpoint_summary
+    printf '\nOpening a prepared CSE build shell without tmux. Exit it with: exit\n'
+    exec bash --noprofile \
+      --rcfile "$CSE_WORKSPACE_ROOT/env/workspace-shell.rc" -i
+    ;;
+  status) show_status ;;
+  concretize) concretize_missing ;;
+  verify) verify_locks ;;
+  fetch) fetch_all ;;
+  install) install_all ;;
+esac

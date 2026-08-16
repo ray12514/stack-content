@@ -35,6 +35,13 @@ def required(name: str) -> str:
     return value
 
 
+def required_absolute_path(name: str) -> Path:
+    path = Path(required(name)).expanduser()
+    if not path.is_absolute():
+        raise InputError(f"{name} must be an absolute path; got {str(path)!r}")
+    return path
+
+
 def parse_ref(value: str, label: str) -> tuple[str, str]:
     if "@" not in value:
         raise InputError(f"{label} must use name@version syntax; got {value!r}")
@@ -171,8 +178,11 @@ def namespaced_stage_path(path: str, *, system_name: str, release: str) -> str:
     base = path.rstrip("/")
     components = {component for component in base.split("/") if component}
     username = os.environ.get("USER", "").strip()
-    if "$user" not in components and (not username or username not in components):
-        base = f"{base}/$user"
+    user_tokens = {"$USER", "${USER}"}
+    if not components.intersection(user_tokens) and (
+        not username or username not in components
+    ):
+        base = f"{base}/${{USER}}"
     if base.rsplit("/", 1)[-1] != "spack-stage":
         base = f"{base}/spack-stage"
     return f"{base}/{system_name}/{release}"
@@ -532,6 +542,19 @@ def main() -> int:
         generic_binary_target = GENERIC_BINARY_TARGETS[cpu_target]
         release_root = required("BUILD_RELEASE_ROOT").rstrip("/")
         restricted_root = required("CSE_RESTRICTED_ROOT").rstrip("/")
+        spack_source = required("SPACK_SOURCE")
+        spack_version = required("SPACK_VERSION")
+        spack_tag = required("SPACK_TAG")
+        spack_runtime_mode = required("SPACK_RUNTIME_MODE")
+        if spack_runtime_mode not in {"shared", "local"}:
+            raise InputError(
+                "SPACK_RUNTIME_MODE must be 'shared' or 'local'; "
+                f"got {spack_runtime_mode!r}"
+            )
+        shared_spack_root = (
+            required_absolute_path("CSE_TOOLS_ROOT") / "spack" / spack_version
+        )
+        initial_spack_root = required_absolute_path("SPACK_ROOT")
         values = {
             "schema_version": 1,
             "workspace": {"role": "build"},
@@ -600,6 +623,15 @@ def main() -> int:
                 "write": "group",
             },
             "build_jobs": int(required("BUILD_JOBS")),
+            "spack": {
+                "source": spack_source,
+                "version": spack_version,
+                "tag": spack_tag,
+                "commit": required("SPACK_COMMIT"),
+                "default_mode": spack_runtime_mode,
+                "shared_root": str(shared_spack_root),
+                "initial_root": str(initial_spack_root),
+            },
             "package_repo": {
                 "git": "https://github.com/spack/spack-packages.git",
                 "tag": "v2026.06.0",

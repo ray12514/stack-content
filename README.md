@@ -60,13 +60,14 @@ template is shared.
   platform scopes; it contains no CSE package roster or deployment workspace.
 - `init-workspace` combines an exact static-catalog selection with an authored
   starter blueprint. `pilots/cse-pilot/` uses this seam to produce the current
-  Foundation/Core/Common/Serial/MPI/GPU pilot environments and module policy.
+  CPU-only Foundation/Core/Common/Serial/MPI trial environments, module policy,
+  and a generated `cse-build` resume entry point for the receiving builder.
 - `render` remains the full curated-stack path. It owns the complete automated
   workspace, deployment inputs, lanes, views, modules, and release manifest.
 
-The CSE pilot starter kit is intentionally named and isolated. Its package
-roster can change without turning pilot policy into generic static-catalog
-behavior. See `pilots/cse-pilot/README.md` and copy
+The CSE Initial Conversion Trials starter kit is intentionally named and
+isolated. Its package roster can change without turning trial policy into
+generic static-catalog behavior. See `pilots/cse-pilot/README.md` and copy
 `pilots/cse-pilot/site-values.example.yaml` for each target system.
 
 Use `stack-planning/docs/runbook.md` as the single procedure for Blueback,

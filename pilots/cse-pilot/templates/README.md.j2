@@ -38,17 +38,23 @@ Build and concretization order:
 7. `environments/{{ values.platform.compiler.name }}/serial`
 8. `environments/{{ values.platform.compiler.name }}/mpi-{{ values.platform.mpi.name }}`
 
+{% if values.workspace.role == 'build' %}
 Every GCC environment repeats the same compiler producer group. Every
 environment builds its own Foundation and Core/build-tool roots with its own
-compiler surface. Concretize all eight, then run
-`"$CSE_PYTHON" scripts/verify-lockfiles.py`. `CSE_PYTHON` is the reviewed
-control-plane interpreter selected by the runbook; do not fall back to an
-ambient `python` or `python3`. Do not install if verification reports different
-GCC hashes or incorrect language providers.
+compiler surface. Run `./cse-build concretize`; it creates missing locks and
+uses the approved Spack runtime to run `scripts/verify-lockfiles.py`. Do not
+install if verification reports different GCC hashes or incorrect language
+providers.
 
 Sequential installation in the order above is the default. Concurrent
 installation is allowed only after the selected shared install tree passes the
 filesystem prefix-lock smoke test.
+{% else %}
+This publication workspace must receive the eight approved lockfiles from the
+matching restricted build workspace. Do not concretize it. Install from the
+private build cache with `--only-concrete --use-buildcache=only` as specified in
+the CSE runbook.
+{% endif %}
 
 Build-sourced MPI specs are explicit:
 
@@ -58,3 +64,55 @@ Build-sourced MPI specs are explicit:
 Private CSE build cache: `{{ values.buildcache.url }}`
 
 The trial is CPU-only. No GPU environment is rendered.
+
+{% if values.workspace.role == 'build' %}
+## Resume handoff
+
+This complete workspace may be handed to another CSE builder. The receiving
+builder does not need the tools that generated it and does not reconstruct the
+render inputs. From the workspace root, run:
+
+```bash
+./cse-build
+```
+
+The generated command reads this workspace's recorded system, release,
+toolchains, deployment paths, environment list, and Spack runtime identity. It
+selects or provisions Spack, creates per-builder cache/keyring state, activates
+Spack and the workspace, detects the lock checkpoint, and creates or reattaches
+a release-specific tmux session. Running `./cse-build` again after a disconnect
+returns to that session. Use `./cse-build shell` for a prepared shell without
+tmux; if tmux is unavailable, the default command falls back to that shell.
+
+The approved Spack runtime is:
+
+- source: `{{ values.spack.source }}`
+- version: `{{ values.spack.version }}`
+- tag: `{{ values.spack.tag }}`
+- commit: `{{ values.spack.commit }}`
+
+Automatic mode follows the recorded `{{ values.spack.default_mode }}`
+preference and uses the shared root
+`{{ values.spack.shared_root }}` when available. If that root cannot be
+provisioned, it uses
+`$HOME/STACK_TESTING/spack/{{ values.spack.version }}`. Either choice must match
+the identity above. To select one explicitly:
+
+```bash
+./cse-build --spack-mode shared
+./cse-build --spack-mode local
+```
+
+The same entry point supports `status`, `concretize`, `verify`, `fetch`, and
+`install`. It concretizes only missing environments and never replaces an
+existing lock merely because the builder or Spack root changed. See the
+generated `BUILDER-HANDOFF.md` for the complete handoff procedure.
+{% else %}
+## Publication control
+
+`./cse-build status`, `verify`, `shell`, and the default tmux session are
+available for inspection. The generated command blocks `concretize`, `fetch`,
+and ordinary `install` actions in this publication workspace. Follow the CSE
+runbook for lock transfer, build-cache trust, cache-only installation, and
+publication validation.
+{% endif %}

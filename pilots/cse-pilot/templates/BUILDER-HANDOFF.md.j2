@@ -1,0 +1,121 @@
+{% if values.workspace.role == 'publish' %}
+# CSE Publication Workspace
+
+System: `{{ values.system.name }}`
+
+Release: `{{ values.release }}`
+
+This is the cache-only publication workspace. It is not the restricted source
+build handoff. `./cse-build status`, `verify`, `shell`, and the default tmux
+session remain available for inspection. The command blocks `concretize`,
+`fetch`, and ordinary `install` actions here. Follow the CSE runbook to copy the
+approved restricted lockfiles, establish build-cache trust, and install with
+`--use-buildcache=only`.
+{% else %}
+# CSE Builder Handoff
+
+System: `{{ values.system.name }}`
+
+Release: `{{ values.release }}`
+
+This complete directory is the build handoff. It already contains the static
+catalog snapshot, generated configuration scopes, all eight Spack environments,
+deployment paths, module policy, and any lockfiles created so far.
+
+From the workspace root, run:
+
+```bash
+./cse-build
+```
+
+No system, release, compiler, MPI, catalog, install-tree, cache, view, module,
+or environment values need to be entered. The command reads the values rendered
+into this workspace. It selects or provisions the exact approved Spack runtime,
+creates private state for the current builder, activates Spack and this
+workspace, reports the current lock checkpoint, and creates or reattaches a
+tmux session named for this system and release. Run the same command again after
+a disconnect to return to that session.
+
+To open the prepared shell without tmux, run:
+
+```bash
+./cse-build shell
+```
+
+If tmux is not installed, the default command reports that fact and opens the
+prepared shell directly.
+
+The recorded Spack runtime is:
+
+- source: `{{ values.spack.source }}`
+- version: `{{ values.spack.version }}`
+- tag: `{{ values.spack.tag }}`
+- commit: `{{ values.spack.commit }}`
+- preferred mode: `{{ values.spack.default_mode }}`
+- shared root: `{{ values.spack.shared_root }}`
+- builder-local root: `$HOME/STACK_TESTING/spack/{{ values.spack.version }}`
+
+With no option, `cse-build` uses the recorded checkout when it is accessible.
+Otherwise it follows the recorded shared/local preference. If the shared path
+cannot be provisioned by this builder, automatic mode provisions the local
+checkout instead. To choose explicitly:
+
+```bash
+./cse-build --spack-mode shared
+./cse-build --spack-mode local
+```
+
+Actions launched from the prepared session retain that session's selected
+Spack mode automatically.
+
+The workspace may be handed over before concretization, after all lockfiles are
+created, or partway through installation. These actions resume from the state
+already present:
+
+```bash
+./cse-build status
+./cse-build concretize
+./cse-build verify
+./cse-build fetch
+./cse-build install
+```
+
+`concretize` creates only missing lockfiles. It does not replace existing
+locks. `install` requires all locks and verifies them before building. Already
+installed concrete hashes are reused from the shared restricted Spack store.
+
+## Commands used by the wrapper
+
+`cse-build` is a thin Bash wrapper. For each applicable generated environment,
+its actions run these Spack commands:
+
+```bash
+# status
+spack -e <environment> find -lv
+
+# concretize, only when spack.lock is absent
+spack -e <environment> concretize --fresh -j 1
+
+# configuration and lock verification
+spack config scopes -vp
+spack -e <environment> config scopes -vp
+spack python scripts/verify-lockfiles.py
+
+# login-node source fetch
+spack -e <environment> fetch -D
+
+# sequential build and exposure refresh
+spack -e <environment> install --only-concrete -j "$BUILD_JOBS" --fail-fast
+spack -e <environment> env view regenerate
+spack -e <environment> module tcl refresh --delete-tree -y
+```
+
+The default session uses `tmux new-session -A` with the generated
+`cse-{{ values.system.name }}-{{ values.release }}` session name. Inspect
+`./cse-build` at any time; it is generated plain Bash, not a compiled build
+engine.
+
+The two CSE builders do not run this release on the same system at the same
+time. Before handing it back, record the last action, the last environment, its
+result, and the relevant log or evidence path.
+{% endif %}

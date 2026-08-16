@@ -52,6 +52,13 @@ required_values:
   - permissions.read
   - permissions.write
   - build_jobs
+  - spack.source
+  - spack.version
+  - spack.tag
+  - spack.commit
+  - spack.default_mode
+  - spack.shared_root
+  - spack.initial_root
   - package_repo.git
   - package_repo.tag
 data_files:
@@ -62,6 +69,7 @@ allowed_values:
   shared.mpi.source: [external, build]
   platform.compiler.source: [external]
   platform.mpi.source: [external, build]
+  spack.default_mode: [shared, local]
 catalog_scope_values:
   - catalog_scopes.common
   - catalog_scopes.platform

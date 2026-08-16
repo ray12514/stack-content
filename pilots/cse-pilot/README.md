@@ -104,6 +104,28 @@ stack-composer init-workspace \
 environment uses relative includes. Hand the entire initialized workspace and
 its reviewed lockfiles to the builder.
 
+The complete workspace is also the builder-resume boundary. It records the
+approved Spack source, version, tag, and commit and contains the selected
+catalog scopes, environment files, deployment configuration, and lockfiles.
+The receiving builder may use either a shared CSE Spack checkout or an
+identity-equivalent checkout under that builder's home directory. A different
+checkout path does not require reconcretization when its verified runtime
+identity is unchanged.
+
+After the workspace and locks exist, the receiving builder does not need
+Cluster Inspector, Stack Composer, this content repository, or the original
+static catalog. The generated `./cse-build` entry point selects or provisions
+the approved shared or builder-local Spack checkout, creates private per-user
+Spack state, restores the environment list and deployment configuration, and
+detects whether zero, some, or all lockfiles already exist. With no action it
+creates or reattaches a tmux session for the system and release; `shell` bypasses
+tmux, and the default falls back to a direct shell when tmux is unavailable.
+Its `concretize`
+action creates only missing locks; its `install` action verifies all locks and
+continues with `spack install --only-concrete`. Already installed hashes are
+reused from the shared restricted store. The two trial builders do not run
+builds on the same system at the same time.
+
 The selected package-build CMake is 3.31.12. CMake 4.4.2 is the second public
 version. The workspace overlay recipe adds those two versions to the pinned
 `spack-packages` generation.
@@ -111,7 +133,7 @@ version. The workspace overlay recipe adds those two versions to the pinned
 After all eight environments concretize, run:
 
 ```sh
-python3 scripts/verify-lockfiles.py
+./cse-build verify
 ```
 
 The verifier checks repeated producer hashes, compiler-provider bindings,

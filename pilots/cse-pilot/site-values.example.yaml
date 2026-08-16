@@ -77,8 +77,8 @@ catalog_scopes:
 paths:
   install_tree: /shared/cse/initial-conversion-trials/restricted/releases/example-system/trial-001/spack/opt
   build_stage:
-    - $tempdir/$user/spack-stage/example-system/trial-001
-    - /scratch/$user/spack-stage/example-system/trial-001
+    - $tempdir/${USER}/spack-stage/example-system/trial-001
+    - /scratch/${USER}/spack-stage/example-system/trial-001
     - ${WORKDIR}/cse-spack-stage/example-system/trial-001
   source_cache: /shared/cse/initial-conversion-trials/restricted/cache/source
   misc_cache: /shared/cse/initial-conversion-trials/restricted/cache/misc
@@ -92,6 +92,15 @@ permissions:
   read: group
   write: group
 build_jobs: 16
+
+spack:
+  source: https://github.com/spack/spack.git
+  version: 1.2.2
+  tag: v1.2.2
+  commit: 3e19345b6e12f5ff1b874f4059622fc6a1fd804a
+  default_mode: shared
+  shared_root: /shared/cse/tools/spack/1.2.2
+  initial_root: /shared/cse/tools/spack/1.2.2
 
 package_repo:
   git: https://github.com/spack/spack-packages.git

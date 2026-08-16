@@ -34,6 +34,15 @@ umask 0027
 
 export CSE_BUILD_NODE_TYPE={{ values.build.node_type | yaml_scalar }}
 export CSE_CPU_TARGET={{ values.architecture.target | yaml_scalar }}
+export CSE_SYSTEM_NAME={{ values.system.name | yaml_scalar }}
+export CSE_TRIAL_RELEASE={{ values.release | yaml_scalar }}
+export CSE_SPACK_SOURCE={{ values.spack.source | yaml_scalar }}
+export CSE_SPACK_VERSION={{ values.spack.version | yaml_scalar }}
+export CSE_SPACK_TAG={{ values.spack.tag | yaml_scalar }}
+export CSE_SPACK_COMMIT={{ values.spack.commit | yaml_scalar }}
+export CSE_SPACK_DEFAULT_MODE={{ values.spack.default_mode | yaml_scalar }}
+export CSE_SPACK_SHARED_ROOT={{ values.spack.shared_root | yaml_scalar }}
+export CSE_SPACK_INITIAL_ROOT={{ values.spack.initial_root | yaml_scalar }}
 export SHARED_COMPILER_NAME={{ values.shared.compiler.name | yaml_scalar }}
 export SHARED_MPI_NAME={{ values.shared.mpi.name | yaml_scalar }}
 export PLATFORM_COMPILER_NAME={{ values.platform.compiler.name | yaml_scalar }}
