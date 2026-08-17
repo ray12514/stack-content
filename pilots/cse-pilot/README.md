@@ -46,12 +46,15 @@ facts fail values generation with instructions to re-probe and re-render. A
 capability record without a verified PMI2 development path produces an
 mpirun-only root instead of guessing. The helper never runs `srun` itself.
 
-The helper resolves one portable CPU target for the whole system from the
-cataloged CPU-only build/runtime node facts. It selects the highest common
-standard target in this order: `x86_64_v3`, `x86_64_v2`, `x86_64`. It never
-selects `x86_64_v4`, a vendor microarchitecture, or the native build-node
-target for these trials. Set `CSE_CPU_TARGET` only to choose a lower reviewed
-target; the helper rejects a target that any relevant CPU-only node cannot run.
+The helper resolves one portable CPU target for the whole system from the CPU
+facts of every cataloged build/runtime node. A node remains part of this
+intersection when it also has a GPU; GPU packages are out of scope, but that
+does not invalidate the node's CPU architecture. The helper selects the
+highest common standard target in this order: `x86_64_v3`, `x86_64_v2`,
+`x86_64`. It never selects `x86_64_v4`, a vendor microarchitecture, or the
+native build-node target for these trials. Set `CSE_CPU_TARGET` only to choose
+a lower reviewed target; the helper rejects a target that any relevant node
+cannot run.
 The initialized manifests place that target on every source-built root group
 and make it the default preference for dependencies. Platform externals keep
 their inspected architecture; the workspace does not require an external MPI

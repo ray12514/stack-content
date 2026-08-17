@@ -264,7 +264,7 @@ def portable_cpu_target(manifest: dict[str, Any]) -> tuple[str, list[str]]:
 
     supported_by_node: dict[str, set[str]] = {}
     for name, node_type in node_types.items():
-        if not isinstance(node_type, dict) or node_type.get("gpu") is not None:
+        if not isinstance(node_type, dict):
             continue
         if node_type.get("role") not in {"build_host", "runtime", "both"}:
             continue
@@ -283,7 +283,7 @@ def portable_cpu_target(manifest: dict[str, Any]) -> tuple[str, list[str]]:
 
     if not supported_by_node:
         raise InputError(
-            "catalog has no CPU-only build/runtime node architecture facts; "
+            "catalog has no build/runtime node CPU architecture facts; "
             "re-probe the system before initializing the workspace"
         )
 
@@ -303,7 +303,8 @@ def portable_cpu_target(manifest: dict[str, Any]) -> tuple[str, list[str]]:
         )
         if missing:
             raise InputError(
-                f"CSE_CPU_TARGET={requested} is not supported by CPU-only node type(s): "
+                f"CSE_CPU_TARGET={requested} is not supported by build/runtime "
+                "node type(s): "
                 f"{', '.join(missing)}"
             )
         return requested, sorted(supported_by_node)
@@ -316,7 +317,7 @@ def portable_cpu_target(manifest: dict[str, Any]) -> tuple[str, list[str]]:
         for name, targets in sorted(supported_by_node.items())
     )
     raise InputError(
-        "CPU-only node types have no common portable x86_64 trial target; "
+        "build/runtime node types have no common portable x86_64 trial target; "
         f"review the profile or set a supported CSE_CPU_TARGET ({details})"
     )
 

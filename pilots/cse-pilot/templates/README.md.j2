@@ -9,7 +9,8 @@ Reviewed build node type: `{{ values.build.node_type }}`
 Portable CPU target: `{{ values.architecture.target }}`
 
 The target is shared by all eight environments and was validated against these
-CPU-only node types: `{{ values.architecture.node_types | join(', ') }}`. Moving
+build/runtime node types: `{{ values.architecture.node_types | join(', ') }}`.
+A node remains in this CPU compatibility check when it also has a GPU. Moving
 the build to another profiled node changes the stage selection, not the target.
 
 Ordered build-stage fallbacks:
