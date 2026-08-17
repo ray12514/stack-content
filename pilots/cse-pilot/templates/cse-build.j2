@@ -111,6 +111,8 @@ esac
   "workspace manifest is missing under $CSE_WORKSPACE_ROOT"
 [ -r "$CSE_WORKSPACE_ROOT/env/setup-build-env.sh" ] || fail \
   "workspace setup is missing under $CSE_WORKSPACE_ROOT"
+[ -r "$CSE_WORKSPACE_ROOT/env/prepare-module-state.sh" ] || fail \
+  "module-state preparation is missing under $CSE_WORKSPACE_ROOT"
 [ -w "$CSE_WORKSPACE_ROOT" ] || fail \
   "workspace is not writable by $USER: $CSE_WORKSPACE_ROOT"
 
@@ -252,6 +254,9 @@ export SPACK_USER_CACHE_PATH="$SPACK_USER_STATE_ROOT/cache"
 export SPACK_GNUPGHOME="$SPACK_USER_STATE_ROOT/gpg"
 install -d -m 0700 "$SPACK_USER_CACHE_PATH" "$SPACK_GNUPGHOME"
 
+source "$CSE_WORKSPACE_ROOT/env/prepare-module-state.sh"
+cse_prepare_module_state || fail \
+  "could not clear a preloaded external module before activating Spack"
 source "$SPACK_ROOT/share/spack/setup-env.sh"
 SPACK_VERSION_OUTPUT="$(spack --version)"
 [ "${SPACK_VERSION_OUTPUT%% *}" = "$CSE_RECORDED_SPACK_VERSION" ] || fail \

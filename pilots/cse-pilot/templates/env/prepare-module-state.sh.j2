@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+
+# Spack 1.2.2 treats loading an already-loaded external module as a failure
+# because LOADEDMODULES does not change. Remove only the selected external
+# compiler/MPI modules from this cse-build process before Spack activates them.
+# The parent login shell is unchanged because cse-build is executed, not sourced.
+CSE_EXTERNAL_MODULES=(
+{% for module in values.shared.compiler.modules %}
+  {{ module | yaml_scalar }}
+{% endfor %}
+{% for module in values.shared.mpi.modules %}
+  {{ module | yaml_scalar }}
+{% endfor %}
+{% for module in values.platform.compiler.modules %}
+  {{ module | yaml_scalar }}
+{% endfor %}
+{% for module in values.platform.mpi.modules %}
+  {{ module | yaml_scalar }}
+{% endfor %}
+)
+readonly CSE_EXTERNAL_MODULES
+
+cse_module_is_loaded() {
+  local requested_module="$1"
+  case ":${LOADEDMODULES:-}:" in
+    *":$requested_module:"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+cse_prepare_module_state() {
+  local external_module found=0
+
+  for external_module in "${CSE_EXTERNAL_MODULES[@]}"; do
+    if cse_module_is_loaded "$external_module"; then
+      found=1
+      break
+    fi
+  done
+  [ "$found" -eq 1 ] || return 0
+
+  if ! type module >/dev/null 2>&1; then
+    printf 'cse-build: configured external module is loaded, but the module command is unavailable\n' >&2
+    return 2
+  fi
+
+  for external_module in "${CSE_EXTERNAL_MODULES[@]}"; do
+    cse_module_is_loaded "$external_module" || continue
+    printf 'cse-build: unloading preloaded external module for Spack: %s\n' \
+      "$external_module"
+    module unload "$external_module" || return 2
+    if cse_module_is_loaded "$external_module"; then
+      printf 'cse-build: external module remains loaded: %s\n' \
+        "$external_module" >&2
+      return 2
+    fi
+  done
+}

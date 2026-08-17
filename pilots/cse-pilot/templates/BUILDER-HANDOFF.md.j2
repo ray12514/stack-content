@@ -83,6 +83,11 @@ already present:
 `concretize` creates only missing lockfiles. It does not replace existing
 locks. `install` requires all locks and verifies them before building. Already
 installed concrete hashes are reused from the shared restricted Spack store.
+Each action starts by unloading a selected external compiler or MPI module when
+that exact module is already active in the wrapper process. This lets Spack
+1.2.2 activate the recorded module itself and avoids inheriting a conflicting
+platform toolchain. Unrelated site modules and the caller's parent shell are
+unchanged.
 
 ## Commands used by the wrapper
 

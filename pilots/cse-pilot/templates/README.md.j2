@@ -115,6 +115,12 @@ The same entry point supports `status`, `concretize`, `verify`, `fetch`, and
 `install`. It concretizes only missing environments and never replaces an
 existing lock merely because the builder or Spack root changed. See the
 generated `BUILDER-HANDOFF.md` for the complete handoff procedure.
+
+Before activating Spack, the wrapper unloads any selected external compiler or
+MPI module that is already active in its own process. Spack 1.2.2 otherwise
+reports an already-loaded module as a failed load because `LOADEDMODULES` does
+not change. The wrapper does not purge unrelated site modules and does not
+change the parent login shell.
 {% else %}
 ## Publication control
 

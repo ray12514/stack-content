@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -22,6 +24,17 @@ def render(template: str, **context: object) -> dict:
     return yaml.safe_load(environment.get_template(template).render(**context))
 
 
+def render_text(template: str, **context: object) -> str:
+    environment = Environment(
+        loader=FileSystemLoader(TEMPLATE_ROOT),
+        undefined=StrictUndefined,
+        autoescape=False,
+        keep_trailing_newline=True,
+    )
+    environment.filters["yaml_scalar"] = json.dumps
+    return environment.get_template(template).render(**context)
+
+
 def values() -> dict:
     return {
         "architecture": {"target": "x86_64_v3", "binary_target": "x86_64"},
@@ -32,12 +45,14 @@ def values() -> dict:
                 "name": "gcc",
                 "version": "12.5.0",
                 "source": "build",
+                "modules": [],
                 "build_with": {"name": "gcc", "version": "12.2.1"},
             },
             "mpi": {
                 "name": "openmpi",
                 "version": "4.1.8",
                 "source": "build",
+                "modules": [],
                 "spec": (
                     "openmpi@4.1.8 fabrics=ucx schedulers=slurm +pmi "
                     "^ucx@1.18.0+thread_multiple ^slurm@23.02.7"
@@ -49,11 +64,17 @@ def values() -> dict:
             "catalog_scopes": {"compiler": "scopes/compilers/gcc/12.2.1"},
         },
         "platform": {
-            "compiler": {"name": "aocc", "version": "4.1.0", "source": "external"},
+            "compiler": {
+                "name": "aocc",
+                "version": "4.1.0",
+                "source": "external",
+                "modules": ["amd/aocc/4.1.0"],
+            },
             "mpi": {
                 "name": "openmpi",
                 "version": "4.1.8",
                 "source": "build",
+                "modules": [],
                 "spec": (
                     "openmpi@4.1.8 fabrics=ucx schedulers=slurm +pmi "
                     "^ucx@1.18.0+thread_multiple ^slurm@23.02.7"
@@ -68,6 +89,44 @@ def values() -> dict:
 
 
 class ToolchainTemplateTests(unittest.TestCase):
+    def test_cse_build_prepares_modules_before_activating_spack(self) -> None:
+        template = (TEMPLATE_ROOT / "cse-build.j2").read_text(encoding="utf-8")
+        prepare = template.index("cse_prepare_module_state")
+        activate = template.index('source "$SPACK_ROOT/share/spack/setup-env.sh"')
+
+        self.assertLess(prepare, activate)
+
+    def test_preloaded_external_module_is_removed_before_spack_runs(self) -> None:
+        script = render_text(
+            "env/prepare-module-state.sh.j2",
+            values=values(),
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script_path = Path(temp_dir) / "prepare-module-state.sh"
+            script_path.write_text(script, encoding="utf-8")
+            harness = r"""
+set -euo pipefail
+export LOADEDMODULES='amd/aocc/4.1.0:site/base'
+module() {
+  [ "$1" = unload ] || return 2
+  [ "$2" = amd/aocc/4.1.0 ] || return 3
+  LOADEDMODULES="${LOADEDMODULES#amd/aocc/4.1.0:}"
+  export LOADEDMODULES
+}
+source "$1"
+cse_prepare_module_state
+printf '%s\n' "$LOADEDMODULES"
+"""
+            result = subprocess.run(
+                ["bash", "-c", harness, "bash", str(script_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines()[-1], "site/base")
+
     def test_language_provider_preferences_are_surface_specific(self) -> None:
         test_values = values()
         cases = {
