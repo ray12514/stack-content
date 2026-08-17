@@ -1,0 +1,14 @@
+schema_version: 1
+openmpi:
+  version: 4.1.8
+  fabrics: [ucx]
+  scheduler: unique_verified_external
+  launch:
+    mpirun: required
+    slurm_direct:
+      support: when_verified
+      interface_priority: [pmi2]
+  cuda: false
+  lustre: false
+  romio: true
+  romio_filesystems: []

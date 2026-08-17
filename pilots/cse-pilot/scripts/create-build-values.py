@@ -26,6 +26,7 @@ GENERIC_BINARY_TARGETS = {
     "x86_64_v2": "x86_64",
     "x86_64": "x86_64",
 }
+OPENMPI_POLICY_PATH = Path(__file__).resolve().parents[1] / "openmpi-policy.yaml"
 
 
 def required(name: str) -> str:
@@ -339,77 +340,169 @@ def scope_external_specs(catalog: Path, relative: str) -> dict[str, list[str]]:
     return result
 
 
-def openmpi_build_spec(name: str, version: str, externals: dict[str, list[str]]) -> str:
+def selected_external_spec(
+    name: str,
+    specs: list[str],
+    *,
+    required_variant: str | None = None,
+) -> str:
+    candidates = [
+        spec
+        for spec in specs
+        if required_variant is None or required_variant in spec.split()
+    ]
+    if not candidates:
+        requirement = f" with {required_variant}" if required_variant else ""
+        raise InputError(
+            f"no verified {name} external{requirement} exists in the static common scope"
+        )
+
+    def external_version(spec: str) -> tuple[tuple[int, Any], ...]:
+        match = re.match(rf"^{re.escape(name)}@([^+~%\s]+)", spec)
+        if not match:
+            raise InputError(f"cannot read {name} version from external spec {spec!r}")
+        return version_key(match.group(1))
+
+    selected = max(candidates, key=external_version)
+    return "".join(selected.split())
+
+
+def selected_profile_external(
+    manifest: dict[str, Any], name: str, selected_spec: str
+) -> dict[str, Any]:
+    match = re.match(rf"^{re.escape(name)}@([^+~%\s]+)", selected_spec)
+    if not match:
+        raise InputError(
+            f"cannot match selected {name} spec {selected_spec!r} to profile facts"
+        )
+    version = match.group(1)
+    facts = (manifest.get("profile_facts") or {}).get("system_externals") or []
+    candidates = [
+        fact
+        for fact in facts
+        if isinstance(fact, dict)
+        and fact.get("name") == name
+        and str(fact.get("version")) == version
+    ]
+    if len(candidates) != 1:
+        raise InputError(
+            f"static manifest must contain exactly one {name}@{version} profile fact; "
+            f"found {len(candidates)}"
+        )
+    return candidates[0]
+
+
+def openmpi_launch_policy(policy: dict[str, Any]) -> list[str]:
+    launch = policy.get("launch")
+    if not isinstance(launch, dict) or launch.get("mpirun") != "required":
+        raise InputError("the CSE OpenMPI policy must retain mpirun")
+    direct = launch.get("slurm_direct")
+    if not isinstance(direct, dict) or direct.get("support") != "when_verified":
+        raise InputError(
+            "the CSE OpenMPI policy must enable Slurm direct launch when verified"
+        )
+    priority = direct.get("interface_priority")
+    if priority != ["pmi2"]:
+        raise InputError(
+            "the current OpenMPI 4.1.8 policy must use interface_priority: [pmi2]"
+        )
+    return priority
+
+
+def slurm_direct_launch_interface(
+    priority: list[str], manifest: dict[str, Any], slurm_spec: str
+) -> str | None:
+    slurm = selected_profile_external(manifest, "slurm", slurm_spec)
+    mpi_launch = ((slurm.get("capabilities") or {}).get("mpi_launch") or {})
+    if mpi_launch.get("command") != "srun":
+        raise InputError(
+            "selected Slurm external has no Cluster Inspector verified srun capability; "
+            "re-probe the system and re-render the static catalog"
+        )
+    plugins = {str(plugin) for plugin in mpi_launch.get("plugins") or []}
+    development = {
+        str(interface)
+        for interface in mpi_launch.get("development_interfaces") or []
+    }
+    for interface in priority:
+        if interface in plugins and interface in development:
+            return interface
+    return None
+
+
+def openmpi_build_spec(
+    name: str,
+    version: str,
+    externals: dict[str, list[str]],
+    manifest: dict[str, Any],
+) -> str:
     if name != "openmpi":
         return f"{name}@{version}"
 
-    fabrics = os.environ.get("CSE_OPENMPI_FABRICS", "").strip()
-    if not fabrics:
-        compatible_ucx = any(
-            "+thread_multiple" in spec.split() for spec in externals.get("ucx", [])
-        )
-        if compatible_ucx:
-            fabrics = "ucx"
-        elif externals.get("libfabric"):
-            fabrics = "ofi"
-        else:
-            raise InputError(
-                "build-sourced OpenMPI needs either verified ucx+thread_multiple or "
-                "a verified libfabric external in the static common scope"
-            )
-    if fabrics == "auto":
+    policy_data = load_mapping(OPENMPI_POLICY_PATH)
+    if policy_data.get("schema_version") != 1:
+        raise InputError(f"unsupported OpenMPI policy in {OPENMPI_POLICY_PATH}")
+    policy = policy_data.get("openmpi")
+    if not isinstance(policy, dict):
+        raise InputError(f"missing openmpi mapping in {OPENMPI_POLICY_PATH}")
+    if str(policy.get("version")) != version:
         raise InputError(
-            "CSE_OPENMPI_FABRICS=auto is not reproducible; select explicit fabrics"
+            f"OpenMPI request {version} does not match trial policy version "
+            f"{policy.get('version')}"
         )
-    for fabric in fabrics.split(","):
-        package = {"ofi": "libfabric", "ucx": "ucx"}.get(fabric, fabric)
-        if package not in externals:
-            raise InputError(
-                f"OpenMPI fabric {fabric!r} has no verified development external in "
-                "the static common scope"
-            )
-        if fabric == "ucx" and not any(
-            "+thread_multiple" in spec.split() for spec in externals.get("ucx", [])
-        ):
-            raise InputError(
-                "OpenMPI 4.1.8 requires ucx+thread_multiple, but the static common "
-                "scope has no UCX external with that verified capability"
-            )
 
-    scheduler = os.environ.get("CSE_OPENMPI_SCHEDULER", "").strip()
-    if not scheduler:
-        scheduler_externals = sorted(
-            {name for name in ("slurm", "pbs") if name in externals}
+    fabrics = policy.get("fabrics")
+    if fabrics != ["ucx"]:
+        raise InputError("the current CSE trial policy must select exactly fabrics: [ucx]")
+    ucx_spec = selected_external_spec(
+        "ucx", externals.get("ucx", []), required_variant="+thread_multiple"
+    )
+
+    if policy.get("scheduler") != "unique_verified_external":
+        raise InputError("the current CSE trial policy requires unique_verified_external")
+    scheduler_externals = sorted(
+        {external for external in ("slurm", "pbs") if external in externals}
+    )
+    if len(scheduler_externals) != 1:
+        raise InputError(
+            "build-sourced OpenMPI needs exactly one verified slurm or pbs external"
         )
-        if len(scheduler_externals) != 1:
-            raise InputError(
-                "build-sourced OpenMPI needs exactly one verified slurm or pbs external; "
-                "set CSE_OPENMPI_SCHEDULER only to resolve a reviewed ambiguity"
-            )
-        scheduler = scheduler_externals[0]
+    scheduler = scheduler_externals[0]
     scheduler_variant = {"slurm": "slurm", "pbs": "tm"}.get(scheduler)
-    if not scheduler_variant:
-        raise InputError("CSE_OPENMPI_SCHEDULER must be slurm or pbs")
-    if scheduler not in externals:
-        raise InputError(
-            f"OpenMPI scheduler {scheduler!r} has no verified development external in "
-            "the static common scope"
-        )
+    scheduler_spec = selected_external_spec(scheduler, externals[scheduler])
 
-    variants = [f"fabrics={fabrics}", f"schedulers={scheduler_variant}", "~rsh"]
-    if "lustre" in externals:
-        variants.extend(["+lustre", "+romio", "romio-filesystem=lustre"])
-    else:
-        variants.extend(["~lustre", "+romio", "romio-filesystem=none"])
-    if os.environ.get("CSE_OPENMPI_PMI", "disabled").strip() == "enabled":
-        if scheduler != "slurm":
+    expected_policy = {
+        "cuda": False,
+        "lustre": False,
+        "romio": True,
+        "romio_filesystems": [],
+    }
+    for key, expected in expected_policy.items():
+        if policy.get(key) != expected:
             raise InputError(
-                "CSE_OPENMPI_PMI=enabled is valid only with the Slurm selection"
+                f"the current CSE trial policy requires openmpi.{key}={expected!r}"
             )
-        variants.append("+pmi")
+    slurm_interface_priority = openmpi_launch_policy(policy)
+
+    variants = [
+        "fabrics=ucx",
+        f"schedulers={scheduler_variant}",
+        "~rsh",
+        "~cuda",
+        "~lustre",
+        "+romio",
+        "romio-filesystem=none",
+    ]
+    if scheduler == "slurm":
+        slurm_interface = slurm_direct_launch_interface(
+            slurm_interface_priority, manifest, scheduler_spec
+        )
+        variants.append("+legacylaunchers")
+        variants.append("+pmi" if slurm_interface == "pmi2" else "~pmi")
     else:
         variants.append("~pmi")
-    return " ".join((f"openmpi@{version}", *variants))
+    dependencies = [f"^{ucx_spec}", f"^{scheduler_spec}"]
+    return " ".join((f"openmpi@{version}", *variants, *dependencies))
 
 
 def mpi_values(
@@ -422,6 +515,7 @@ def mpi_values(
     module_map: dict[str, list[str]],
     catalog: Path,
     common_externals: dict[str, list[str]],
+    manifest: dict[str, Any],
 ) -> tuple[dict[str, Any], str | None]:
     if source not in {"build", "external"}:
         raise InputError(
@@ -443,7 +537,9 @@ def mpi_values(
         scope_path = existing_scope(catalog, scope)
         modules = module_map.get(scope_path, [])
     spec = (
-        openmpi_build_spec(package_name, provider_version, common_externals)
+        openmpi_build_spec(
+            package_name, provider_version, common_externals, manifest
+        )
         if source == "build"
         else f"{package_name}@{provider_version}"
     )
@@ -513,6 +609,7 @@ def main() -> int:
             module_map=module_map,
             catalog=catalog,
             common_externals=common_externals,
+            manifest=manifest,
         )
         platform_compiler_ref = f"{platform_provider}@{platform_version}"
         platform_mpi, platform_mpi_scope = mpi_values(
@@ -524,6 +621,7 @@ def main() -> int:
             module_map=module_map,
             catalog=catalog,
             common_externals=common_externals,
+            manifest=manifest,
         )
         platform_scopes = [scope for scope in scopes if scope.get("kind") == "platform"]
         platform_common_path = (

@@ -25,21 +25,26 @@ records it under `shared.compiler.build_with`. This is a direct compiler
 dependency in each GCC environment, not a separate preparatory environment.
 
 The initializer does not probe the machine. `scripts/create-build-values.py`
-resolves reviewed provider selections against the static catalog. For a
-build-sourced OpenMPI it requires verified development externals in the common
-scope and emits explicit variants:
+resolves reviewed provider selections against the static catalog and the
+tracked `openmpi-policy.yaml`. For the initial non-Cray builds that policy is:
 
-- verified UCX with thread-multiple support, or verified libfabric/OFI, never
-  `fabrics=auto`;
-- `schedulers=slurm` or `schedulers=tm` for PBS;
-- Lustre and ROMIO only when the Lustre development external was verified;
-- PMI only when `CSE_OPENMPI_PMI=enabled` was explicitly reviewed.
+- Open MPI 4.1.8 with UCX and verified thread-multiple support;
+- exactly one verified site scheduler, rendered as `schedulers=slurm` or
+  `schedulers=tm` for PBS;
+- both `mpirun` and direct `srun --mpi=pmi2` on Slurm, but only when the static
+  manifest records both the advertised `pmi2` plugin and its development
+  interface;
+- legacy launchers on Slurm, with `+pmi` when that PMI2 path is verified and
+  `~pmi` otherwise; CUDA and Lustre disabled; and
+- ROMIO enabled without a Lustre filesystem plugin.
 
-The helper automatically selects UCX when the static common scope contains a
-`ucx+thread_multiple` external; otherwise it selects verified libfabric/OFI.
-It selects the scheduler when exactly one of `slurm` or `pbs` is present. Use
-`CSE_OPENMPI_FABRICS` or `CSE_OPENMPI_SCHEDULER` only to resolve a reviewed
-ambiguity; the selected dependency must still exist in the catalog.
+The generated Open MPI root includes exact dependency constraints for the
+selected UCX and scheduler versions from the common catalog scope. A detected
+Lustre filesystem or Lustre development external remains a useful system fact;
+it does not enable Open MPI Lustre integration. Missing Slurm launch capability
+facts fail values generation with instructions to re-probe and re-render. A
+capability record without a verified PMI2 development path produces an
+mpirun-only root instead of guessing. The helper never runs `srun` itself.
 
 The helper resolves one portable CPU target for the whole system from the
 cataloged CPU-only build/runtime node facts. It selects the highest common
@@ -92,6 +97,16 @@ absolute writable directory. This keeps the workspace portable between CSE
 builders while preventing an unset variable from becoming an unintended
 relative stage path.
 
+Before this workspace exists, the operator resumes work through a separate
+operator-local session entry point. Run `scripts/create-operator-session.py`
+once for an exact system/catalog/trial tuple, then source the generated
+`$HOME/STACK_TESTING/operator-sessions/<system>/<trial>/activate.sh` after each
+login. It restores repository, profile, catalog, workspace, release, cache,
+Spack, and Python paths and loads the reviewed provider selections saved beside
+it. It does not pull repositories, rebuild tools, probe, render, or initialize
+a workspace. That session belongs to the operator-controlled preparation
+phase; it is not copied into the shared handoff.
+
 ```sh
 stack-composer init-workspace \
   --blueprint stack-content/pilots/cse-pilot \
@@ -103,6 +118,11 @@ stack-composer init-workspace \
 `init-workspace` snapshots the catalog under `catalog/`; every generated
 environment uses relative includes. Hand the entire initialized workspace and
 its reviewed lockfiles to the builder.
+
+The `cse-build` entry point first appears inside that initialized workspace.
+Use the operator session through profile/catalog/value preparation, then use
+`<workspace>/cse-build` for concretize, fetch, install, verify, and builder
+handoff. The two scripts do not overlap in ownership.
 
 The complete workspace is also the builder-resume boundary. It records the
 approved Spack source, version, tag, and commit and contains the selected

@@ -61,6 +61,13 @@ Build-sourced MPI specs are explicit:
 - GCC: `{{ values.shared.mpi.spec }}`
 - platform: `{{ values.platform.mpi.spec }}`
 
+When an Open MPI spec contains `schedulers=slurm`, `+pmi`, and
+`+legacylaunchers`, the reviewed profile proved a build-usable PMI2 `srun`
+path. After installation, compile one MPI smoke program with that surface's
+wrapper and exercise the same binary with both `mpirun -n 2` and
+`srun --mpi=pmi2 -n 2` from an allocation. Both results are required trial
+evidence. A Slurm root with `~pmi +legacylaunchers` is mpirun-only.
+
 Private CSE build cache: `{{ values.buildcache.url }}`
 
 The trial is CPU-only. No GPU environment is rendered.

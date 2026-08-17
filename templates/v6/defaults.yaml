@@ -32,12 +32,12 @@ spack:
 externals:
   openssl: system
   curl: system
+  libfabric: system
   ucx: system
   slurm: system
   pbs: system
   lustre: system
   cray-libsci: system
-  fabric_userspace: prefer_platform
 
 modules:
   format: tcl
