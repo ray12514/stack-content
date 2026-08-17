@@ -431,14 +431,15 @@ def slurm_direct_launch_interface(
     return None
 
 
-def openmpi_build_spec(
+def openmpi_build_specs(
     name: str,
     version: str,
     externals: dict[str, list[str]],
     manifest: dict[str, Any],
-) -> str:
+) -> tuple[str, str]:
     if name != "openmpi":
-        return f"{name}@{version}"
+        spec = f"{name}@{version}"
+        return spec, spec
 
     policy_data = load_mapping(OPENMPI_POLICY_PATH)
     if policy_data.get("schema_version") != 1:
@@ -503,7 +504,11 @@ def openmpi_build_spec(
     else:
         variants.append("~pmi")
     dependencies = [f"^{ucx_spec}", f"^{scheduler_spec}"]
-    return " ".join((f"openmpi@{version}", *variants, *dependencies))
+    provider_constraint = " ".join((f"openmpi@{version}", *variants))
+    return (
+        " ".join((provider_constraint, *dependencies)),
+        provider_constraint,
+    )
 
 
 def mpi_values(
@@ -537,13 +542,13 @@ def mpi_values(
         package_name = str(scope.get("package") or provider_name)
         scope_path = existing_scope(catalog, scope)
         modules = module_map.get(scope_path, [])
-    spec = (
-        openmpi_build_spec(
+    if source == "build":
+        spec, provider_constraint = openmpi_build_specs(
             package_name, provider_version, common_externals, manifest
         )
-        if source == "build"
-        else f"{package_name}@{provider_version}"
-    )
+    else:
+        spec = f"{package_name}@{provider_version}"
+        provider_constraint = spec
     return (
         {
             "name": package_name,
@@ -551,6 +556,7 @@ def mpi_values(
             "source": source,
             "modules": modules,
             "spec": spec,
+            "provider_constraint": provider_constraint,
         },
         scope_path,
     )

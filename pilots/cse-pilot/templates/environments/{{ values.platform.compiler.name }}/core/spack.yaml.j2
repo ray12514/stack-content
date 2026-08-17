@@ -1,5 +1,6 @@
 spack:
   include::
+    - ../../../configs/surfaces/platform/compiler.yaml
     - {{ ('../../../catalog/' ~ values.catalog_scopes.common) | yaml_scalar }}
     - {{ ('../../../catalog/' ~ values.platform.catalog_scopes.compiler) | yaml_scalar }}
     - ../../../configs/common

@@ -2,7 +2,7 @@ packages:
   mpi:
     require:
 {% if values.platform.mpi.source == 'build' %}
-      - {{ (values.platform.mpi.name ~ '@' ~ values.platform.mpi.version ~ ' target=' ~ values.architecture.target) | yaml_scalar }}
+      - {{ values.platform.mpi.provider_constraint | yaml_scalar }}
 {% else %}
       - {{ (values.platform.mpi.name ~ '@' ~ values.platform.mpi.version) | yaml_scalar }}
 {% endif %}

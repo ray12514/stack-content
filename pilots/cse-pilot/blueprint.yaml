@@ -28,6 +28,7 @@ required_values:
   - shared.mpi.source
   - shared.mpi.modules
   - shared.mpi.spec
+  - shared.mpi.provider_constraint
   - platform.compiler.name
   - platform.compiler.version
   - platform.compiler.public_name
@@ -39,6 +40,7 @@ required_values:
   - platform.mpi.source
   - platform.mpi.modules
   - platform.mpi.spec
+  - platform.mpi.provider_constraint
   - catalog_scopes.common
   - paths.install_tree
   - paths.build_stage

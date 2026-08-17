@@ -98,6 +98,18 @@ def package_versions(hashes: set[str], nodes: dict, name: str) -> set[str]:
     }
 
 
+def package_hashes(
+    hashes: set[str], nodes: dict, name: str, version: str
+) -> set[str]:
+    return {
+        dag_hash
+        for dag_hash in hashes
+        if dag_hash in nodes
+        and nodes[dag_hash].get("name") == name
+        and node_version(nodes[dag_hash]) == version
+    }
+
+
 def direct_language_providers(node: dict, nodes: dict) -> set[tuple[str, str]]:
     providers: set[tuple[str, str]] = set()
     for dependency in node.get("dependencies", []):
@@ -191,7 +203,7 @@ def main() -> int:
                 expected_provider = COMPILER_BY_SURFACE[surface]
             else:
                 expected_provider = None
-            if providers and providers != {expected_provider}:
+            if expected_provider is not None and providers != {expected_provider}:
                 errors.append(
                     f"{environment}: {group} root {root.get('spec')} uses language "
                     f"provider(s) {sorted(providers)}; expected {expected_provider}"
@@ -263,6 +275,24 @@ def main() -> int:
 
         if lane.startswith("mpi-"):
             mpi_name, mpi_version = MPI_BY_SURFACE[surface]
+            mpi_source = MPI_SOURCE_BY_SURFACE[surface]
+            mpi_group_roots = roots_by_group.get("mpi", [])
+            expected_mpi_hash = None
+            if mpi_source == "build":
+                if len(mpi_group_roots) != 1:
+                    errors.append(
+                        f"{environment}: built MPI lane has {len(mpi_group_roots)} "
+                        "MPI producer roots; expected one"
+                    )
+                else:
+                    expected_mpi_hash = mpi_group_roots[0].get("hash")
+            elif mpi_group_roots:
+                errors.append(
+                    f"{environment}: external MPI lane unexpectedly has an MPI "
+                    "producer root"
+                )
+
+            selected_mpi_hashes: set[str] = set()
             for root in payload_roots:
                 graph = reachable(root["hash"], nodes)
                 versions = package_versions(graph, nodes, mpi_name)
@@ -271,13 +301,34 @@ def main() -> int:
                         f"{environment}: MPI root {root.get('spec')} resolves "
                         f"{mpi_name} versions {sorted(versions)}; expected {mpi_version}"
                     )
-                if MPI_SOURCE_BY_SURFACE[surface] == "build":
+                provider_hashes = package_hashes(
+                    graph, nodes, mpi_name, mpi_version
+                )
+                selected_mpi_hashes.update(provider_hashes)
+                if expected_mpi_hash and provider_hashes != {expected_mpi_hash}:
+                    errors.append(
+                        f"{environment}: MPI root {root.get('spec')} uses provider "
+                        f"hashes {sorted(provider_hashes)}; expected producer "
+                        f"{expected_mpi_hash}"
+                    )
+                if mpi_source == "build":
                     for dependency_name in MPI_RUNTIME_DEPENDENCIES.get(mpi_name, set()):
                         if not package_versions(graph, nodes, dependency_name):
                             errors.append(
                                 f"{environment}: MPI root {root.get('spec')} does not "
                                 f"reach required runtime {dependency_name}"
                             )
+            if len(selected_mpi_hashes) != 1:
+                errors.append(
+                    f"{environment}: payload roots use MPI provider hashes "
+                    f"{sorted(selected_mpi_hashes)}; expected one"
+                )
+            elif mpi_source == "external":
+                selected_mpi_hash = next(iter(selected_mpi_hashes))
+                if not nodes.get(selected_mpi_hash, {}).get("external"):
+                    errors.append(
+                        f"{environment}: MPI provider {selected_mpi_hash} is not external"
+                    )
 
         for root in payload_roots:
             graph = reachable(root["hash"], nodes)

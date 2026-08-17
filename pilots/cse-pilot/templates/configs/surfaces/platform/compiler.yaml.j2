@@ -1,0 +1,10 @@
+packages:
+  c:
+    prefer:
+      - {{ (values.platform.compiler.name ~ '@' ~ values.platform.compiler.version) | yaml_scalar }}
+  cxx:
+    prefer:
+      - {{ (values.platform.compiler.name ~ '@' ~ values.platform.compiler.version) | yaml_scalar }}
+  fortran:
+    prefer:
+      - {{ (values.platform.compiler.name ~ '@' ~ values.platform.compiler.version) | yaml_scalar }}

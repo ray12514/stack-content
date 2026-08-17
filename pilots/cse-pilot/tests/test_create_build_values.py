@@ -78,5 +78,47 @@ class PortableCpuTargetTests(unittest.TestCase):
         )
 
 
+class OpenMpiSpecTests(unittest.TestCase):
+    def test_provider_constraint_excludes_machine_external_dependencies(self) -> None:
+        manifest = {
+            "profile_facts": {
+                "system_externals": [
+                    {
+                        "name": "slurm",
+                        "version": "23.02.7",
+                        "capabilities": {
+                            "mpi_launch": {
+                                "command": "srun",
+                                "plugins": ["pmi2"],
+                                "development_interfaces": ["pmi2"],
+                            }
+                        },
+                    }
+                ]
+            }
+        }
+
+        root_spec, provider_constraint = CREATE_BUILD_VALUES.openmpi_build_specs(
+            "openmpi",
+            "4.1.8",
+            {
+                "ucx": ["ucx@1.18.0 +thread_multiple"],
+                "slurm": ["slurm@23.02.7"],
+            },
+            manifest,
+        )
+
+        self.assertIn("fabrics=ucx", provider_constraint)
+        self.assertIn("schedulers=slurm", provider_constraint)
+        self.assertIn("+pmi", provider_constraint)
+        self.assertIn("+legacylaunchers", provider_constraint)
+        self.assertNotIn("^", provider_constraint)
+        self.assertEqual(
+            root_spec,
+            provider_constraint
+            + " ^ucx@1.18.0+thread_multiple ^slurm@23.02.7",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -3,5 +3,4 @@
 {% set environment_kind = 'serial' %}
 {% set environment_name = 'serial' %}
 {% set payload_specs = data.roster.specs.serial %}
-{% set payload_constraint = 'target=' ~ values.architecture.target ~ ' %' ~ values.shared.compiler.name ~ '@' ~ values.shared.compiler.version %}
 {% include '_partials/payload-spack.yaml.j2' %}

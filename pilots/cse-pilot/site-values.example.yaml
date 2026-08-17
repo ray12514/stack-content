@@ -40,6 +40,7 @@ shared:
     source: build
     modules: []
     spec: openmpi@4.1.8 fabrics=ucx schedulers=slurm ~rsh ~cuda ~lustre +romio romio-filesystem=none +pmi +legacylaunchers ^ucx@1.16.0+thread_multiple ^slurm@24.05.4
+    provider_constraint: openmpi@4.1.8 fabrics=ucx schedulers=slurm ~rsh ~cuda ~lustre +romio romio-filesystem=none +pmi +legacylaunchers
   catalog_scopes:
     compiler: scopes/compilers/gcc/11.4.0
     mpi: null
@@ -66,6 +67,7 @@ platform:
     source: build
     modules: []
     spec: openmpi@4.1.8 fabrics=ucx schedulers=slurm ~rsh ~cuda ~lustre +romio romio-filesystem=none +pmi +legacylaunchers ^ucx@1.16.0+thread_multiple ^slurm@24.05.4
+    provider_constraint: openmpi@4.1.8 fabrics=ucx schedulers=slurm ~rsh ~cuda ~lustre +romio romio-filesystem=none +pmi +legacylaunchers
   catalog_scopes:
     compiler: scopes/compilers/aocc/4.2.0
     mpi: null
