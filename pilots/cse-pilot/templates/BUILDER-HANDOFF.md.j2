@@ -104,9 +104,10 @@ surfaces across two build nodes:
 
 Both commands use the same locked workspace and restricted install tree.
 Spack's prefix/database locks coordinate identical concrete hashes; the
-surface split keeps view and module refresh roots disjoint. Do not run two
-commands for the same surface. `BUILD_JOBS` is a per-process budget, so two
-processes on one node would add their budgets together. `concretize` and
+surface split keeps view, module refresh, and mutable per-user cache roots
+disjoint. The source/misc caches and package store remain shared. Do not run
+two commands for the same surface. `BUILD_JOBS` is a per-process budget, so
+two processes on one node would add their budgets together. `concretize` and
 `verify` remain whole-workspace gates and do not accept `--surface`.
 
 ## Commands used by the wrapper

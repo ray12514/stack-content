@@ -152,7 +152,9 @@ passes the cross-node prefix-lock test, one builder may split the work across
 two nodes with `install --surface shared` for GCC and
 `install --surface platform` for the selected platform compiler. Do not run
 both commands for the same surface, and do not let the per-process job budgets
-oversubscribe one node.
+oversubscribe one node. The two processes receive separate surface-scoped
+`SPACK_USER_CACHE_PATH` directories while retaining the same locked package
+store and generated source/misc caches.
 
 The selected package-build CMake is 3.31.12. CMake 4.4.2 is the second public
 version. The workspace overlay recipe adds those two versions to the pinned

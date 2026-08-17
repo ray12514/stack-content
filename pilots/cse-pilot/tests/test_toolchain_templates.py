@@ -165,6 +165,10 @@ class ToolchainTemplateTests(unittest.TestCase):
             'for environment in "${CSE_ACTION_ENVIRONMENTS[@]}"; do',
             script,
         )
+        self.assertIn(
+            'SPACK_USER_CACHE_PATH="$SPACK_USER_STATE_ROOT/cache/$REQUESTED_SURFACE"',
+            script,
+        )
 
     def test_preloaded_external_module_is_removed_before_spack_runs(self) -> None:
         script = render_text(
