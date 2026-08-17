@@ -146,8 +146,13 @@ tmux, and the default falls back to a direct shell when tmux is unavailable.
 Its `concretize`
 action creates only missing locks; its `install` action verifies all locks and
 continues with `spack install --only-concrete`. Already installed hashes are
-reused from the shared restricted store. The two trial builders do not run
-builds on the same system at the same time.
+reused from the shared restricted store. The default `install` action remains
+sequential. After all locks pass verification and the real shared install tree
+passes the cross-node prefix-lock test, one builder may split the work across
+two nodes with `install --surface shared` for GCC and
+`install --surface platform` for the selected platform compiler. Do not run
+both commands for the same surface, and do not let the per-process job budgets
+oversubscribe one node.
 
 The selected package-build CMake is 3.31.12. CMake 4.4.2 is the second public
 version. The workspace overlay recipe adds those two versions to the pinned

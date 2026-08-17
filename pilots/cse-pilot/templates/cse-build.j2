@@ -21,11 +21,13 @@ readonly CSE_RECORDED_INITIAL_SPACK_ROOT={{ values.spack.initial_root | yaml_sca
 
 ACTION="tmux"
 REQUESTED_SPACK_MODE="auto"
+REQUESTED_SURFACE="all"
 ACTION_SET=0
 
 usage() {
   cat <<'EOF'
 Usage: ./cse-build [ACTION] [--spack-mode auto|shared|local]
+                   [--surface all|shared|platform]
 
 Actions:
   tmux        Create or reattach the release build session (default).
@@ -41,6 +43,15 @@ Spack selection:
               workspace's recorded shared/local preference (default).
   shared      Use or provision the recorded shared CSE checkout.
   local       Use or provision $HOME/STACK_TESTING/spack/<version>.
+
+Environment selection:
+  all         Process both compiler surfaces in their recorded order (default).
+  shared      Process only the shared GCC surface.
+  platform    Process only the selected platform-compiler surface.
+
+The surface selector applies to status, fetch, and install. Concretize and
+verify remain whole-workspace gates. Concurrent shared/platform installs are
+allowed only after the real shared install tree passes the prefix-lock test.
 
 See ./BUILDER-HANDOFF.md for the exact Spack commands behind each action.
 EOF
@@ -70,6 +81,14 @@ while [ "$#" -gt 0 ]; do
     --spack-mode=*)
       REQUESTED_SPACK_MODE="${1#*=}"
       ;;
+    --surface)
+      shift
+      [ "$#" -gt 0 ] || fail "--surface requires all, shared, or platform"
+      REQUESTED_SURFACE="$1"
+      ;;
+    --surface=*)
+      REQUESTED_SURFACE="${1#*=}"
+      ;;
     -h|--help)
       usage
       exit 0
@@ -85,6 +104,18 @@ case "$REQUESTED_SPACK_MODE" in
   auto|shared|local) ;;
   *) fail "--spack-mode must be auto, shared, or local" ;;
 esac
+
+case "$REQUESTED_SURFACE" in
+  all|shared|platform) ;;
+  *) fail "--surface must be all, shared, or platform" ;;
+esac
+
+if [ "$REQUESTED_SURFACE" != all ]; then
+  case "$ACTION" in
+    status|fetch|install) ;;
+    *) fail "--surface applies only to status, fetch, and install" ;;
+  esac
+fi
 
 if [ "$CSE_RECORDED_ROLE" != build ]; then
   case "$ACTION" in
@@ -266,16 +297,27 @@ source "$CSE_WORKSPACE_ROOT/env/setup-build-env.sh"
 export CSE_BUILD_WORKSPACE="$CSE_WORKSPACE_ROOT"
 export CSE_SPACK_MODE_SELECTED="$SELECTED_SPACK_MODE"
 
-CSE_ENVIRONMENTS=(
+CSE_SHARED_ENVIRONMENTS=(
   "$SHARED_COMPILER_NAME/core"
   "$SHARED_COMPILER_NAME/common"
   "$SHARED_COMPILER_NAME/serial"
   "$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"
+)
+CSE_PLATFORM_ENVIRONMENTS=(
   "$PLATFORM_COMPILER_NAME/core"
   "$PLATFORM_COMPILER_NAME/common"
   "$PLATFORM_COMPILER_NAME/serial"
   "$PLATFORM_COMPILER_NAME/mpi-$PLATFORM_MPI_NAME"
 )
+CSE_ENVIRONMENTS=(
+  "${CSE_SHARED_ENVIRONMENTS[@]}"
+  "${CSE_PLATFORM_ENVIRONMENTS[@]}"
+)
+case "$REQUESTED_SURFACE" in
+  shared) CSE_ACTION_ENVIRONMENTS=("${CSE_SHARED_ENVIRONMENTS[@]}") ;;
+  platform) CSE_ACTION_ENVIRONMENTS=("${CSE_PLATFORM_ENVIRONMENTS[@]}") ;;
+  all) CSE_ACTION_ENVIRONMENTS=("${CSE_ENVIRONMENTS[@]}") ;;
+esac
 readonly CSE_ENVIRONMENT_COUNT=8
 
 checkpoint_summary() {
@@ -353,7 +395,8 @@ verify_locks() {
 show_status() {
   local environment
   checkpoint_summary
-  for environment in "${CSE_ENVIRONMENTS[@]}"; do
+  printf 'Selected surface: %s\n' "$REQUESTED_SURFACE"
+  for environment in "${CSE_ACTION_ENVIRONMENTS[@]}"; do
     printf '\n[%s]\n' "$environment"
     if [ -f "$CSE_WORKSPACE_ROOT/environments/$environment/spack.lock" ]; then
       spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" find -lv
@@ -377,19 +420,21 @@ concretize_missing() {
   verify_locks
 }
 
-fetch_all() {
+fetch_selected() {
   local environment
   verify_locks
-  for environment in "${CSE_ENVIRONMENTS[@]}"; do
+  note "fetch surface: $REQUESTED_SURFACE"
+  for environment in "${CSE_ACTION_ENVIRONMENTS[@]}"; do
     note "fetching $environment"
     spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" fetch -D
   done
 }
 
-install_all() {
+install_selected() {
   local environment
   verify_locks
-  for environment in "${CSE_ENVIRONMENTS[@]}"; do
+  note "install surface: $REQUESTED_SURFACE"
+  for environment in "${CSE_ACTION_ENVIRONMENTS[@]}"; do
     note "building $environment"
     spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" fetch -D
     spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" \
@@ -431,6 +476,6 @@ case "$ACTION" in
   status) show_status ;;
   concretize) concretize_missing ;;
   verify) verify_locks ;;
-  fetch) fetch_all ;;
-  install) install_all ;;
+  fetch) fetch_selected ;;
+  install) install_selected ;;
 esac

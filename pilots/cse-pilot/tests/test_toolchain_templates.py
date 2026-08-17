@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import subprocess
 import tempfile
@@ -89,12 +90,81 @@ def values() -> dict:
 
 
 class ToolchainTemplateTests(unittest.TestCase):
+    def test_lock_verifier_keeps_python_36_compatible_annotations(self) -> None:
+        script = render_text(
+            "scripts/verify-lockfiles.py.j2",
+            values=values(),
+            data={
+                "roster": {
+                    "cmake": {
+                        "build_default": "3.31.12",
+                        "current": "4.4.2",
+                    }
+                }
+            },
+        )
+        tree = ast.parse(script)
+
+        future_annotations = [
+            node
+            for node in tree.body
+            if isinstance(node, ast.ImportFrom)
+            and node.module == "__future__"
+            and any(alias.name == "annotations" for alias in node.names)
+        ]
+        builtin_generics = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Name)
+            and node.value.id in {"dict", "list", "set", "tuple"}
+        ]
+
+        self.assertEqual(future_annotations, [])
+        self.assertEqual(builtin_generics, [])
+        compile(script, "verify-lockfiles.py", "exec")
+
     def test_cse_build_prepares_modules_before_activating_spack(self) -> None:
         template = (TEMPLATE_ROOT / "cse-build.j2").read_text(encoding="utf-8")
         prepare = template.index("cse_prepare_module_state")
         activate = template.index('source "$SPACK_ROOT/share/spack/setup-env.sh"')
 
         self.assertLess(prepare, activate)
+
+    def test_cse_build_can_select_one_compiler_surface_for_install(self) -> None:
+        script = render_text(
+            "cse-build.j2",
+            values={
+                **values(),
+                "system": {"name": "raider"},
+                "release": "trial-001",
+                "workspace": {"role": "build"},
+                "permissions": {"group": "cse"},
+                "spack": {
+                    "source": "https://github.com/spack/spack.git",
+                    "version": "1.2.2",
+                    "tag": "v1.2.2",
+                    "commit": "a" * 40,
+                    "default_mode": "shared",
+                    "shared_root": "/tools/spack/1.2.2",
+                    "initial_root": "/tools/spack/1.2.2",
+                },
+            },
+        )
+
+        self.assertIn("--surface all|shared|platform", script)
+        self.assertIn(
+            'shared) CSE_ACTION_ENVIRONMENTS=("${CSE_SHARED_ENVIRONMENTS[@]}")',
+            script,
+        )
+        self.assertIn(
+            'platform) CSE_ACTION_ENVIRONMENTS=("${CSE_PLATFORM_ENVIRONMENTS[@]}")',
+            script,
+        )
+        self.assertIn(
+            'for environment in "${CSE_ACTION_ENVIRONMENTS[@]}"; do',
+            script,
+        )
 
     def test_preloaded_external_module_is_removed_before_spack_runs(self) -> None:
         script = render_text(

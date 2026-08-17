@@ -49,7 +49,11 @@ providers.
 
 Sequential installation in the order above is the default. Concurrent
 installation is allowed only after the selected shared install tree passes the
-filesystem prefix-lock smoke test.
+filesystem prefix-lock smoke test. At that point, use
+`./cse-build install --surface shared` on the GCC node and
+`./cse-build install --surface platform` on the platform-compiler node. Each
+surface remains sequential internally, and both processes consume the same
+verified eight-lock checkpoint.
 {% else %}
 This publication workspace must receive the eight approved lockfiles from the
 matching restricted build workspace. Do not concretize it. Install from the

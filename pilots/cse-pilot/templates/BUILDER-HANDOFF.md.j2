@@ -89,6 +89,26 @@ that exact module is already active in the wrapper process. This lets Spack
 platform toolchain. Unrelated site modules and the caller's parent shell are
 unchanged.
 
+The default install processes all eight environments sequentially. If all
+locks have passed `./cse-build verify` and the real shared install tree has
+passed the cross-node prefix-lock test, one builder may split the two compiler
+surfaces across two build nodes:
+
+```bash
+# Node 1: shared GCC surface, sequential within this surface
+./cse-build install --surface shared
+
+# Node 2: platform-compiler surface, sequential within this surface
+./cse-build install --surface platform
+```
+
+Both commands use the same locked workspace and restricted install tree.
+Spack's prefix/database locks coordinate identical concrete hashes; the
+surface split keeps view and module refresh roots disjoint. Do not run two
+commands for the same surface. `BUILD_JOBS` is a per-process budget, so two
+processes on one node would add their budgets together. `concretize` and
+`verify` remain whole-workspace gates and do not accept `--surface`.
+
 ## Commands used by the wrapper
 
 `cse-build` is a thin Bash wrapper. For each applicable generated environment,
@@ -109,7 +129,7 @@ spack python scripts/verify-lockfiles.py
 # login-node source fetch
 spack -e <environment> fetch -D
 
-# sequential build and exposure refresh
+# build and exposure refresh; sequential within the selected surface
 spack -e <environment> install --only-concrete -j "$BUILD_JOBS" --fail-fast
 spack -e <environment> env view regenerate
 spack -e <environment> module tcl refresh --delete-tree -y
@@ -120,7 +140,9 @@ The default session uses `tmux new-session -A` with the generated
 `./cse-build` at any time; it is generated plain Bash, not a compiled build
 engine.
 
-The two CSE builders do not run this release on the same system at the same
-time. Before handing it back, record the last action, the last environment, its
-result, and the relevant log or evidence path.
+The two CSE builders do not independently run this release on the same system
+at the same time. A coordinated two-node split by one active builder is allowed
+only under the verified-lock conditions above. Before handing it back, record
+the last action, surface, environment, result, and relevant log or evidence
+path.
 {% endif %}

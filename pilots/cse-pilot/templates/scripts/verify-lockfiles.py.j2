@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Verify the concrete DAG invariants for the CSE Initial Conversion Trials."""
 
-from __future__ import annotations
-
 import json
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import Dict, List, Set, Tuple
 
 
 WORKSPACE = Path(__file__).resolve().parents[1]
@@ -62,7 +61,7 @@ NETCDF_CHAINS = {
 NETCDF_CXX_CHAINS = {("4.9.2", "1.10.6"), ("4.10.0", "2.1.0")}
 
 
-def load_lock(path: Path) -> tuple[dict, dict]:
+def load_lock(path: Path) -> Tuple[Dict, Dict]:
     with path.open(encoding="utf-8") as stream:
         lock = json.load(stream)
     version = lock.get("_meta", {}).get("lockfile-version")
@@ -71,13 +70,13 @@ def load_lock(path: Path) -> tuple[dict, dict]:
     return lock, lock.get("concrete_specs", {})
 
 
-def node_version(node: dict) -> str:
+def node_version(node: Dict) -> str:
     return str(node.get("version", ""))
 
 
-def reachable(start_hash: str, nodes: dict) -> set[str]:
+def reachable(start_hash: str, nodes: Dict) -> Set[str]:
     pending = [start_hash]
-    seen: set[str] = set()
+    seen: Set[str] = set()
     while pending:
         current = pending.pop()
         if current in seen:
@@ -90,7 +89,7 @@ def reachable(start_hash: str, nodes: dict) -> set[str]:
     return seen
 
 
-def package_versions(hashes: set[str], nodes: dict, name: str) -> set[str]:
+def package_versions(hashes: Set[str], nodes: Dict, name: str) -> Set[str]:
     return {
         node_version(nodes[dag_hash])
         for dag_hash in hashes
@@ -99,8 +98,8 @@ def package_versions(hashes: set[str], nodes: dict, name: str) -> set[str]:
 
 
 def package_hashes(
-    hashes: set[str], nodes: dict, name: str, version: str
-) -> set[str]:
+    hashes: Set[str], nodes: Dict, name: str, version: str
+) -> Set[str]:
     return {
         dag_hash
         for dag_hash in hashes
@@ -110,8 +109,8 @@ def package_hashes(
     }
 
 
-def direct_language_providers(node: dict, nodes: dict) -> set[tuple[str, str]]:
-    providers: set[tuple[str, str]] = set()
+def direct_language_providers(node: Dict, nodes: Dict) -> Set[Tuple[str, str]]:
+    providers: Set[Tuple[str, str]] = set()
     for dependency in node.get("dependencies", []):
         virtuals = set(dependency.get("parameters", {}).get("virtuals", []))
         if not virtuals.intersection({"c", "cxx", "fortran"}):
@@ -121,7 +120,7 @@ def direct_language_providers(node: dict, nodes: dict) -> set[tuple[str, str]]:
     return providers
 
 
-def direct_language_provider_hashes(node: dict) -> set[str]:
+def direct_language_provider_hashes(node: Dict) -> Set[str]:
     return {
         dependency.get("hash")
         for dependency in node.get("dependencies", [])
@@ -137,7 +136,7 @@ def main() -> int:
     actual = {
         str(path.parent.relative_to(WORKSPACE / "environments")) for path in lock_paths
     }
-    errors: list[str] = []
+    errors: List[str] = []
 
     missing = EXPECTED_ENVIRONMENTS - actual
     extra = actual - EXPECTED_ENVIRONMENTS
@@ -146,11 +145,11 @@ def main() -> int:
     if extra:
         errors.append(f"unexpected lockfiles: {', '.join(sorted(extra))}")
 
-    reused_hashes: dict[tuple[str, str, str], set[str]] = defaultdict(set)
-    language_provider_hashes: dict[tuple[str, str, str], set[str]] = defaultdict(set)
-    gcc_producer_hashes: set[str] = set()
-    cmake_roots_by_environment: dict[str, set[str]] = defaultdict(set)
-    python_roots_by_environment: dict[str, set[str]] = defaultdict(set)
+    reused_hashes: Dict[Tuple[str, str, str], Set[str]] = defaultdict(set)
+    language_provider_hashes: Dict[Tuple[str, str, str], Set[str]] = defaultdict(set)
+    gcc_producer_hashes: Set[str] = set()
+    cmake_roots_by_environment: Dict[str, Set[str]] = defaultdict(set)
+    python_roots_by_environment: Dict[str, Set[str]] = defaultdict(set)
 
     for path in lock_paths:
         environment = str(path.parent.relative_to(WORKSPACE / "environments"))
@@ -161,7 +160,7 @@ def main() -> int:
             errors.append(str(error))
             continue
 
-        roots_by_group: dict[str, list[dict]] = defaultdict(list)
+        roots_by_group: Dict[str, List[Dict]] = defaultdict(list)
         for dag_hash, node in nodes.items():
             if node.get("external"):
                 continue
@@ -227,7 +226,7 @@ def main() -> int:
             )
 
         payload_roots = roots_by_group.get("payload", [])
-        cxx_chains: set[tuple[str, str]] = set()
+        cxx_chains: Set[Tuple[str, str]] = set()
         has_cxx_roots = False
         for root in payload_roots:
             node = nodes.get(root.get("hash"), {})
@@ -292,7 +291,7 @@ def main() -> int:
                     "producer root"
                 )
 
-            selected_mpi_hashes: set[str] = set()
+            selected_mpi_hashes: Set[str] = set()
             for root in payload_roots:
                 graph = reachable(root["hash"], nodes)
                 versions = package_versions(graph, nodes, mpi_name)
