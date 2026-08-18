@@ -36,6 +36,11 @@ The static scope path retains the observed provider identity. The values file
 uses the manifest's Spack `package` identity. Build OpenMPI separately with
 each compiler surface.
 
+For an LLVM-based oneAPI platform surface, the generated workspace also
+includes the verified GCC seed scope. That GCC is present only to provide the
+`gcc-runtime` dependency required by `intel-oneapi-runtime`; Wheat payload roots
+remain bound to the oneAPI compiler.
+
 ## Required profile and catalog checks
 
 - Verify whether the compiler drivers are oneAPI or Classic Intel.

@@ -78,6 +78,25 @@ class PortableCpuTargetTests(unittest.TestCase):
         )
 
 
+class PlatformCompilerRuntimeTests(unittest.TestCase):
+    def test_only_oneapi_reuses_the_gcc_seed_scope(self) -> None:
+        seed_scope = "scopes/compilers/gcc/12.2.1"
+
+        self.assertEqual(
+            CREATE_BUILD_VALUES.platform_runtime_compiler_scope(
+                "oneapi", seed_scope
+            ),
+            seed_scope,
+        )
+        for provider in ("aocc", "cce", "intel"):
+            with self.subTest(provider=provider):
+                self.assertIsNone(
+                    CREATE_BUILD_VALUES.platform_runtime_compiler_scope(
+                        provider, seed_scope
+                    )
+                )
+
+
 class OpenMpiSpecTests(unittest.TestCase):
     def test_no_scheduler_external_uses_standard_mpi_launchers(self) -> None:
         root_spec, provider_constraint = CREATE_BUILD_VALUES.openmpi_build_specs(

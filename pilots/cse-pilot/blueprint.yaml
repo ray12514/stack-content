@@ -78,4 +78,5 @@ catalog_scope_values:
   - shared.catalog_scopes.compiler
   - shared.catalog_scopes.mpi
   - platform.catalog_scopes.compiler
+  - platform.catalog_scopes.runtime_compiler
   - platform.catalog_scopes.mpi

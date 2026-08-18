@@ -84,7 +84,10 @@ def values() -> dict:
                     "openmpi@4.1.8 fabrics=ucx schedulers=slurm +pmi"
                 ),
             },
-            "catalog_scopes": {"compiler": "scopes/compilers/aocc/4.1.0"},
+            "catalog_scopes": {
+                "compiler": "scopes/compilers/aocc/4.1.0",
+                "runtime_compiler": None,
+            },
         },
     }
 
@@ -214,6 +217,63 @@ printf '%s\n' "$LOADEDMODULES"
                 packages = rendered["packages"]
                 for language in ("c", "cxx", "fortran"):
                     self.assertEqual(packages[language]["prefer"], [expected])
+
+    def test_oneapi_core_includes_registered_gcc_runtime_provider(self) -> None:
+        test_values = values()
+        test_values["platform"]["compiler"].update(
+            {
+                "name": "oneapi",
+                "version": "2024.1",
+                "modules": ["intel/2024.2.1/compiler/latest"],
+            }
+        )
+        test_values["platform"]["catalog_scopes"].update(
+            {
+                "compiler": "scopes/compilers/oneapi/2024.1",
+                "runtime_compiler": "scopes/compilers/gcc/12.2.1",
+            }
+        )
+        rendered = render(
+            "environments/{{ values.platform.compiler.name }}/core/spack.yaml.j2",
+            values=test_values,
+            data={
+                "roster": {
+                    "specs": {
+                        "foundation": ["zlib@1.3.1"],
+                        "core": ["cmake@3.31.12"],
+                        "core_independent": [],
+                    }
+                }
+            },
+        )
+
+        self.assertIn(
+            "../../../catalog/scopes/compilers/gcc/12.2.1",
+            rendered["spack"]["include:"],
+        )
+
+        payload = render(
+            "_partials/payload-spack.yaml.j2",
+            values=test_values,
+            data={
+                "roster": {
+                    "specs": {
+                        "foundation": ["zlib@1.3.1"],
+                        "build_tools": ["cmake@3.31.12"],
+                    }
+                }
+            },
+            surface_key="platform",
+            surface=test_values["platform"],
+            environment_kind="serial",
+            environment_name="serial",
+            payload_specs=["hdf5@2.1.0~mpi"],
+            payload_constraint="target=x86_64_v3 %oneapi@2024.1",
+        )
+        self.assertIn(
+            "../../../catalog/scopes/compilers/gcc/12.2.1",
+            payload["spack"]["include:"],
+        )
 
     def test_mpi_boundary_does_not_propagate_lane_constraints_to_externals(self) -> None:
         test_values = values()

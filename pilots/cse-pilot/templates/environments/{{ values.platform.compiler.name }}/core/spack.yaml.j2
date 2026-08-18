@@ -3,6 +3,9 @@ spack:
     - ../../../configs/surfaces/platform/compiler.yaml
     - {{ ('../../../catalog/' ~ values.catalog_scopes.common) | yaml_scalar }}
     - {{ ('../../../catalog/' ~ values.platform.catalog_scopes.compiler) | yaml_scalar }}
+{% if values.platform.catalog_scopes.runtime_compiler %}
+    - {{ ('../../../catalog/' ~ values.platform.catalog_scopes.runtime_compiler) | yaml_scalar }}
+{% endif %}
     - ../../../configs/common
     - {{ ('../../../configs/environments/' ~ values.platform.compiler.name ~ '/core') | yaml_scalar }}
 

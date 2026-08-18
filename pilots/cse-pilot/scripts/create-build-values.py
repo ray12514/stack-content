@@ -127,6 +127,15 @@ def shared_compiler_seed_scope(
     return max(candidates, key=lambda scope: version_key(str(scope.get("version"))))
 
 
+def platform_runtime_compiler_scope(
+    provider_name: str, shared_seed_scope_path: str
+) -> str | None:
+    """Return a compiler scope needed only to satisfy a platform runtime DAG."""
+    if provider_name == "oneapi":
+        return shared_seed_scope_path
+    return None
+
+
 def mpi_scope(
     scopes: list[dict[str, Any]], *, name: str, version: str, compiler_ref: str
 ) -> dict[str, Any]:
@@ -709,6 +718,9 @@ def main() -> int:
                 "mpi": platform_mpi,
                 "catalog_scopes": {
                     "compiler": platform_scope_path,
+                    "runtime_compiler": platform_runtime_compiler_scope(
+                        platform_provider, shared_seed_scope_path
+                    ),
                     "mpi": platform_mpi_scope,
                 },
             },

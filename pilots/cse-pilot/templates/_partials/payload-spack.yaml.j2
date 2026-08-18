@@ -10,6 +10,9 @@ spack:
     - {{ ('../../../catalog/' ~ values.shared.catalog_scopes.compiler) | yaml_scalar }}
 {% elif surface.compiler.source == 'external' %}
     - {{ ('../../../catalog/' ~ surface.catalog_scopes.compiler) | yaml_scalar }}
+{% if surface_key == 'platform' and surface.catalog_scopes.runtime_compiler %}
+    - {{ ('../../../catalog/' ~ surface.catalog_scopes.runtime_compiler) | yaml_scalar }}
+{% endif %}
 {% endif %}
 {% if environment_kind == 'mpi' and surface.mpi.source == 'external' %}
     - {{ ('../../../catalog/' ~ surface.catalog_scopes.mpi) | yaml_scalar }}

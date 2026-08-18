@@ -24,6 +24,12 @@ helper selects the newest verified older GCC scope from the static catalog and
 records it under `shared.compiler.build_with`. This is a direct compiler
 dependency in each GCC environment, not a separate preparatory environment.
 
+An LLVM-based Intel oneAPI surface also includes that verified GCC scope as a
+runtime-support provider. Spack's `intel-oneapi-runtime` depends on
+`gcc-runtime`; registering the GCC external satisfies that dependency without
+changing the selected compiler for Foundation, Core, Serial, MPI, or payload
+roots. Classic Intel, AOCC, and CCE surfaces do not receive this extra scope.
+
 The initializer does not probe the machine. `scripts/create-build-values.py`
 resolves reviewed provider selections against the static catalog and the
 tracked `openmpi-policy.yaml`. For the initial non-Cray builds that policy is:

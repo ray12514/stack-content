@@ -70,6 +70,7 @@ platform:
     provider_constraint: openmpi@4.1.8 fabrics=ucx schedulers=slurm ~rsh ~cuda ~lustre +romio romio-filesystem=none +pmi +legacylaunchers
   catalog_scopes:
     compiler: scopes/compilers/aocc/4.2.0
+    runtime_compiler: null
     mpi: null
 
 catalog_scopes:
