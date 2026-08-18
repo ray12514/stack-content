@@ -22,6 +22,17 @@ This complete directory is the build handoff. It already contains the static
 catalog snapshot, generated configuration scopes, all eight Spack environments,
 deployment paths, module policy, and any lockfiles created so far.
 
+There is one shared workspace for this system and release, not one workspace
+per builder. The operator initializes it once and gives the receiving builder
+this directory's absolute path. The receiving builder does not run
+`init-workspace` and does not copy the workspace into a home directory. If this
+directory or `./cse-build` does not exist, the handoff is not ready and the
+operator must finish workspace initialization first.
+
+The receiving builder needs membership in `{{ values.permissions.group }}` and
+the site-provided absolute writable `WORKDIR`. Do not activate Spack or source
+an operator-session file before running the entry point.
+
 From the workspace root, run:
 
 ```bash
@@ -35,6 +46,25 @@ creates private state for the current builder, activates Spack and this
 workspace, reports the current lock checkpoint, and creates or reattaches a
 tmux session named for this system and release. Run the same command again after
 a disconnect to return to that session.
+
+For an explicit handoff to the recorded shared Spack checkout, use this first
+entry sequence:
+
+```bash
+: "${WORKDIR:?WORKDIR must be set by the site environment}"
+cd "<absolute-shared-workspace-path>"
+test -r workspace-manifest.yaml
+test -x ./cse-build
+./cse-build status --spack-mode shared
+```
+
+If all eight lockfiles exist, run
+`./cse-build verify --spack-mode shared`. If any lock is missing, run
+`./cse-build concretize --spack-mode shared`; that action creates only missing
+locks and verifies the complete set. Then run
+`./cse-build --spack-mode shared` to create or reattach the prepared build
+session. On later logins, return to the same absolute path and run the last
+command again.
 
 To open the prepared shell without tmux, run:
 
