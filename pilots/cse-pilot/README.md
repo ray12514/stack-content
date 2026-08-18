@@ -29,8 +29,9 @@ resolves reviewed provider selections against the static catalog and the
 tracked `openmpi-policy.yaml`. For the initial non-Cray builds that policy is:
 
 - Open MPI 4.1.8 with UCX and verified thread-multiple support;
-- exactly one verified site scheduler, rendered as `schedulers=slurm` or
-  `schedulers=tm` for PBS;
+- at most one verified site scheduler, rendered as `schedulers=slurm` or
+  `schedulers=tm` for PBS; when neither is present, `schedulers=none +rsh`
+  retains ordinary `mpirun`/`mpiexec` launch without a scheduler dependency;
 - both `mpirun` and direct `srun --mpi=pmi2` on Slurm, but only when the static
   manifest records both the advertised `pmi2` plugin and its development
   interface;
@@ -38,13 +39,15 @@ tracked `openmpi-policy.yaml`. For the initial non-Cray builds that policy is:
   `~pmi` otherwise; CUDA and Lustre disabled; and
 - ROMIO enabled without a Lustre filesystem plugin.
 
-The generated Open MPI root includes exact dependency constraints for the
-selected UCX and scheduler versions from the common catalog scope. A detected
+The generated Open MPI root includes an exact dependency constraint for the
+selected UCX version and, when selected, the scheduler version from the common
+catalog scope. A detected
 Lustre filesystem or Lustre development external remains a useful system fact;
-it does not enable Open MPI Lustre integration. Missing Slurm launch capability
-facts fail values generation with instructions to re-probe and re-render. A
-capability record without a verified PMI2 development path produces an
-mpirun-only root instead of guessing. The helper never runs `srun` itself.
+it does not enable Open MPI Lustre integration. When Slurm is selected, missing
+Slurm launch capability facts fail values generation with instructions to
+re-probe and re-render. A capability record without a verified PMI2 development
+path produces an mpirun-only root instead of guessing. The helper never runs
+`srun` itself.
 
 The helper resolves one portable CPU target for the whole system from the CPU
 facts of every cataloged build/runtime node. A node remains part of this

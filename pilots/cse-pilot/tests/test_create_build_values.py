@@ -79,6 +79,23 @@ class PortableCpuTargetTests(unittest.TestCase):
 
 
 class OpenMpiSpecTests(unittest.TestCase):
+    def test_no_scheduler_external_uses_standard_mpi_launchers(self) -> None:
+        root_spec, provider_constraint = CREATE_BUILD_VALUES.openmpi_build_specs(
+            "openmpi",
+            "4.1.8",
+            {"ucx": ["ucx@1.18.0 +thread_multiple"]},
+            {"profile_facts": {"system_externals": []}},
+        )
+
+        self.assertIn("schedulers=none", provider_constraint)
+        self.assertIn("+rsh", provider_constraint)
+        self.assertNotIn("pmi", provider_constraint)
+        self.assertNotIn("legacylaunchers", provider_constraint)
+        self.assertEqual(
+            root_spec,
+            provider_constraint + " ^ucx@1.18.0+thread_multiple",
+        )
+
     def test_provider_constraint_excludes_machine_external_dependencies(self) -> None:
         manifest = {
             "profile_facts": {
@@ -118,6 +135,42 @@ class OpenMpiSpecTests(unittest.TestCase):
             provider_constraint
             + " ^ucx@1.18.0+thread_multiple ^slurm@23.02.7",
         )
+
+    def test_pbs_external_uses_tm_without_slurm_only_variants(self) -> None:
+        root_spec, provider_constraint = CREATE_BUILD_VALUES.openmpi_build_specs(
+            "openmpi",
+            "4.1.8",
+            {
+                "ucx": ["ucx@1.18.0 +thread_multiple"],
+                "pbs": ["pbs@23.06.06"],
+            },
+            {"profile_facts": {"system_externals": []}},
+        )
+
+        self.assertIn("schedulers=tm", provider_constraint)
+        self.assertIn("~rsh", provider_constraint)
+        self.assertNotIn("pmi", provider_constraint)
+        self.assertNotIn("legacylaunchers", provider_constraint)
+        self.assertEqual(
+            root_spec,
+            provider_constraint + " ^ucx@1.18.0+thread_multiple ^pbs@23.06.06",
+        )
+
+    def test_multiple_scheduler_externals_are_ambiguous(self) -> None:
+        with self.assertRaisesRegex(
+            CREATE_BUILD_VALUES.InputError,
+            "found both verified slurm and pbs externals",
+        ):
+            CREATE_BUILD_VALUES.openmpi_build_specs(
+                "openmpi",
+                "4.1.8",
+                {
+                    "ucx": ["ucx@1.18.0 +thread_multiple"],
+                    "slurm": ["slurm@23.02.7"],
+                    "pbs": ["pbs@23.06.06"],
+                },
+                {"profile_facts": {"system_externals": []}},
+            )
 
 
 if __name__ == "__main__":

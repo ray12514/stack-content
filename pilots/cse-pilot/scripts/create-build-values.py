@@ -460,18 +460,19 @@ def openmpi_build_specs(
         "ucx", externals.get("ucx", []), required_variant="+thread_multiple"
     )
 
-    if policy.get("scheduler") != "unique_verified_external":
-        raise InputError("the current CSE trial policy requires unique_verified_external")
+    if policy.get("scheduler") != "verified_external_or_none":
+        raise InputError(
+            "the current CSE trial policy requires verified_external_or_none"
+        )
     scheduler_externals = sorted(
         {external for external in ("slurm", "pbs") if external in externals}
     )
-    if len(scheduler_externals) != 1:
+    if len(scheduler_externals) > 1:
         raise InputError(
-            "build-sourced OpenMPI needs exactly one verified slurm or pbs external"
+            "build-sourced OpenMPI found both verified slurm and pbs externals; "
+            "select one scheduler before creating build values"
         )
-    scheduler = scheduler_externals[0]
-    scheduler_variant = {"slurm": "slurm", "pbs": "tm"}.get(scheduler)
-    scheduler_spec = selected_external_spec(scheduler, externals[scheduler])
+    scheduler = scheduler_externals[0] if scheduler_externals else None
 
     expected_policy = {
         "cuda": False,
@@ -488,22 +489,27 @@ def openmpi_build_specs(
 
     variants = [
         "fabrics=ucx",
-        f"schedulers={scheduler_variant}",
-        "~rsh",
         "~cuda",
         "~lustre",
         "+romio",
         "romio-filesystem=none",
     ]
+    dependencies = [f"^{ucx_spec}"]
     if scheduler == "slurm":
+        scheduler_spec = selected_external_spec("slurm", externals["slurm"])
+        variants.extend(("schedulers=slurm", "~rsh"))
         slurm_interface = slurm_direct_launch_interface(
             slurm_interface_priority, manifest, scheduler_spec
         )
         variants.append("+legacylaunchers")
         variants.append("+pmi" if slurm_interface == "pmi2" else "~pmi")
+        dependencies.append(f"^{scheduler_spec}")
+    elif scheduler == "pbs":
+        scheduler_spec = selected_external_spec("pbs", externals["pbs"])
+        variants.extend(("schedulers=tm", "~rsh"))
+        dependencies.append(f"^{scheduler_spec}")
     else:
-        variants.append("~pmi")
-    dependencies = [f"^{ucx_spec}", f"^{scheduler_spec}"]
+        variants.extend(("schedulers=none", "+rsh"))
     provider_constraint = " ".join((f"openmpi@{version}", *variants))
     return (
         " ".join((provider_constraint, *dependencies)),

@@ -2,7 +2,7 @@ schema_version: 1
 openmpi:
   version: 4.1.8
   fabrics: [ucx]
-  scheduler: unique_verified_external
+  scheduler: verified_external_or_none
   launch:
     mpirun: required
     slurm_direct:
