@@ -89,10 +89,12 @@ that exact module is already active in the wrapper process. This lets Spack
 platform toolchain. Unrelated site modules and the caller's parent shell are
 unchanged.
 
-The default install processes all eight environments sequentially. If all
-locks have passed `./cse-build verify` and the real shared install tree has
-passed the cross-node prefix-lock test, one builder may split the two compiler
-surfaces across two build nodes:
+The environment is the build execution unit. `cse-build` is a convenience
+entry point for preparing the shell and running common loops; it is not the
+build scheduler. `./cse-build install` processes all eight environments
+sequentially. If all locks have passed `./cse-build verify` and the real shared
+install tree has passed the cross-node prefix-lock test, the operator may split
+the two compiler surfaces across two build nodes:
 
 ```bash
 # Node 1: shared GCC surface, sequential within this surface
@@ -109,6 +111,34 @@ disjoint. The source/misc caches and package store remain shared. Do not run
 two commands for the same surface. `BUILD_JOBS` is a per-process budget, so
 two processes on one node would add their budgets together. `concretize` and
 `verify` remain whole-workspace gates and do not accept `--surface`.
+
+The operator may instead launch any distinct environment directly, on one node
+or across several nodes. Open a prepared shell for each process:
+
+```bash
+./cse-build shell
+
+environment="$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"
+environment_key="${environment//\//-}"
+export SPACK_USER_CACHE_PATH="$SPACK_USER_STATE_ROOT/cache/$environment_key"
+install -d -m 0700 "$SPACK_USER_CACHE_PATH"
+
+spack -e "$CSE_BUILD_WORKSPACE/environments/$environment" \
+  install --only-concrete -j "$BUILD_JOBS" --fail-fast
+spack -e "$CSE_BUILD_WORKSPACE/environments/$environment" \
+  env view regenerate
+spack -e "$CSE_BUILD_WORKSPACE/environments/$environment" \
+  module tcl refresh --delete-tree -y
+```
+
+Change `environment` for each process. The four GCC environments may run on
+one node while the four platform environments run on another, or the operator
+may choose a different distribution. Different hashes build concurrently. If
+two processes reach the same exact hash, Spack's shared prefix/database lock
+allows one to build while the other waits and then reuses the installed
+prefix. Do not launch the same environment twice because its view and module
+root are owned by that environment process. `BUILD_JOBS` is per process, so
+size the sum of all process budgets on a node for its CPU and memory allocation.
 
 ## Commands used by the wrapper
 
@@ -130,7 +160,7 @@ spack python scripts/verify-lockfiles.py
 # login-node source fetch
 spack -e <environment> fetch -D
 
-# build and exposure refresh; sequential within the selected surface
+# build and exposure refresh; sequential only when invoked by the wrapper loop
 spack -e <environment> install --only-concrete -j "$BUILD_JOBS" --fail-fast
 spack -e <environment> env view regenerate
 spack -e <environment> module tcl refresh --delete-tree -y
@@ -141,9 +171,9 @@ The default session uses `tmux new-session -A` with the generated
 `./cse-build` at any time; it is generated plain Bash, not a compiled build
 engine.
 
-The two CSE builders do not independently run this release on the same system
-at the same time. A coordinated two-node split by one active builder is allowed
-only under the verified-lock conditions above. Before handing it back, record
-the last action, surface, environment, result, and relevant log or evidence
-path.
+Coordinate environment assignments whenever more than one process or builder
+is active. Never launch the same environment twice. Concurrent work is allowed
+only under the verified-lock conditions above. Before handing the workspace
+back, record the last action, node, environment, result, and relevant log or
+evidence path.
 {% endif %}

@@ -28,7 +28,7 @@ Selected surfaces:
 - package-build CMake: `{{ data.roster.cmake.build_default }}`
 - second public CMake: `{{ data.roster.cmake.current }}`
 
-Build and concretization order:
+Generated environment order (used by the sequential wrapper path):
 
 1. `environments/{{ values.shared.compiler.name }}/core`
 2. `environments/{{ values.shared.compiler.name }}/common`
@@ -47,13 +47,16 @@ uses the approved Spack runtime to run `scripts/verify-lockfiles.py`. Do not
 install if verification reports different GCC hashes or incorrect language
 providers.
 
-Sequential installation in the order above is the default. Concurrent
+The environment is the build execution unit. `./cse-build install` is the
+simple sequential convenience path; it is not a scheduler. Concurrent
 installation is allowed only after the selected shared install tree passes the
-filesystem prefix-lock smoke test. At that point, use
-`./cse-build install --surface shared` on the GCC node and
-`./cse-build install --surface platform` on the platform-compiler node. Each
-surface remains sequential internally, and both processes consume the same
-verified eight-lock checkpoint.
+filesystem prefix-lock smoke test and all eight locks pass verification. The
+operator may then use the two wrapper surface commands on separate nodes, or
+run distinct environments directly with bare Spack. The direct install command
+is `spack -e <environment> install --only-concrete`. Exact shared hashes wait
+on Spack's prefix/database locks and are reused after the first successful
+install. Never launch the same environment twice, and give each direct Spack
+process its own mutable `SPACK_USER_CACHE_PATH`.
 {% else %}
 This publication workspace must receive the eight approved lockfiles from the
 matching restricted build workspace. Do not concretize it. Install from the
