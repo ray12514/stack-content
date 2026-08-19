@@ -186,6 +186,74 @@ the other.
 - The cache contains CSE-built packages only; it does not attempt to package or
   relocate the platform-owned CPE or Cray MPICH installations.
 
+### Build-stage execution diagnosis
+
+A Spack build stage must be writable and searchable, have usable space and
+inodes, and permit both scripts and newly linked executables to run. The
+generated `cse-build` entry point checks the selected node context and chooses
+the first approved stage that passes its script execution probe. A normal
+`noexec` mount is therefore rejected before Spack starts. The message `C
+compiler cannot create executables` does not, by itself, prove that the stage
+is mounted `noexec`.
+
+When a build reports that message, remain in the same `cse-build` shell and run
+the following checks before changing the workspace or reconcretizing:
+
+```bash
+printf 'selected stage: %s\n' "$CSE_BUILD_STAGE"
+findmnt -T "$CSE_BUILD_STAGE" -o TARGET,SOURCE,FSTYPE,OPTIONS
+
+STAGE_PROBE="$CSE_BUILD_STAGE/.cse-exec-probe-$$"
+
+printf '#!/bin/sh\nexit 0\n' > "${STAGE_PROBE}.sh"
+chmod 0700 "${STAGE_PROBE}.sh"
+if "${STAGE_PROBE}.sh"; then
+  echo "stage script execution: PASS"
+else
+  echo "stage script execution: FAIL"
+fi
+
+TRUE_PROGRAM="$(type -P true)"
+cp "$TRUE_PROGRAM" "${STAGE_PROBE}.bin"
+chmod 0700 "${STAGE_PROBE}.bin"
+if "${STAGE_PROBE}.bin"; then
+  echo "stage binary execution: PASS"
+else
+  echo "stage binary execution: FAIL"
+fi
+
+rm -f "${STAGE_PROBE}.sh" "${STAGE_PROBE}.bin"
+
+CONFIG_LOG="$(
+  find "$CSE_BUILD_STAGE" \
+    -type f \
+    -path '*spack-stage-gmake*' \
+    -name config.log \
+    -print | tail -1
+)"
+printf 'gmake config log: %s\n' "$CONFIG_LOG"
+grep -nE -B10 -A20 \
+  'C compiler cannot create executables|Permission denied|cannot execute|collect2:|ld:|error:' \
+  "$CONFIG_LOG"
+```
+
+Interpret the result as follows:
+
+- If either execution probe fails, stop the build and preserve its log. The
+  selected stage is not usable in that Blueback context. Do not edit a
+  generated `spack.yaml` or `spack.lock` to work around it.
+- If `findmnt` reports `noexec`, the stage selection is wrong and the owning
+  node facts or stage-selection logic must be corrected before retrying.
+- If both probes pass, the stage is executable. Use the reported `config.log`
+  error to diagnose the compiler, linker, runtime, or module environment; do
+  not replace the workspace merely because configure printed its generic
+  failure message.
+
+The script probe covers the common mount-policy failure. The copied executable
+probe also checks Blueback-specific execution controls that may allow a shell
+script but reject a binary. Keep both results with the failed Spack log when
+requesting a code or policy correction.
+
 ### Cray PMI/Cray MPICH concretization guard
 
 If concretization reports both `Cannot build cray-pmi` and `Cannot build
