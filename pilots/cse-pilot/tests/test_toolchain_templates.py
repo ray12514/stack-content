@@ -186,9 +186,18 @@ class ToolchainTemplateTests(unittest.TestCase):
         )
 
         requirement = rendered["packages"]["boost"]["require"]
-        self.assertEqual(len(requirement), 1)
+        self.assertEqual(len(requirement), 2)
         for library in ("filesystem", "iostreams", "program_options", "system"):
             self.assertIn(f"+{library}", requirement[0])
+        self.assertEqual(
+            requirement[1],
+            {"spec": "^python@3.12.13", "when": "+mpi"},
+        )
+        self.assertEqual(
+            rendered["packages"]["xcb-proto"]["require"],
+            ["^python@3.12.13"],
+        )
+        self.assertEqual(rendered["packages"]["python"]["require"], ["+ssl"])
         for virtual in ("blas", "lapack"):
             self.assertEqual(
                 rendered["packages"][virtual]["require"],
@@ -199,6 +208,9 @@ class ToolchainTemplateTests(unittest.TestCase):
         roster = yaml.safe_load(ROSTER_PATH.read_text(encoding="utf-8"))
 
         self.assertIn("ninja ^python@3.12.13", roster["specs"]["core"])
+        for spec in roster["specs"]["mpi"]:
+            if spec.startswith("boost@"):
+                self.assertIn("+mpi", spec)
         for spec in roster["specs"]["mpi"]:
             if not spec.startswith("dakota@"):
                 continue

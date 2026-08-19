@@ -17,6 +17,11 @@ packages:
   miniforge3:
     require:
       - target={{ values.architecture.binary_target }}
+  # Keep approved Python roots and transitive Python dependencies identical
+  # across Core, Common, Serial, and MPI lane solves.
+  python:
+    require:
+      - +ssl
   iconv:
     require:
       - glibc
@@ -26,6 +31,16 @@ packages:
   boost:
     require:
       - +atomic+chrono+date_time+exception+filesystem+graph+iostreams+locale+log+math+program_options+random+regex+serialization+system+test+thread+timer+wave
+      # Boost.MPI requires Boost.Python beginning with Boost 1.87. Bind that
+      # package-local edge without constraining unrelated Python dependencies
+      # elsewhere in the MPI root DAG.
+      - spec: ^python@3.12.13
+        when: +mpi
+  # XCB protocol generation has a build-only Python dependency. Keep it on an
+  # approved interpreter without applying a root-wide Python constraint.
+  xcb-proto:
+    require:
+      - ^python@3.12.13
   blas:
     require:
       - netlib-lapack@3.12.1
