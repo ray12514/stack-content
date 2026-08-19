@@ -157,7 +157,7 @@ def main() -> int:
         selections = output.parent / "provider-selections.sh"
         if not selections.exists():
             selections.write_text(
-                """# Optional reviewed selections added after static-catalog review.
+                """# Reviewed selections completed after static-catalog review.
 # This file is sourced automatically by activate.sh when present.
 # Uncomment and fill every required selection before creating build values.
 # export CSE_SHARED_COMPILER_REF="gcc@12.5.0"
@@ -168,9 +168,9 @@ def main() -> int:
 # export CSE_PLATFORM_COMPILER_PUBLIC_NAME="<front-door-name>"
 # export CSE_PLATFORM_MPI_REF="<provider>@<version>"
 # export CSE_PLATFORM_MPI_SOURCE="<external-or-build>"
-# Optional when the catalog does not use the standard node keys.
-# export CSE_LOGIN_NODE_TYPE="<reviewed-login-node-type>"
-# export CSE_COMPUTE_NODE_TYPE="<reviewed-cpu-compute-node-type>"
+# Verify these exact keys against profile_facts.node_types in catalog/manifest.yaml.
+export CSE_LOGIN_NODE_TYPE="login"
+export CSE_COMPUTE_NODE_TYPE="cpu_compute"
 # export BUILD_JOBS="<approved-job-count>"
 # Optional: export CSE_CPU_TARGET="x86_64_v2"
 # Optional: export CSE_SHARED_COMPILER_SEED_REF="gcc@<reviewed-version>"

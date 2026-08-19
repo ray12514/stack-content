@@ -276,11 +276,11 @@ def build_contexts(
         raise InputError("catalog profile_facts.node_types must be a mapping")
 
     contexts: dict[str, dict[str, Any]] = {}
-    for context, variable, default_node_type in (
-        ("login", "CSE_LOGIN_NODE_TYPE", "login"),
-        ("compute", "CSE_COMPUTE_NODE_TYPE", "cpu_compute"),
+    for context, variable in (
+        ("login", "CSE_LOGIN_NODE_TYPE"),
+        ("compute", "CSE_COMPUTE_NODE_TYPE"),
     ):
-        node_type_name = os.environ.get(variable, "").strip() or default_node_type
+        node_type_name = required(variable)
         if node_type_name not in node_types:
             available = ", ".join(sorted(str(name) for name in node_types)) or "none"
             raise InputError(

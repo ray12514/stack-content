@@ -103,9 +103,12 @@ compiler. The MPI scope names the physical product-tree flavor baseline, such
 as `gcc-12.3` or `cce-20.0`. The helper accepts that scope only when the selected
 compiler is from the same family and is at or above the baseline.
 
-The helper records two reviewed execution contexts from the catalog manifest:
-`CSE_LOGIN_NODE_TYPE` (default `login`) and `CSE_COMPUTE_NODE_TYPE` (default
-`cpu_compute`). For each context it drops candidates that were unwritable,
+The helper records two reviewed execution contexts from the catalog manifest.
+The generated provider-selection file starts with `CSE_LOGIN_NODE_TYPE=login`
+and `CSE_COMPUTE_NODE_TYPE=cpu_compute`; the operator must verify or replace
+both values with exact keys from `profile_facts.node_types`. The values helper
+requires both selections and does not silently choose another node type. For
+each context it drops candidates that were unwritable,
 empty, or on a known `noexec` mount and adds a separate `${WORKDIR}` fallback.
 The generated `cse-build` command then tests candidates by executing a small
 probe before Spack starts. This catches site execution policy that is not

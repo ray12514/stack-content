@@ -78,6 +78,8 @@ export CSE_PLATFORM_COMPILER_REF="cce@21.0.0"
 export CSE_PLATFORM_COMPILER_PUBLIC_NAME="init-CCE"
 export CSE_PLATFORM_MPI_REF="cray-mpich@9.1.0"
 export CSE_PLATFORM_MPI_SOURCE="external"
+export CSE_LOGIN_NODE_TYPE="login"
+export CSE_COMPUTE_NODE_TYPE="cpu_compute"
 export BUILD_JOBS="<approved-job-count>"
 ```
 
@@ -87,9 +89,9 @@ compiler used to build GCC 12.5.0. If catalog review requires another installed
 compiler, set `CSE_SHARED_COMPILER_SEED_REF="<provider>@<version>"` explicitly.
 This seed compiler is separate from the Cray MPICH flavor selection.
 
-The standard profile keys are `login` and `cpu_compute`. Set
-`CSE_LOGIN_NODE_TYPE` or `CSE_COMPUTE_NODE_TYPE` only when the Blueback catalog
-uses different keys. The helper records both contexts. `./cse-build login`
+The values above assume the standard profile keys `login` and `cpu_compute`.
+Replace either value when the Blueback catalog uses a different exact key. The
+helper records both contexts. `./cse-build login`
 selects the reviewed login candidates and `./cse-build compute` selects the
 reviewed compute candidates; both retain a context-specific `${WORKDIR}`
 fallback.

@@ -115,7 +115,12 @@ class BuildContextTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as workdir:
             with mock.patch.dict(
                 os.environ,
-                {"WORKDIR": workdir, "USER": "tester"},
+                {
+                    "WORKDIR": workdir,
+                    "USER": "tester",
+                    "CSE_LOGIN_NODE_TYPE": "login",
+                    "CSE_COMPUTE_NODE_TYPE": "cpu_compute",
+                },
                 clear=False,
             ):
                 contexts = CREATE_BUILD_VALUES.build_contexts(
@@ -160,7 +165,12 @@ class BuildContextTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as workdir:
             with mock.patch.dict(
                 os.environ,
-                {"WORKDIR": workdir, "USER": "tester"},
+                {
+                    "WORKDIR": workdir,
+                    "USER": "tester",
+                    "CSE_LOGIN_NODE_TYPE": "login",
+                    "CSE_COMPUTE_NODE_TYPE": "cpu_compute",
+                },
                 clear=False,
             ):
                 contexts = CREATE_BUILD_VALUES.build_contexts(
@@ -173,6 +183,37 @@ class BuildContextTests(unittest.TestCase):
             contexts["login"]["stages"],
             ["${WORKDIR}/cse-spack-stage/fran/fran-trial-001/login"],
         )
+
+    def test_context_node_type_selections_are_required(self) -> None:
+        manifest = {
+            "profile_facts": {
+                "node_types": {
+                    "login": {"build_stage": []},
+                    "cpu_compute": {"build_stage": []},
+                }
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as workdir:
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "WORKDIR": workdir,
+                    "USER": "tester",
+                    "CSE_LOGIN_NODE_TYPE": "",
+                    "CSE_COMPUTE_NODE_TYPE": "",
+                },
+                clear=False,
+            ):
+                with self.assertRaisesRegex(
+                    CREATE_BUILD_VALUES.InputError,
+                    "CSE_LOGIN_NODE_TYPE",
+                ):
+                    CREATE_BUILD_VALUES.build_contexts(
+                        manifest,
+                        system_name="fran",
+                        release="fran-trial-001",
+                    )
 
 
 class PlatformCompilerRuntimeTests(unittest.TestCase):

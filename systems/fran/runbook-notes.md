@@ -46,12 +46,13 @@ export CSE_PLATFORM_COMPILER_REF="cce@20.0.0"
 export CSE_PLATFORM_COMPILER_PUBLIC_NAME="init-CCE"
 export CSE_PLATFORM_MPI_REF="cray-mpich@9.0.1"
 export CSE_PLATFORM_MPI_SOURCE="external"
+export CSE_LOGIN_NODE_TYPE="login"
+export CSE_COMPUTE_NODE_TYPE="cpu_compute"
 export BUILD_JOBS="<approved-job-count>"
 ```
 
-The standard context keys are `login` and `cpu_compute`. Set
-`CSE_LOGIN_NODE_TYPE` or `CSE_COMPUTE_NODE_TYPE` only when Fran's catalog uses
-different keys.
+The values above assume the standard context keys `login` and `cpu_compute`.
+Replace either value when Fran's catalog uses a different exact key.
 
 ## Required profile and catalog checks
 

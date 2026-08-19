@@ -52,7 +52,16 @@ surface. For the platform surface, copy the exact provider reference reported
 by the live profile: `oneapi@...` for `icx`/`icpx`/`ifx`, or `intel@...` for
 `icc`/`icpc`/`ifort`. Do not translate the module suite label into a compiler
 product version by guess. Both MPI selections use `openmpi@4.1.8` with
-`source=build`. The standard context keys are `login` and `cpu_compute`.
+`source=build`. Record the reviewed node contexts with the other Step 7
+selections:
+
+```bash
+export CSE_LOGIN_NODE_TYPE="login"
+export CSE_COMPUTE_NODE_TYPE="cpu_compute"
+```
+
+These values assume the standard context keys. Replace either value when
+Wheat's catalog uses a different exact key.
 
 ## Required profile and catalog checks
 

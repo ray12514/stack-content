@@ -51,12 +51,13 @@ export CSE_PLATFORM_COMPILER_REF="aocc@4.1.0"
 export CSE_PLATFORM_COMPILER_PUBLIC_NAME="init-AOCC"
 export CSE_PLATFORM_MPI_REF="openmpi@4.1.8"
 export CSE_PLATFORM_MPI_SOURCE="build"
+export CSE_LOGIN_NODE_TYPE="login"
+export CSE_COMPUTE_NODE_TYPE="cpu_compute"
 export BUILD_JOBS="<approved-job-count>"
 ```
 
-The standard context keys are `login` and `cpu_compute`. Set
-`CSE_LOGIN_NODE_TYPE` or `CSE_COMPUTE_NODE_TYPE` only when Raider's catalog
-uses different keys.
+The values above assume the standard context keys `login` and `cpu_compute`.
+Replace either value when Raider's catalog uses a different exact key.
 
 ## Profile and catalog review additions
 
