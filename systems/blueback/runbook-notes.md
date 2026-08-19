@@ -247,23 +247,33 @@ than selecting by package version:
 ```bash
 GMAKE_ENV="$CSE_BUILD_WORKSPACE/environments/gcc/core"
 CC_PROBE="$CSE_BUILD_STAGE/.cse-gmake-compiler-probe-$$"
-GMAKE_STAGE_DIR="$(dirname "$(dirname "$CONFIG_LOG")")"
-GMAKE_HASH="${GMAKE_STAGE_DIR##*-}"
-printf 'failed gmake hash: %s\n' "$GMAKE_HASH"
+GMAKE_STAGE_NAME="$(
+  printf '%s\n' "$CONFIG_LOG" |
+    tr '/' '\n' |
+    grep -E '^spack-stage-gmake-4[.]4[.]1-[[:alnum:]]+$' |
+    tail -1
+)"
 
-if spack -e "$GMAKE_ENV" build-env "/$GMAKE_HASH" -- bash -c '
-  set -x
-  printf "CC=%s\n" "${CC:-<unset>}"
-  printf "SPACK_CC=%s\n" "${SPACK_CC:-<unset>}"
-  printf "LOADEDMODULES=%s\n" "${LOADEDMODULES:-<unset>}"
-  printf "int main(void) { return 0; }\n" > "$1.c"
-  "$CC" --version
-  "$CC" -v "$1.c" -o "$1"
-  "$1"
-' bash "$CC_PROBE"; then
-  echo "gmake compiler environment: PASS"
+if [ -z "$GMAKE_STAGE_NAME" ]; then
+  echo "could not derive the failed gmake stage from: $CONFIG_LOG" >&2
 else
-  echo "gmake compiler environment: FAIL"
+  GMAKE_HASH="${GMAKE_STAGE_NAME#spack-stage-gmake-4.4.1-}"
+  printf 'failed gmake hash: %s\n' "$GMAKE_HASH"
+
+  if spack -e "$GMAKE_ENV" build-env "/$GMAKE_HASH" -- bash -c '
+    set -x
+    printf "CC=%s\n" "${CC:-<unset>}"
+    printf "SPACK_CC=%s\n" "${SPACK_CC:-<unset>}"
+    printf "LOADEDMODULES=%s\n" "${LOADEDMODULES:-<unset>}"
+    printf "int main(void) { return 0; }\n" > "$1.c"
+    "$CC" --version
+    "$CC" -v "$1.c" -o "$1"
+    "$1"
+  ' bash "$CC_PROBE"; then
+    echo "gmake compiler environment: PASS"
+  else
+    echo "gmake compiler environment: FAIL"
+  fi
 fi
 
 rm -f "$CC_PROBE.c" "$CC_PROBE"
