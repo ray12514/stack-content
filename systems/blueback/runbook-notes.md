@@ -54,6 +54,9 @@ default PrgEnv is review evidence only and does not narrow the supported map.
 
 In addition to the common runbook checks:
 
+- use the committed `inspector-hints.yaml` when probing system facts; its MPI
+  exclusion removes Cray MPICH ABI compatibility modules from native Cray
+  MPICH activation chains without changing generic provider discovery;
 - confirm the selected CPE is the intended current release;
 - confirm the compiler provider includes the complete program-environment and
   compiler module chain plus the exact prefix;

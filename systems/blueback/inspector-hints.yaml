@@ -1,0 +1,5 @@
+schema_version: 1
+
+mpi:
+  exclude_patterns:
+    - "cray-mpich-abi*"
