@@ -83,10 +83,25 @@ test "$RAIDER_OLD_RESTRICTED_ROOT" != "$RAIDER_CORRECT_RESTRICTED_ROOT"
 test "${RAIDER_TRIAL_ROOT%/initial-conversion-trials}" = "/p/app/CSE"
 ```
 
-Do not move the old Spack install tree. Installed prefixes, the Spack database,
-views, modules, and lockfiles contain or derive from absolute paths. Preserve
-the old tree as failed-release evidence while creating a new correctly rooted
-catalog, trial release, operator session, and workspace.
+The current Raider incident has one populated tree and one empty destination:
+
+- `$RAIDER_OLD_RESTRICTED_ROOT` contains the existing catalog, workspace,
+  lockfiles, install tree, views, modules, caches, and any completed packages;
+- `$RAIDER_CORRECT_RESTRICTED_ROOT` contains no trial artifacts that need to be
+  inspected, merged, or preserved before the correction.
+
+Every old-artifact inventory or optional binary-salvage command below reads
+from `$RAIDER_OLD_RESTRICTED_ROOT`. Every new catalog, workspace, release, and
+build-cache path is created under `$RAIDER_CORRECT_RESTRICTED_ROOT`. Do not look
+under the empty correct root for the old workspace, and do not copy or move the
+old tree into it.
+
+Installed prefixes, the Spack database, views, modules, and lockfiles contain
+or derive from absolute paths. Preserve the old populated tree as
+failed-release evidence while creating a new correctly rooted catalog, trial
+release, operator session, and workspace. Reuse is allowed only by exact
+concrete hash through the optional build-cache salvage step after the new
+workspace is concretized.
 
 ### Raider correction sequence after installation has started
 
@@ -108,9 +123,9 @@ continuing.
    test -d "$RAIDER_OLD_RELEASE_ROOT/spack/opt"
    ```
 
-2. Inventory the old release before changing repositories or creating the new
-   workspace. Store the inventory in the operator's home tree first so this
-   step does not depend on the corrected shared root already existing:
+2. Inventory only the populated wrong-root release before changing
+   repositories or creating the new workspace. Store the inventory in the
+   operator's home tree; the empty correct root is not an input to this step:
 
    ```bash
    export RAIDER_RECOVERY_RECORD="$WORK_ROOT/recovery/raider/$RAIDER_OLD_TRIAL_RELEASE"
@@ -174,10 +189,12 @@ continuing.
    test "$CSE_RESTRICTED_ROOT" = "$RAIDER_CORRECT_RESTRICTED_ROOT"
    ```
 
-5. Run common runbook Steps 5 and 6 to create only the corrected CSE paths and
-   render the new static catalog. Use the existing reviewed Raider profile when
-   its machine facts have not changed. Rerun Cluster Inspector first if those
-   facts have changed. Confirm that `CATALOG`, `STATIC_ROOT`,
+5. Run common runbook Steps 5 and 6 to populate the previously empty correct
+   CSE paths and render the new static catalog. Use the existing reviewed Raider
+   profile when its machine facts have not changed; the profile is an
+   operator-owned input and does not need to be recovered from the wrong-root
+   tree. Rerun Cluster Inspector first only if those facts have changed. Confirm
+   that `CATALOG`, `STATIC_ROOT`,
    `BUILD_RELEASE_ROOT`, `BUILD_WORKSPACE`, and `BUILDCACHE_ROOT` all begin with
    `$RAIDER_CORRECT_RESTRICTED_ROOT/` before continuing.
 
