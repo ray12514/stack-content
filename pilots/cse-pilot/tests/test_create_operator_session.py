@@ -47,6 +47,15 @@ class ProviderSelectionTemplateTests(unittest.TestCase):
             self.assertIn(
                 'export CSE_COMPUTE_NODE_TYPE="cpu_compute"', selections
             )
+            self.assertIn(
+                '# export CSE_SHARED_MPI_REF="<provider>@<version>"',
+                selections,
+            )
+            self.assertIn(
+                '# export CSE_SHARED_MPI_SOURCE="<external-or-build>"',
+                selections,
+            )
+            self.assertNotIn('CSE_SHARED_MPI_REF="openmpi@4.1.8"', selections)
 
 
 if __name__ == "__main__":

@@ -118,6 +118,37 @@ the other.
 - The cache contains CSE-built packages only; it does not attempt to package or
   relocate the platform-owned CPE or Cray MPICH installations.
 
+### Cray PMI/Cray MPICH concretization guard
+
+If concretization reports both `Cannot build cray-pmi` and `Cannot build
+cray-mpich`, stop. That message means the workspace is treating Cray MPICH as a
+source-built MPI producer. `cray-pmi` appears because the Spack `cray-mpich`
+recipe declares it as a dependency; it is not a CSE build target. A correct
+Blueback MPI environment includes the compiler-matched Cray MPICH external
+scope and has no `group: mpi` producer root.
+
+Check the owning inputs and generated result:
+
+```bash
+grep -nE 'CSE_(SHARED|PLATFORM)_MPI_(REF|SOURCE)' \
+  "$CSE_PROVIDER_SELECTIONS"
+sed -n '/^shared:/,/^platform:/p' "$BUILD_VALUES"
+sed -n '/^platform:/,/^catalog_scopes:/p' "$BUILD_VALUES"
+grep -nE 'group: mpi|catalog/scopes/mpi|cray-mpich' \
+  "$BUILD_WORKSPACE/environments/gcc/mpi-cray-mpich/spack.yaml" \
+  "$BUILD_WORKSPACE/environments/cce/mpi-cray-mpich/spack.yaml"
+```
+
+Both saved selections and both generated MPI values must say
+`source: external`. Each environment must include its selected catalog MPI
+scope, and neither environment may contain `group: mpi`. Correct
+`$CSE_PROVIDER_SELECTIONS`, reload the operator session, and regenerate the
+values/workspace from their owners. Do not edit `spack.yaml` directly. If this
+release has produced only diagnostic lockfiles and no installation or cache
+promotion, replace the complete workspace through the common runbook's
+pre-installation `--overwrite` recovery. If installation began, preserve it and
+create a new trial release.
+
 ## Publication gates
 
 - Copy the approved restricted lockfiles; do not reconcretize the publication

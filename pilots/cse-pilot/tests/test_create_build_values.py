@@ -236,6 +236,18 @@ class PlatformCompilerRuntimeTests(unittest.TestCase):
 
 
 class OpenMpiSpecTests(unittest.TestCase):
+    def test_source_built_non_openmpi_provider_is_rejected(self) -> None:
+        with self.assertRaisesRegex(
+            CREATE_BUILD_VALUES.InputError,
+            "source-built MPI is supported only for openmpi",
+        ):
+            CREATE_BUILD_VALUES.openmpi_build_specs(
+                "cray-mpich",
+                "9.1.0",
+                {},
+                {"profile_facts": {"system_externals": []}},
+            )
+
     def test_no_scheduler_external_uses_standard_mpi_launchers(self) -> None:
         root_spec, provider_constraint = CREATE_BUILD_VALUES.openmpi_build_specs(
             "openmpi",

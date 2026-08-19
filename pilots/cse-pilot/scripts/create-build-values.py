@@ -483,8 +483,10 @@ def openmpi_build_specs(
     manifest: dict[str, Any],
 ) -> tuple[str, str]:
     if name != "openmpi":
-        spec = f"{name}@{version}"
-        return spec, spec
+        raise InputError(
+            "source-built MPI is supported only for openmpi in the current "
+            f"CSE trial policy; select source=external for {name}@{version}"
+        )
 
     policy_data = load_mapping(OPENMPI_POLICY_PATH)
     if policy_data.get("schema_version") != 1:

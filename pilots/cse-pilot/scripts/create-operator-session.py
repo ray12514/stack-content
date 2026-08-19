@@ -162,8 +162,8 @@ def main() -> int:
 # Uncomment and fill every required selection before creating build values.
 # export CSE_SHARED_COMPILER_REF="gcc@12.5.0"
 # export CSE_SHARED_COMPILER_PUBLIC_NAME="<module-front-door-name>"
-# export CSE_SHARED_MPI_REF="openmpi@4.1.8"
-# export CSE_SHARED_MPI_SOURCE="build"
+# export CSE_SHARED_MPI_REF="<provider>@<version>"
+# export CSE_SHARED_MPI_SOURCE="<external-or-build>"
 # export CSE_PLATFORM_COMPILER_REF="<provider>@<version>"
 # export CSE_PLATFORM_COMPILER_PUBLIC_NAME="<front-door-name>"
 # export CSE_PLATFORM_MPI_REF="<provider>@<version>"
