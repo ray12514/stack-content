@@ -240,13 +240,18 @@ grep -nE -B10 -A20 \
 If both stage probes pass, reproduce only the failed compiler check in Spack's
 concrete `gmake` build environment. This prints the wrapper, the underlying
 compiler selected through `SPACK_CC`, and the modules visible to that exact
-build environment:
+build environment. The environment contains several `gmake@4.4.1` dependency
+specs, so the probe derives the exact failed DAG hash from `CONFIG_LOG` rather
+than selecting by package version:
 
 ```bash
 GMAKE_ENV="$CSE_BUILD_WORKSPACE/environments/gcc/core"
 CC_PROBE="$CSE_BUILD_STAGE/.cse-gmake-compiler-probe-$$"
+GMAKE_STAGE_DIR="$(dirname "$(dirname "$CONFIG_LOG")")"
+GMAKE_HASH="${GMAKE_STAGE_DIR##*-}"
+printf 'failed gmake hash: %s\n' "$GMAKE_HASH"
 
-if spack -e "$GMAKE_ENV" build-env gmake@4.4.1 -- bash -c '
+if spack -e "$GMAKE_ENV" build-env "/$GMAKE_HASH" -- bash -c '
   set -x
   printf "CC=%s\n" "${CC:-<unset>}"
   printf "SPACK_CC=%s\n" "${SPACK_CC:-<unset>}"
