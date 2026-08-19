@@ -71,12 +71,209 @@ In addition to the common runbook checks:
 
 The trial root must be the directory that directly contains `restricted/` and
 `published/`, ending in `/initial-conversion-trials`. An earlier Raider session
-that used the parent CSE directory must not be resumed. Preserve the wrongly
-rooted tree while creating a corrected operator session and workspace. After
-the corrected workspace exists and verifies, inventory the old Raider catalog,
-workspace, locks, install database, and cache before removing only confirmed
-Raider-owned artifacts. Do not delete or move the shared parent
-`/p/app/CSE/restricted` as a unit.
+that used the parent CSE directory must not be resumed. The old and correct
+roots are:
+
+```bash
+export RAIDER_OLD_RESTRICTED_ROOT="/p/app/CSE/restricted"
+export RAIDER_TRIAL_ROOT="/p/app/CSE/initial-conversion-trials"
+export RAIDER_CORRECT_RESTRICTED_ROOT="$RAIDER_TRIAL_ROOT/restricted"
+
+test "$RAIDER_OLD_RESTRICTED_ROOT" != "$RAIDER_CORRECT_RESTRICTED_ROOT"
+test "${RAIDER_TRIAL_ROOT%/initial-conversion-trials}" = "/p/app/CSE"
+```
+
+Do not move the old Spack install tree. Installed prefixes, the Spack database,
+views, modules, and lockfiles contain or derive from absolute paths. Preserve
+the old tree as failed-release evidence while creating a new correctly rooted
+catalog, trial release, operator session, and workspace.
+
+### Raider correction sequence after installation has started
+
+Use this sequence instead of the runbook's pre-installation `--overwrite`
+recovery. The examples assume the incorrectly rooted release was
+`raider-trial-001`; confirm that value from its workspace manifest before
+continuing.
+
+1. Stop every Raider `cse-build`, Spack install, fetch, and concretize process.
+   Do not remove a stage or prefix while another process may hold a store lock.
+   Record the old workspace and release paths:
+
+   ```bash
+   export RAIDER_OLD_TRIAL_RELEASE="raider-trial-001"
+   export RAIDER_OLD_WORKSPACE="$RAIDER_OLD_RESTRICTED_ROOT/workspaces/raider/initial-conversion-trials/$RAIDER_OLD_TRIAL_RELEASE"
+   export RAIDER_OLD_RELEASE_ROOT="$RAIDER_OLD_RESTRICTED_ROOT/releases/raider/$RAIDER_OLD_TRIAL_RELEASE"
+
+   test -r "$RAIDER_OLD_WORKSPACE/workspace-manifest.yaml"
+   test -d "$RAIDER_OLD_RELEASE_ROOT/spack/opt"
+   ```
+
+2. Inventory the old release before changing repositories or creating the new
+   workspace. Store the inventory in the operator's home tree first so this
+   step does not depend on the corrected shared root already existing:
+
+   ```bash
+   export RAIDER_RECOVERY_RECORD="$WORK_ROOT/recovery/raider/$RAIDER_OLD_TRIAL_RELEASE"
+   install -d -m 0700 "$RAIDER_RECOVERY_RECORD"
+
+   cp "$RAIDER_OLD_WORKSPACE/workspace-manifest.yaml" \
+     "$RAIDER_RECOVERY_RECORD/old-workspace-manifest.yaml"
+   find "$RAIDER_OLD_WORKSPACE/environments" -name spack.lock -type f \
+     -exec sha256sum {} + \
+     > "$RAIDER_RECOVERY_RECORD/old-lockfiles.sha256"
+   find "$RAIDER_OLD_RELEASE_ROOT" -maxdepth 3 -type d -print \
+     > "$RAIDER_RECOVERY_RECORD/old-release-directories.txt"
+   du -sh "$RAIDER_OLD_WORKSPACE" "$RAIDER_OLD_RELEASE_ROOT" \
+     > "$RAIDER_RECOVERY_RECORD/old-space.txt"
+   ```
+
+3. Synchronize all four repositories with runbook Step 2. Preserve any local
+   profile or other reviewed system input; stop instead of pulling over
+   unreviewed work. Capture the current tool-root selections from the old
+   operator session, but do not resume that session for new release work:
+
+   ```bash
+   export RAIDER_OLD_SESSION="$WORK_ROOT/operator-sessions/raider/$RAIDER_OLD_TRIAL_RELEASE/activate.sh"
+   source "$RAIDER_OLD_SESSION"
+   export RAIDER_TOOLS_ROOT="$CSE_TOOLS_ROOT"
+   export RAIDER_BOOTSTRAP_PYTHON="$CSE_BOOTSTRAP_PYTHON"
+   export RAIDER_SPACK_MODE="$SPACK_RUNTIME_MODE"
+
+   for repo in cluster-inspector stack-composer stack-content stack-planning; do
+     git -C "$WORK_ROOT/$repo" status --short --branch
+   done
+   # Stop here if any checkout contains unreviewed work.
+   for repo in cluster-inspector stack-composer stack-content stack-planning; do
+     git -C "$WORK_ROOT/$repo" fetch origin
+     git -C "$WORK_ROOT/$repo" switch "$STACK_BRANCH"
+     git -C "$WORK_ROOT/$repo" pull --ff-only
+   done
+   ```
+
+4. Create a new release identity under the correct root. Do not use
+   `--overwrite` and do not reuse the old provider-selection file:
+
+   ```bash
+   export RAIDER_NEW_CATALOG_RELEASE="raider-catalog-002"
+   export RAIDER_NEW_TRIAL_RELEASE="raider-trial-002"
+
+   "$RAIDER_BOOTSTRAP_PYTHON" \
+     "$CONTENT/pilots/cse-pilot/scripts/create-operator-session.py" \
+     --system raider \
+     --trial-root "$RAIDER_TRIAL_ROOT" \
+     --tools-root "$RAIDER_TOOLS_ROOT" \
+     --bootstrap-python "$RAIDER_BOOTSTRAP_PYTHON" \
+     --spack-mode "$RAIDER_SPACK_MODE" \
+     --catalog-release "$RAIDER_NEW_CATALOG_RELEASE" \
+     --trial-release "$RAIDER_NEW_TRIAL_RELEASE" \
+     --branch "$STACK_BRANCH" \
+     --group cse
+
+   source "$WORK_ROOT/operator-sessions/raider/$RAIDER_NEW_TRIAL_RELEASE/activate.sh"
+   test "$CSE_TRIAL_ROOT" = "$RAIDER_TRIAL_ROOT"
+   test "$CSE_RESTRICTED_ROOT" = "$RAIDER_CORRECT_RESTRICTED_ROOT"
+   ```
+
+5. Run common runbook Steps 5 and 6 to create only the corrected CSE paths and
+   render the new static catalog. Use the existing reviewed Raider profile when
+   its machine facts have not changed. Rerun Cluster Inspector first if those
+   facts have changed. Confirm that `CATALOG`, `STATIC_ROOT`,
+   `BUILD_RELEASE_ROOT`, `BUILD_WORKSPACE`, and `BUILDCACHE_ROOT` all begin with
+   `$RAIDER_CORRECT_RESTRICTED_ROOT/` before continuing.
+
+6. Re-enter the reviewed Raider provider selections shown above in the new
+   `$CSE_PROVIDER_SELECTIONS`, reload the new session, and run common runbook
+   Steps 7 and 8. The current workspace must be generated from the current
+   Stack Content input, including GCC 12.5.0 `+binutils`. Do not copy old values,
+   manifests, or lockfiles into the new release.
+
+   ```bash
+   vi "$CSE_PROVIDER_SELECTIONS"
+   source "$CSE_OPERATOR_SESSION_FILE"
+
+   "$CSE_PYTHON" \
+     "$CONTENT/pilots/cse-pilot/scripts/create-build-values.py"
+   "$CSE_PYTHON" "$STACK_COMPOSER" init-workspace \
+     --blueprint "$CONTENT/pilots/cse-pilot" \
+     --catalog "$CATALOG" \
+     --values "$BUILD_VALUES" \
+     --output "$BUILD_WORKSPACE"
+
+   cd "$BUILD_WORKSPACE"
+   ./cse-build login concretize
+   ./cse-build login verify
+   ```
+
+7. Treat the new verified lockfiles as authoritative. The old binaries are not
+   reusable merely because their package names and versions match. GCC
+   `+binutils` changes the GCC hash and normally changes every dependent hash.
+   Do not push the old environment wholesale to the new build cache.
+
+   Build-cache salvage is optional and occurs only after the new
+   concretization. Inventory old installed hashes and new concrete hashes with
+   the pinned Spack command, then compare them:
+
+   ```bash
+   cse_session_use_spack
+   install -d -m 2770 -g cse "$BUILD_EVIDENCE/root-correction"
+   export RAIDER_HASH_EVIDENCE="$BUILD_EVIDENCE/root-correction"
+
+   for environment_dir in "$RAIDER_OLD_WORKSPACE"/environments/*/*; do
+     spack -e "$environment_dir" find --no-groups -d -H
+   done | sort -u > "$RAIDER_HASH_EVIDENCE/old-installed.txt"
+
+   for environment_dir in "$BUILD_WORKSPACE"/environments/*/*; do
+     spack -e "$environment_dir" find --show-concretized --no-groups -d -H
+   done | sort -u > "$RAIDER_HASH_EVIDENCE/new-concrete.txt"
+
+   comm -12 \
+     "$RAIDER_HASH_EVIDENCE/old-installed.txt" \
+     "$RAIDER_HASH_EVIDENCE/new-concrete.txt" \
+     > "$RAIDER_HASH_EVIDENCE/exact-reuse-candidates.txt"
+   cat "$RAIDER_HASH_EVIDENCE/exact-reuse-candidates.txt"
+   ```
+
+   An empty candidate file means rebuild from the new locks. For a nonempty
+   file, remove externals and any package that has not already passed its
+   applicable restricted-build validation. If signing is ready, push only each
+   approved exact hash with `buildcache push --signed --only package`; never use
+   the old environment's no-argument whole-environment push. Update and verify
+   the new cache index afterward:
+
+   ```bash
+   cp "$RAIDER_HASH_EVIDENCE/exact-reuse-candidates.txt" \
+     "$RAIDER_HASH_EVIDENCE/approved-reuse.txt"
+   vi "$RAIDER_HASH_EVIDENCE/approved-reuse.txt"
+
+   export RAIDER_OLD_QUERY_ENV="$RAIDER_OLD_WORKSPACE/environments/gcc/core"
+   while IFS= read -r concrete_hash; do
+     test -n "$concrete_hash" || continue
+     spack -e "$RAIDER_OLD_QUERY_ENV" \
+       buildcache push --signed --only package --fail-fast \
+       "$BUILDCACHE_URL" "$concrete_hash" || break
+   done < "$RAIDER_HASH_EVIDENCE/approved-reuse.txt"
+
+   spack buildcache update-index --keys "$BUILDCACHE_URL"
+   spack buildcache check-index --verify all "$BUILDCACHE_URL"
+   ```
+
+   The edited approval file is part of the recovery evidence; it must not
+   contain an external or an unvalidated binary. If signing or validation is
+   not ready, skip salvage and rebuild; do not create an unsigned recovery
+   path.
+
+8. Install and validate the new release through the normal runbook Steps 10 and
+   11. `./cse-build compute install` checks the correctly rooted private build
+   cache automatically and builds every missing exact hash from source. A cache
+   hit cannot change the new lockfile.
+
+9. Keep the old tree until every required new lane is installed, exercised,
+   and recorded. Then obtain the release owner's approval to remove only the
+   confirmed Raider-owned old catalog, workspace, release, build-cache, and
+   evidence paths. Do not delete or move `/p/app/CSE/restricted` as a unit, and
+   do not remove shared source or miscellaneous caches merely because Raider
+   used them. The corrected workspace and cache must not retain an upstream,
+   mirror, include, or install-tree reference to the wrong root.
 
 ## Restricted build and cache gates
 
