@@ -68,6 +68,71 @@ In addition to the common runbook checks:
 - reject cross-CPE compiler/MPI combinations even when every individual module
   exists.
 
+### Cray MPICH ABI-module exclusion
+
+Blueback's committed `inspector-hints.yaml` excludes
+`cray-mpich-abi*`. Cluster Inspector applies this MPI category exclusion to
+discovered provider candidates and to every module recorded in the native Cray
+MPICH activation chain. Do not add a Blueback name, CPE release, or Cray MPICH
+version to Cluster Inspector for this rule.
+For another Cray system, place the same pattern in that system's own hints file
+after its module inventory confirms the same ABI compatibility siblings; do
+not turn the Blueback decision into a global default.
+
+After changing the hint or updating the relevant Cluster Inspector behavior,
+synchronize both repositories and rebuild the inspector:
+
+```bash
+git -C "$INSPECTOR" pull --ff-only
+git -C "$CONTENT" pull --ff-only
+
+cd "$INSPECTOR"
+make build
+./cluster-inspector --help >/dev/null
+git rev-parse HEAD > "$CSE_TOOL_STATE_ROOT/cluster-inspector.commit"
+```
+
+Compiler, MPI, fabric, and module inventory are system facts. Rerun only the
+system probe with the committed hint; retain the existing reviewed node
+fragments:
+
+```bash
+"$INSPECTOR/cluster-inspector" probe-system \
+  --system "$SYSTEM_NAME" \
+  --hints "$CONTENT/systems/blueback/inspector-hints.yaml" \
+  --record "$PROBE_DIR/system-probe-transcript.yaml" \
+  --output "$PROBE_DIR/system.frag.yaml"
+
+if grep -n 'cray-mpich-abi' "$PROBE_DIR/system.frag.yaml"; then
+  echo "unexpected Cray MPICH ABI module in Blueback system facts" >&2
+  return 2 2>/dev/null || exit 2
+fi
+```
+
+Merge the regenerated system fragment with the existing Blueback node
+fragments, then verify the complete profile:
+
+```bash
+"$INSPECTOR/cluster-inspector" merge \
+  --system-fragment "$PROBE_DIR/system.frag.yaml" \
+  --node "$PROBE_DIR/login.frag.yaml" \
+  --node "$PROBE_DIR/compute.frag.yaml" \
+  --node "$PROBE_DIR/apu.frag.yaml" \
+  --output "$PROBE_DIR/profile.yaml"
+
+"$INSPECTOR/cluster-inspector" verify "$PROBE_DIR/profile.yaml"
+
+if grep -n 'cray-mpich-abi' "$PROBE_DIR/profile.yaml"; then
+  echo "unexpected Cray MPICH ABI module in Blueback profile" >&2
+  return 2 2>/dev/null || exit 2
+fi
+```
+
+Do not rerun `probe-node` solely for this hint change. A static catalog or
+restricted workspace rendered from the previous profile is stale. Before any
+installation, regenerate it through the common runbook's overwrite path. If
+installation has started, preserve that release and create a new one.
+
 ## Restricted build and cache gates
 
 Use this reviewed Step 7 selection:
