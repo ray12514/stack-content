@@ -2,5 +2,5 @@
 {% set surface = values.shared %}
 {% set environment_name = 'common' %}
 {% set environment_kind = 'common' %}
-{% set module_packages = data.roster.module_packages.common %}
+{% set module_packages = data.roster.specs.common %}
 {% include '_partials/modules.yaml.j2' %}

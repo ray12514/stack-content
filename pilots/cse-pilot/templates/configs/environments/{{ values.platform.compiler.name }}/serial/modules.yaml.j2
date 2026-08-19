@@ -2,5 +2,5 @@
 {% set surface = values.platform %}
 {% set environment_name = 'serial' %}
 {% set environment_kind = 'serial' %}
-{% set module_packages = data.roster.module_packages.serial %}
+{% set module_packages = data.roster.specs.serial %}
 {% include '_partials/modules.yaml.j2' %}

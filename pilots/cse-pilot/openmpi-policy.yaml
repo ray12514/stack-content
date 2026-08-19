@@ -9,6 +9,7 @@ openmpi:
       support: when_verified
       interface_priority: [pmi2]
   cuda: false
+  fortran: true
   lustre: false
   romio: true
   romio_filesystems: []

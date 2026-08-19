@@ -19,7 +19,9 @@ specs:
   core:
     - cmake@3.31.12
     - cmake@4.4.2
-    - ninja
+    # Ninja has an unconditional build-only Python dependency. Pin it to the
+    # approved current trial Python so it cannot add a fourth interpreter.
+    - ninja ^python@3.12.13
     - pkgconf
     - git
     - python@3.8.20
@@ -68,12 +70,8 @@ specs:
     - fftw@3.3.11+mpi
     - boost@1.81.0+mpi
     - boost@1.90.0+mpi
-    - dakota@6.23.0+mpi ^cmake@3.31.12
-    - dakota@6.24.0+mpi ^cmake@3.31.12
-
-module_packages:
-  core: [cmake, ninja, pkgconf, git, python, gsl, sqlite]
-  core_independent: [miniforge3]
-  common: [netlib-lapack, gnuplot]
-  serial: [hdf5, netcdf-c, netcdf-fortran, netcdf-cxx4, fftw, boost]
-  mpi: [hdf5, netcdf-c, netcdf-fortran, netcdf-cxx4, fftw, boost, dakota]
+    # Dakota defaults to Python and independently requests BLAS, LAPACK,
+    # Boost, and MPI. Bind those edges to approved trial producers so its DAG
+    # cannot grow parallel Python, LAPACK, or Boost builds.
+    - dakota@6.23.0+mpi+python~hdf5~python-direct-interface~python-wrapper~python-surrogates ^python@3.12.13 ^netlib-lapack@3.12.1 ^boost@1.90.0+mpi ^cmake@3.31.12
+    - dakota@6.24.0+mpi+python~hdf5~python-direct-interface~python-wrapper~python-surrogates ^python@3.12.13 ^netlib-lapack@3.12.1 ^boost@1.90.0+mpi ^cmake@3.31.12

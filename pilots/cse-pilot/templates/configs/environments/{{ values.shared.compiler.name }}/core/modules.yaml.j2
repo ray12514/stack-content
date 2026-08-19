@@ -2,5 +2,5 @@
 {% set surface = values.shared %}
 {% set environment_name = 'core' %}
 {% set environment_kind = 'core' %}
-{% set module_packages = data.roster.module_packages.core %}
+{% set module_packages = data.roster.specs.core %}
 {% include '_partials/modules.yaml.j2' %}

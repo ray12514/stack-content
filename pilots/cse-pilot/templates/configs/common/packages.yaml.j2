@@ -17,6 +17,21 @@ packages:
   miniforge3:
     require:
       - target={{ values.architecture.binary_target }}
+  iconv:
+    require:
+      - glibc
+  # The pinned Boost recipe leaves compiled libraries disabled unless each
+  # library variant is requested. Use its standard compiled-library set for
+  # both public Boost versions and for consumers such as Dakota.
+  boost:
+    require:
+      - +atomic+chrono+date_time+exception+filesystem+graph+iostreams+locale+log+math+program_options+random+regex+serialization+system+test+thread+timer+wave
+  blas:
+    require:
+      - netlib-lapack@3.12.1
+  lapack:
+    require:
+      - netlib-lapack@3.12.1
   all:
     prefer:
       - target={{ values.architecture.target }}

@@ -2,5 +2,5 @@
 {% set surface = values.shared %}
 {% set environment_name = 'mpi-' ~ values.shared.mpi.name %}
 {% set environment_kind = 'mpi' %}
-{% set module_packages = data.roster.module_packages.mpi %}
+{% set module_packages = data.roster.specs.mpi %}
 {% include '_partials/modules.yaml.j2' %}

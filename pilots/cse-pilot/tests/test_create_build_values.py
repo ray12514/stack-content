@@ -205,6 +205,7 @@ class OpenMpiSpecTests(unittest.TestCase):
 
         self.assertIn("schedulers=none", provider_constraint)
         self.assertIn("+rsh", provider_constraint)
+        self.assertIn("+fortran", provider_constraint)
         self.assertNotIn("pmi", provider_constraint)
         self.assertNotIn("legacylaunchers", provider_constraint)
         self.assertEqual(
@@ -243,6 +244,7 @@ class OpenMpiSpecTests(unittest.TestCase):
 
         self.assertIn("fabrics=ucx", provider_constraint)
         self.assertIn("schedulers=slurm", provider_constraint)
+        self.assertIn("+fortran", provider_constraint)
         self.assertIn("+pmi", provider_constraint)
         self.assertIn("+legacylaunchers", provider_constraint)
         self.assertNotIn("^", provider_constraint)
@@ -265,6 +267,7 @@ class OpenMpiSpecTests(unittest.TestCase):
 
         self.assertIn("schedulers=tm", provider_constraint)
         self.assertIn("~rsh", provider_constraint)
+        self.assertIn("+fortran", provider_constraint)
         self.assertNotIn("pmi", provider_constraint)
         self.assertNotIn("legacylaunchers", provider_constraint)
         self.assertEqual(

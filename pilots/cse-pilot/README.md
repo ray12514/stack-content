@@ -77,7 +77,16 @@ Python 3.8.20 is marked deprecated in the pinned package recipe because that
 release line is end-of-life. The generated `config.yaml` deliberately enables
 deprecated versions so this explicit trial root can concretize; the lock
 verifier requires all three approved Python roots in each compiler's Core
-environment.
+environment. Ninja's unconditional build-only Python edge and Dakota's Python
+edge are pinned to 3.12.13. The verifier rejects any additional Python version
+and requires the repeated 3.12.13 producer to keep one hash per compiler
+surface.
+
+The pinned Boost recipe does not enable its usual compiled libraries for a
+bare root. Common package policy enables the recipe's standard compiled
+library set for both public Boost versions. Dakota is also bound to the
+approved Python 3.12.13, netlib-lapack 3.12.1, Boost 1.90 MPI, CMake 3.31.12,
+and lane MPI producers so it cannot silently create parallel producer DAGs.
 
 The restricted trial workspace is collaborative. Generated package policy uses
 group `cse` with group read and write access. The surrounding workspace,

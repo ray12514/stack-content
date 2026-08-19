@@ -12,6 +12,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 
 TEMPLATE_ROOT = Path(__file__).resolve().parents[1] / "templates"
+ROSTER_PATH = Path(__file__).resolve().parents[1] / "roster.yaml"
 
 
 def render(template: str, **context: object) -> dict:
@@ -22,6 +23,7 @@ def render(template: str, **context: object) -> dict:
         keep_trailing_newline=True,
     )
     environment.filters["yaml_scalar"] = json.dumps
+    environment.filters["yaml_flow"] = json.dumps
     return yaml.safe_load(environment.get_template(template).render(**context))
 
 
@@ -33,6 +35,7 @@ def render_text(template: str, **context: object) -> str:
         keep_trailing_newline=True,
     )
     environment.filters["yaml_scalar"] = json.dumps
+    environment.filters["yaml_flow"] = json.dumps
     return environment.get_template(template).render(**context)
 
 
@@ -111,6 +114,112 @@ def values() -> dict:
 
 
 class ToolchainTemplateTests(unittest.TestCase):
+    def test_common_package_policy_uses_system_glibc_for_iconv(self) -> None:
+        rendered = render(
+            "configs/common/packages.yaml.j2",
+            values={
+                "architecture": {
+                    "target": "x86_64_v3",
+                    "binary_target": "x86_64",
+                },
+                "permissions": {
+                    "read": "group",
+                    "write": "group",
+                    "group": "cse",
+                },
+            },
+            data={"roster": {"cmake": {"build_default": "3.31.12"}}},
+        )
+
+        self.assertEqual(rendered["packages"]["iconv"]["require"], ["glibc"])
+
+    def test_common_package_policy_enables_standard_boost_libraries(self) -> None:
+        rendered = render(
+            "configs/common/packages.yaml.j2",
+            values={
+                "architecture": {
+                    "target": "x86_64_v3",
+                    "binary_target": "x86_64",
+                },
+                "permissions": {
+                    "read": "group",
+                    "write": "group",
+                    "group": "cse",
+                },
+            },
+            data={"roster": {"cmake": {"build_default": "3.31.12"}}},
+        )
+
+        requirement = rendered["packages"]["boost"]["require"]
+        self.assertEqual(len(requirement), 1)
+        for library in ("filesystem", "iostreams", "program_options", "system"):
+            self.assertIn(f"+{library}", requirement[0])
+        for virtual in ("blas", "lapack"):
+            self.assertEqual(
+                rendered["packages"][virtual]["require"],
+                ["netlib-lapack@3.12.1"],
+            )
+
+    def test_roster_binds_implicit_python_and_dakota_producers(self) -> None:
+        roster = yaml.safe_load(ROSTER_PATH.read_text(encoding="utf-8"))
+
+        self.assertIn("ninja ^python@3.12.13", roster["specs"]["core"])
+        for spec in roster["specs"]["mpi"]:
+            if not spec.startswith("dakota@"):
+                continue
+            self.assertIn("+python", spec)
+            self.assertIn("^python@3.12.13", spec)
+            self.assertIn("^netlib-lapack@3.12.1", spec)
+            self.assertIn("^boost@1.90.0+mpi", spec)
+
+        self.assertEqual(
+            len([spec for spec in roster["specs"]["mpi"] if spec.startswith("dakota@")]),
+            2,
+        )
+
+    def test_module_sets_select_only_their_intended_roots(self) -> None:
+        test_values = values()
+        test_values["paths"]["modules_root"] = "/modules"
+        roster = {
+            "specs": {
+                "core": ["pkgconf", "python@3.12.13"],
+                "core_independent": ["miniforge3@26.1.1-3"],
+            }
+        }
+
+        shared = render(
+            "configs/environments/{{ values.shared.compiler.name }}/core/modules.yaml.j2",
+            values=test_values,
+            data={"roster": roster},
+        )["modules"]
+
+        self.assertEqual(shared["compiler_producer"]["tcl"]["exclude"], ["@:"])
+        self.assertEqual(
+            shared["compiler_producer"]["tcl"]["include"], ["gcc@12.5.0"]
+        )
+        self.assertEqual(shared["default"]["tcl"]["exclude"], ["@:"])
+        self.assertIn("pkgconf %gcc@12.5.0", shared["default"]["tcl"]["include"])
+        self.assertIn(
+            "python@3.12.13 %gcc@12.5.0", shared["default"]["tcl"]["include"]
+        )
+
+        test_values["platform"]["compiler"].update(
+            {
+                "name": "intel-oneapi-compilers",
+                "version": "2024.2.1",
+                "modules": ["oneapi/2024.2.1"],
+            }
+        )
+        platform = render(
+            "configs/environments/{{ values.platform.compiler.name }}/core/modules.yaml.j2",
+            values=test_values,
+            data={"roster": roster},
+        )["modules"]
+
+        self.assertIn(
+            "pkgconf %oneapi@2024.2.1", platform["default"]["tcl"]["include"]
+        )
+
     def test_lock_verifier_keeps_python_36_compatible_annotations(self) -> None:
         script = render_text(
             "scripts/verify-lockfiles.py.j2",

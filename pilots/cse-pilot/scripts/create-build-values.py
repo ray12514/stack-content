@@ -521,6 +521,7 @@ def openmpi_build_specs(
 
     expected_policy = {
         "cuda": False,
+        "fortran": True,
         "lustre": False,
         "romio": True,
         "romio_filesystems": [],
@@ -535,6 +536,7 @@ def openmpi_build_specs(
     variants = [
         "fabrics=ucx",
         "~cuda",
+        "+fortran",
         "~lustre",
         "+romio",
         "romio-filesystem=none",

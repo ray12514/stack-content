@@ -1,3 +1,15 @@
+{% set compiler_spec_name = {
+  'intel-oneapi-compilers': 'oneapi',
+  'intel-oneapi-compilers-classic': 'intel'
+}.get(surface.compiler.name, surface.compiler.name) %}
+{% set compiler_constraint = '%' ~ compiler_spec_name ~ '@' ~ surface.compiler.version %}
+{% macro with_compiler(spec, compiler) -%}
+{%- if '^' in spec -%}
+{{ spec.split('^', 1)[0].rstrip() }} {{ compiler }} ^{{ spec.split('^', 1)[1].lstrip() }}
+{%- else -%}
+{{ spec }} {{ compiler }}
+{%- endif -%}
+{%- endmacro %}
 modules:
 {% if environment_kind == 'core' and surface.compiler.source == 'build' %}
   compiler_producer:
@@ -9,7 +21,9 @@ modules:
     tcl:
       hash_length: 0
       exclude_implicits: true
-      include: [{{ surface.compiler.name }}]
+      exclude: ['@:']
+      include:
+        - {{ (surface.compiler.name ~ '@' ~ surface.compiler.version) | yaml_scalar }}
       projections:
         all: '{name}/{version}'
       all:
@@ -25,7 +39,9 @@ modules:
     tcl:
       hash_length: 0
       exclude_implicits: true
-      include: [{{ surface.mpi.name }}]
+      exclude: ['@:']
+      include:
+        - {{ (surface.mpi.name ~ '@' ~ surface.mpi.version ~ ' ' ~ compiler_constraint) | yaml_scalar }}
       projections:
         all: '{name}/{version}'
       all:
@@ -40,7 +56,8 @@ modules:
     tcl:
       hash_length: 0
       exclude_implicits: true
-      include: {{ data.roster.module_packages.core_independent | yaml_flow }}
+      exclude: ['@:']
+      include: {{ data.roster.specs.core_independent | yaml_flow }}
       projections:
         all: '{name}/{version}'
       all:
@@ -65,7 +82,11 @@ modules:
     tcl:
       hash_length: 0
       exclude_implicits: true
-      include: {{ module_packages | yaml_flow }}
+      exclude: ['@:']
+      include:
+{% for package in module_packages %}
+        - {{ with_compiler(package, compiler_constraint) | trim | yaml_scalar }}
+{% endfor %}
       projections:
         netcdf-cxx4: '{name}/{version}-netcdf{^netcdf-c.version}-hdf5{^hdf5.version}'
         py-numpy: '{name}/{version}-python{^python.version}'

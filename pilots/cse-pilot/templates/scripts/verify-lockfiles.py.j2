@@ -150,6 +150,8 @@ def main() -> int:
     gcc_producer_hashes: Set[str] = set()
     cmake_roots_by_environment: Dict[str, Set[str]] = defaultdict(set)
     python_roots_by_environment: Dict[str, Set[str]] = defaultdict(set)
+    python_hashes_by_surface: Dict[Tuple[str, str], Set[str]] = defaultdict(set)
+    lapack_hashes_by_surface: Dict[Tuple[str, str], Set[str]] = defaultdict(set)
 
     for path in lock_paths:
         environment = str(path.parent.relative_to(WORKSPACE / "environments"))
@@ -162,6 +164,18 @@ def main() -> int:
 
         roots_by_group: Dict[str, List[Dict]] = defaultdict(list)
         for dag_hash, node in nodes.items():
+            name = node.get("name")
+            version = node_version(node)
+            if name == "python" and not node.get("external"):
+                if version not in EXPECTED_PYTHON_VERSIONS:
+                    errors.append(
+                        f"{environment}: unexpected Python node {version} "
+                        f"({dag_hash[:7]}); approved versions are "
+                        f"{sorted(EXPECTED_PYTHON_VERSIONS)}"
+                    )
+                python_hashes_by_surface[(surface, version)].add(dag_hash)
+            if name == "netlib-lapack" and version == "3.12.1":
+                lapack_hashes_by_surface[(surface, version)].add(dag_hash)
             if node.get("external"):
                 continue
             target = (node.get("arch") or {}).get("target")
@@ -226,6 +240,10 @@ def main() -> int:
             )
 
         payload_roots = roots_by_group.get("payload", [])
+        payload_roots_by_name = {
+            nodes.get(root.get("hash"), {}).get("name"): root
+            for root in payload_roots
+        }
         cxx_chains: Set[Tuple[str, str]] = set()
         has_cxx_roots = False
         for root in payload_roots:
@@ -338,6 +356,35 @@ def main() -> int:
                     f"{sorted(cmake_versions)}; expected only {BUILD_CMAKE}"
                 )
 
+            node = nodes.get(root.get("hash"), {})
+            if node.get("name") == "dakota":
+                expected_boost_root = payload_roots_by_name.get("boost")
+                expected_boost_hash = (
+                    expected_boost_root.get("hash") if expected_boost_root else None
+                )
+                boost_hashes = package_hashes(graph, nodes, "boost", "1.90.0")
+                if not expected_boost_hash or boost_hashes != {expected_boost_hash}:
+                    errors.append(
+                        f"{environment}: Dakota root {root.get('spec')} uses Boost "
+                        f"hashes {sorted(boost_hashes)}; expected the direct "
+                        f"boost@1.90.0 MPI root {expected_boost_hash}"
+                    )
+                python_versions = package_versions(graph, nodes, "python")
+                if python_versions != {"3.12.13"}:
+                    errors.append(
+                        f"{environment}: Dakota root {root.get('spec')} resolves "
+                        f"Python {sorted(python_versions)}; expected 3.12.13"
+                    )
+                lapack_hashes = package_hashes(
+                    graph, nodes, "netlib-lapack", "3.12.1"
+                )
+                if len(lapack_hashes) != 1:
+                    errors.append(
+                        f"{environment}: Dakota root {root.get('spec')} resolves "
+                        f"netlib-lapack hashes {sorted(lapack_hashes)}; expected one "
+                        "3.12.1 producer"
+                    )
+
     for (surface, name, version), hashes in sorted(reused_hashes.items()):
         if len(hashes) != 1:
             errors.append(
@@ -350,6 +397,20 @@ def main() -> int:
             "repeated GCC producer roots have hashes "
             f"{sorted(gcc_producer_hashes)}; expected one"
         )
+
+    for (surface, version), hashes in sorted(python_hashes_by_surface.items()):
+        if len(hashes) != 1:
+            errors.append(
+                f"{surface} Python {version} has {len(hashes)} hashes across "
+                f"environments: {', '.join(sorted(hashes))}"
+            )
+
+    for (surface, version), hashes in sorted(lapack_hashes_by_surface.items()):
+        if len(hashes) != 1:
+            errors.append(
+                f"{surface} netlib-lapack {version} has {len(hashes)} hashes "
+                f"across environments: {', '.join(sorted(hashes))}"
+            )
 
     shared_compiler_key = (
         {{ values.shared.compiler.name | tojson }},
@@ -371,7 +432,8 @@ def main() -> int:
     print(
         "Lockfile verification passed: eight environments, shared producer "
         f"hashes, CMake {BUILD_CMAKE} build dependencies, Core Python roots "
-        f"{sorted(EXPECTED_PYTHON_VERSIONS)}, NetCDF/HDF5 chains, "
+        f"{sorted(EXPECTED_PYTHON_VERSIONS)} with no extra interpreters, "
+        "Dakota producer reuse, NetCDF/HDF5 chains, "
         f"compiler surfaces, MPI boundaries, CPU target {EXPECTED_CPU_TARGET}, "
         "and reviewed binary-target exceptions."
     )
