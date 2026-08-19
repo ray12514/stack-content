@@ -114,6 +114,41 @@ def values() -> dict:
 
 
 class ToolchainTemplateTests(unittest.TestCase):
+    def test_gcc_producer_explicitly_enables_binutils(self) -> None:
+        test_values = values()
+        roster = {
+            "specs": {
+                "foundation": ["zlib@1.3.1"],
+                "core": ["cmake@3.31.12"],
+                "core_independent": ["miniforge3@26.1.1-3"],
+                "build_tools": ["cmake@3.31.12"],
+            }
+        }
+
+        core = render(
+            "environments/{{ values.shared.compiler.name }}/core/spack.yaml.j2",
+            values=test_values,
+            data={"roster": roster},
+        )
+        payload = render(
+            "_partials/payload-spack.yaml.j2",
+            values=test_values,
+            data={"roster": roster},
+            surface_key="shared",
+            surface=test_values["shared"],
+            environment_kind="serial",
+            environment_name="serial",
+            payload_specs=["hdf5@2.1.0~mpi"],
+            payload_constraint="target=x86_64_v3 %gcc@12.5.0",
+        )
+
+        for rendered in (core, payload):
+            groups = {
+                entry["group"]: entry for entry in rendered["spack"]["specs"]
+            }
+            compiler_spec = groups["compiler"]["specs"][0]
+            self.assertIn("+binutils", compiler_spec)
+
     def test_common_package_policy_uses_system_glibc_for_iconv(self) -> None:
         rendered = render(
             "configs/common/packages.yaml.j2",

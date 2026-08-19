@@ -46,7 +46,7 @@ spack:
 {% if surface.compiler.source == 'build' %}
     - group: compiler
       specs:
-        - {{ (surface.compiler.name ~ '@' ~ surface.compiler.version ~ " languages='c,c++,fortran' target=" ~ values.architecture.target ~ ' %' ~ surface.compiler.build_with.name ~ '@' ~ surface.compiler.build_with.version) | yaml_scalar }}
+        - {{ (surface.compiler.name ~ '@' ~ surface.compiler.version ~ "+binutils languages='c,c++,fortran' target=" ~ values.architecture.target ~ ' %' ~ surface.compiler.build_with.name ~ '@' ~ surface.compiler.build_with.version) | yaml_scalar }}
 {% endif %}
     - group: foundation
 {% if surface.compiler.source == 'build' %}

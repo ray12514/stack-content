@@ -23,7 +23,7 @@ spack:
   specs:
     - group: compiler
       specs:
-        - {{ (values.shared.compiler.name ~ '@' ~ values.shared.compiler.version ~ " languages='c,c++,fortran' target=" ~ values.architecture.target ~ ' %' ~ values.shared.compiler.build_with.name ~ '@' ~ values.shared.compiler.build_with.version) | yaml_scalar }}
+        - {{ (values.shared.compiler.name ~ '@' ~ values.shared.compiler.version ~ "+binutils languages='c,c++,fortran' target=" ~ values.architecture.target ~ ' %' ~ values.shared.compiler.build_with.name ~ '@' ~ values.shared.compiler.build_with.version) | yaml_scalar }}
     - group: foundation
       needs: [compiler]
       specs:

@@ -23,6 +23,9 @@ GCC still needs an already available compiler to build GCC itself. The values
 helper selects the newest verified older GCC scope from the static catalog and
 records it under `shared.compiler.build_with`. This is a direct compiler
 dependency in each GCC environment, not a separate preparatory environment.
+Every GCC 12.5.0 producer explicitly enables `+binutils`; leaving the variant
+unspecified permits reuse of a previously concrete `~binutils` compiler. The
+lock verifier rejects a GCC producer without the managed Binutils dependency.
 
 An LLVM-based Intel oneAPI surface also includes that verified GCC scope as a
 runtime-support provider. Spack's `intel-oneapi-runtime` depends on

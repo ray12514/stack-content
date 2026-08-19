@@ -211,6 +211,11 @@ def main() -> int:
                 expected_provider = GCC_BUILD_COMPILER
                 if surface != {{ values.shared.compiler.name | tojson }}:
                     errors.append(f"{environment}: external surface has a compiler producer")
+                if (node.get("parameters") or {}).get("binutils") is not True:
+                    errors.append(
+                        f"{environment}: GCC producer {root.get('spec')} does not "
+                        "enable +binutils"
+                    )
                 gcc_producer_hashes.add(root.get("hash"))
             elif group in {"foundation", "build-tools", "core", "payload", "mpi"}:
                 expected_provider = COMPILER_BY_SURFACE[surface]
