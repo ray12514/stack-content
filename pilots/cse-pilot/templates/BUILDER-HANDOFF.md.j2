@@ -21,6 +21,9 @@ Release: `{{ values.release }}`
 This complete directory is the build handoff. It already contains the static
 catalog snapshot, generated configuration scopes, all eight Spack environments,
 deployment paths, module policy, and any lockfiles created so far.
+The exact reviewed Cluster Inspector facts are retained at
+`catalog/profile.yaml` for inspection; the builder does not edit or consume
+that file directly.
 
 There is one shared workspace for this system and release, not one workspace
 per builder. The operator initializes it once and gives the receiving builder
@@ -32,6 +35,15 @@ operator must finish workspace initialization first.
 The receiving builder needs membership in `{{ values.permissions.group }}` and
 the site-provided absolute writable `WORKDIR`. Do not activate Spack or source
 an operator-session file before running the entry point.
+
+`cse-build` is an executable Bash program and may be launched directly from a
+default `tcsh` login. Do not source it. Its shebang selects Bash without
+changing the receiving builder's login shell:
+
+```tcsh
+cd /absolute/path/to/shared/workspace
+./cse-build login status --spack-mode shared
+```
 
 From the workspace root, run:
 
@@ -56,6 +68,7 @@ entry sequence:
 cd "<absolute-shared-workspace-path>"
 test -r workspace-manifest.yaml
 test -x ./cse-build
+test -w .
 ./cse-build login status --spack-mode shared
 ```
 

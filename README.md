@@ -57,11 +57,13 @@ template is shared.
 
 - `render-static` produces the generic, reusable platform catalog from an
   observed profile. It contains compiler, MPI, GPU, common-external, and
-  platform scopes; it contains no CSE package roster or deployment workspace.
+  platform scopes plus an exact `profile.yaml` snapshot for review; it contains
+  no CSE package roster or deployment workspace.
 - `init-workspace` combines an exact static-catalog selection with an authored
   starter blueprint. `pilots/cse-pilot/` uses this seam to produce the current
   CPU-only Foundation/Core/Common/Serial/MPI trial environments, module policy,
-  and a generated `cse-build` resume entry point for the receiving builder.
+  and a generated `cse-build` resume entry point for the receiving builder. The
+  pilot blueprint applies its declared group access modes to the new workspace.
 - `render` remains the full curated-stack path. It owns the complete automated
   workspace, deployment inputs, lanes, views, modules, and release manifest.
 

@@ -151,13 +151,17 @@ stack-composer init-workspace \
 ```
 
 `init-workspace` snapshots the catalog under `catalog/`; every generated
-environment uses relative includes. Hand the entire initialized workspace and
-its reviewed lockfiles to the builder.
+environment uses relative includes. The exact reviewed facts are available at
+`catalog/profile.yaml`. Restricted build workspaces are created with group
+read/write/search access: directories `2770`, ordinary files `0660`, and
+executable entry points `0770`. The setgid parent supplies CSE group ownership.
+Hand the entire initialized workspace and its reviewed lockfiles to the builder.
 
 The `cse-build` entry point first appears inside that initialized workspace.
 Use the operator session through profile/catalog/value preparation, then use
 `<workspace>/cse-build` for concretize, fetch, install, verify, and builder
-handoff. The two scripts do not overlap in ownership.
+handoff. It is executable Bash and can be run directly from a default `tcsh`
+login; it must not be sourced. The two scripts do not overlap in ownership.
 
 The complete workspace is also the builder-resume boundary. It records the
 approved Spack source, version, tag, and commit and contains the selected

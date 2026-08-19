@@ -32,6 +32,8 @@ Compute build-stage candidates:
 
 Static catalog snapshot: `catalog/`
 
+Reviewed Cluster Inspector facts: `catalog/profile.yaml`
+
 Selected surfaces:
 
 - `{{ values.shared.compiler.name }}@{{ values.shared.compiler.version }}` + `{{ values.shared.mpi.name }}@{{ values.shared.mpi.version }}`
@@ -96,7 +98,8 @@ The trial is CPU-only. No GPU environment is rendered.
 
 This complete workspace may be handed to another CSE builder. The receiving
 builder does not need the tools that generated it and does not reconstruct the
-render inputs. From the workspace root, run:
+render inputs. `cse-build` is executable Bash, so a builder whose login shell is
+`tcsh` runs it directly rather than sourcing it. From the workspace root, run:
 
 ```bash
 ./cse-build login

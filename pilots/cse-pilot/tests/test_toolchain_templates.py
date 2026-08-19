@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import ast
 import json
+import shlex
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -13,6 +15,8 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 TEMPLATE_ROOT = Path(__file__).resolve().parents[1] / "templates"
 ROSTER_PATH = Path(__file__).resolve().parents[1] / "roster.yaml"
+BLUEPRINT_PATH = Path(__file__).resolve().parents[1] / "blueprint.yaml"
+SITE_VALUES_PATH = Path(__file__).resolve().parents[1] / "site-values.example.yaml"
 
 
 def render(template: str, **context: object) -> dict:
@@ -114,6 +118,48 @@ def values() -> dict:
 
 
 class ToolchainTemplateTests(unittest.TestCase):
+    def test_blueprint_declares_shared_workspace_access_contract(self) -> None:
+        blueprint = yaml.safe_load(BLUEPRINT_PATH.read_text(encoding="utf-8"))
+        self.assertTrue(blueprint["apply_workspace_permissions"])
+        self.assertEqual(
+            blueprint["allowed_values"]["permissions.read"],
+            ["group", "world"],
+        )
+        self.assertEqual(
+            blueprint["allowed_values"]["permissions.write"],
+            ["user", "group"],
+        )
+        handoff = (TEMPLATE_ROOT / "BUILDER-HANDOFF.md.j2").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("default `tcsh` login", handoff)
+        self.assertIn("`catalog/profile.yaml`", handoff)
+
+    @unittest.skipUnless(shutil.which("tcsh"), "tcsh is not installed")
+    def test_cse_build_runs_directly_from_tcsh(self) -> None:
+        rendered = render_text(
+            "cse-build.j2",
+            values=yaml.safe_load(SITE_VALUES_PATH.read_text(encoding="utf-8")),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            launcher = Path(temporary) / "cse-build"
+            launcher.write_text(rendered, encoding="utf-8")
+            launcher.chmod(0o770)
+            result = subprocess.run(
+                [
+                    shutil.which("tcsh") or "tcsh",
+                    "-f",
+                    "-c",
+                    f"{shlex.quote(str(launcher))} login --help",
+                ],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Usage: ./cse-build", result.stdout)
+
     def test_gcc_producer_explicitly_enables_binutils(self) -> None:
         test_values = values()
         roster = {

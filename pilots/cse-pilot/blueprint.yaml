@@ -6,6 +6,7 @@ description: |
   for both the CSE GCC and platform compiler surfaces.
 template_root: templates
 snapshot_catalog: true
+apply_workspace_permissions: true
 required_values:
   - workspace.role
   - build.contexts.login.node_type
@@ -69,6 +70,8 @@ data_files:
   roster: roster.yaml
 allowed_values:
   workspace.role: [build, publish]
+  permissions.read: [group, world]
+  permissions.write: [user, group]
   shared.compiler.source: [build]
   shared.mpi.source: [external, build]
   platform.compiler.source: [external]
