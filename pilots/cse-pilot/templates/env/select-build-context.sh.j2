@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+
+# Select one executable Spack stage for the requested runtime node context.
+# This is sourced by cse-build before Spack reads config.yaml.
+
+CSE_LOGIN_STAGE_CANDIDATES=(
+{% for stage in values.build.contexts.login.stages %}
+  '{{ stage | replace("'", "'\"'\"'") }}'
+{% endfor %}
+)
+CSE_COMPUTE_STAGE_CANDIDATES=(
+{% for stage in values.build.contexts.compute.stages %}
+  '{{ stage | replace("'", "'\"'\"'") }}'
+{% endfor %}
+)
+
+_cse_expand_stage_path() {
+  local path="$1"
+  local tempdir="${TMPDIR:-/tmp}"
+
+  path="${path//\$tempdir/$tempdir}"
+  path="${path//\$\{USER\}/$USER}"
+  path="${path//\$USER/$USER}"
+  path="${path//\$user/$USER}"
+  path="${path//\$\{WORKDIR\}/$WORKDIR}"
+  path="${path//\$WORKDIR/$WORKDIR}"
+  case "$path" in
+    /*) ;;
+    *) return 1 ;;
+  esac
+  case "$path" in
+    *'$'*) return 1 ;;
+  esac
+  printf '%s\n' "$path"
+}
+
+_cse_stage_is_executable() (
+  local path="$1"
+  local probe
+
+  umask 0077
+  install -d -m 0700 "$path" 2>/dev/null || return 1
+  [ -d "$path" ] && [ -w "$path" ] && [ -x "$path" ] || return 1
+  probe="$path/.cse-stage-exec-$$-${RANDOM:-0}"
+  trap 'rm -f -- "$probe"' EXIT HUP INT TERM
+  printf '#!/bin/sh\nexit 0\n' > "$probe" || return 1
+  chmod 0700 "$probe" || return 1
+  "$probe" >/dev/null 2>&1
+)
+
+cse_select_build_context() {
+  local context="$1"
+  local node_type raw_stage stage
+  local -a candidates
+
+  case "$context" in
+    login)
+      node_type={{ values.build.contexts.login.node_type | yaml_scalar }}
+      candidates=("${CSE_LOGIN_STAGE_CANDIDATES[@]}")
+      ;;
+    compute)
+      node_type={{ values.build.contexts.compute.node_type | yaml_scalar }}
+      candidates=("${CSE_COMPUTE_STAGE_CANDIDATES[@]}")
+      ;;
+    *)
+      printf 'cse-build: node context must be login or compute: %s\n' \
+        "$context" >&2
+      return 2
+      ;;
+  esac
+
+  for raw_stage in "${candidates[@]}"; do
+    if ! stage="$(_cse_expand_stage_path "$raw_stage")"; then
+      printf 'cse-build: unresolved build stage skipped: %s\n' \
+        "$raw_stage" >&2
+      continue
+    fi
+    if _cse_stage_is_executable "$stage"; then
+      export CSE_NODE_CONTEXT="$context"
+      export CSE_BUILD_NODE_TYPE="$node_type"
+      export CSE_BUILD_STAGE="$stage"
+      return 0
+    fi
+    printf 'cse-build: non-executable build stage skipped: %s\n' \
+      "$stage" >&2
+  done
+
+  printf 'cse-build: no executable %s build stage is available\n' \
+    "$context" >&2
+  return 2
+}

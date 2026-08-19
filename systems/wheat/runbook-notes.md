@@ -41,6 +41,19 @@ includes the verified GCC seed scope. That GCC is present only to provide the
 `gcc-runtime` dependency required by `intel-oneapi-runtime`; Wheat payload roots
 remain bound to the oneAPI compiler.
 
+Do not select an arbitrary latest external GCC for that runtime dependency.
+The helper reuses the same newest verified compiler older than GCC 12.5.0 that
+the reviewed catalog selects to build the GCC 12.5.0 producer. Use
+`CSE_SHARED_COMPILER_SEED_REF` only when catalog review deliberately selects a
+different installed GCC scope.
+
+For Step 7, use `gcc@12.5.0` and build-sourced `openmpi@4.1.8` for the shared
+surface. For the platform surface, copy the exact provider reference reported
+by the live profile: `oneapi@...` for `icx`/`icpx`/`ifx`, or `intel@...` for
+`icc`/`icpc`/`ifort`. Do not translate the module suite label into a compiler
+product version by guess. Both MPI selections use `openmpi@4.1.8` with
+`source=build`. The standard context keys are `login` and `cpu_compute`.
+
 ## Required profile and catalog checks
 
 - Verify whether the compiler drivers are oneAPI or Classic Intel.

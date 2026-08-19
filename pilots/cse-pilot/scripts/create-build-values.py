@@ -184,7 +184,9 @@ def safe_path_segment(value: str, label: str) -> str:
     return value
 
 
-def namespaced_stage_path(path: str, *, system_name: str, release: str) -> str:
+def namespaced_stage_path(
+    path: str, *, system_name: str, release: str, context: str
+) -> str:
     base = path.rstrip("/")
     components = {component for component in base.split("/") if component}
     username = os.environ.get("USER", "").strip()
@@ -195,7 +197,7 @@ def namespaced_stage_path(path: str, *, system_name: str, release: str) -> str:
         base = f"{base}/${{USER}}"
     if base.rsplit("/", 1)[-1] != "spack-stage":
         base = f"{base}/spack-stage"
-    return f"{base}/{system_name}/{release}"
+    return f"{base}/{system_name}/{release}/{context}"
 
 
 def is_temporary_stage(path: str, record: dict[str, Any]) -> bool:
@@ -209,10 +211,14 @@ def is_temporary_stage(path: str, record: dict[str, Any]) -> bool:
     )
 
 
-def build_stage_paths(
-    manifest: dict[str, Any], *, system_name: str, release: str
-) -> tuple[str, list[str]]:
-    node_type_name = required("CSE_BUILD_NODE_TYPE")
+def stage_paths_for_node(
+    manifest: dict[str, Any],
+    *,
+    node_type_name: str,
+    system_name: str,
+    release: str,
+    context: str,
+) -> list[str]:
     node_types = (manifest.get("profile_facts") or {}).get("node_types") or {}
     if not isinstance(node_types, dict) or node_type_name not in node_types:
         available = ", ".join(sorted(str(name) for name in node_types)) or "none"
@@ -240,15 +246,10 @@ def build_stage_paths(
             path,
             system_name=safe_path_segment(system_name, "SYSTEM_NAME"),
             release=safe_path_segment(release, "TRIAL_RELEASE"),
+            context=safe_path_segment(context, "build context"),
         )
         destination = temporary if is_temporary_stage(path, record) else scratch
         destination.append(rendered)
-    if not temporary and not scratch:
-        raise InputError(
-            f"catalog node type {node_type_name!r} has no writable executable build-stage "
-            "candidate; re-probe the intended build node or choose another reviewed node type"
-        )
-
     workdir = Path(required("WORKDIR")).expanduser()
     if not workdir.is_absolute():
         raise InputError(f"WORKDIR must be absolute; got {str(workdir)!r}")
@@ -256,13 +257,48 @@ def build_stage_paths(
         raise InputError(f"WORKDIR does not exist or is not a directory: {workdir}")
     if not os.access(workdir, os.W_OK | os.X_OK):
         raise InputError(f"WORKDIR is not writable and searchable: {workdir}")
-    work_fallback = f"${{WORKDIR}}/cse-spack-stage/{system_name}/{release}"
+    work_fallback = (
+        f"${{WORKDIR}}/cse-spack-stage/{system_name}/{release}/{context}"
+    )
 
     ordered: list[str] = []
     for path in [*temporary, *scratch, work_fallback]:
         if path not in ordered:
             ordered.append(path)
-    return node_type_name, ordered
+    return ordered
+
+
+def build_contexts(
+    manifest: dict[str, Any], *, system_name: str, release: str
+) -> dict[str, dict[str, Any]]:
+    node_types = (manifest.get("profile_facts") or {}).get("node_types") or {}
+    if not isinstance(node_types, dict):
+        raise InputError("catalog profile_facts.node_types must be a mapping")
+
+    contexts: dict[str, dict[str, Any]] = {}
+    for context, variable, default_node_type in (
+        ("login", "CSE_LOGIN_NODE_TYPE", "login"),
+        ("compute", "CSE_COMPUTE_NODE_TYPE", "cpu_compute"),
+    ):
+        node_type_name = os.environ.get(variable, "").strip() or default_node_type
+        if node_type_name not in node_types:
+            available = ", ".join(sorted(str(name) for name in node_types)) or "none"
+            raise InputError(
+                f"catalog has no {context} node type {node_type_name!r}; "
+                f"available node types: {available}; set {variable} to the "
+                f"reviewed {context} node key"
+            )
+        contexts[context] = {
+            "node_type": node_type_name,
+            "stages": stage_paths_for_node(
+                manifest,
+                node_type_name=node_type_name,
+                system_name=system_name,
+                release=release,
+                context=context,
+            ),
+        }
+    return contexts
 
 
 def portable_cpu_target(manifest: dict[str, Any]) -> tuple[str, list[str]]:
@@ -655,7 +691,7 @@ def main() -> int:
             raise InputError("catalog contains more than one platform scope")
 
         release = required("TRIAL_RELEASE")
-        build_node_type, build_stages = build_stage_paths(
+        contexts = build_contexts(
             manifest, system_name=system_name, release=release
         )
         cpu_target, target_node_types = portable_cpu_target(manifest)
@@ -681,7 +717,7 @@ def main() -> int:
             "system": {"name": system_name},
             "release": release,
             "stack": {"name": "cse-initial-conversion-trials"},
-            "build": {"node_type": build_node_type},
+            "build": {"contexts": contexts},
             "architecture": {
                 "target": cpu_target,
                 "binary_target": generic_binary_target,
@@ -730,7 +766,6 @@ def main() -> int:
             },
             "paths": {
                 "install_tree": f"{release_root}/spack/opt",
-                "build_stage": build_stages,
                 "source_cache": f"{restricted_root}/cache/source",
                 "misc_cache": f"{restricted_root}/cache/misc",
                 "views_root": f"{release_root}/views",
@@ -763,10 +798,11 @@ def main() -> int:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(yaml.safe_dump(values, sort_keys=False), encoding="utf-8")
         print(output)
-        print(f"build node type: {build_node_type}")
+        for context, context_values in contexts.items():
+            print(f"{context} node type: {context_values['node_type']}")
+            for stage in context_values["stages"]:
+                print(f"{context} build stage candidate: {stage}")
         print(f"CPU target: {cpu_target} (common to {', '.join(target_node_types)})")
-        for stage in build_stages:
-            print(f"build stage: {stage}")
         print(
             f"shared surface: {shared_compiler_ref} + {required('CSE_SHARED_MPI_REF')}"
         )

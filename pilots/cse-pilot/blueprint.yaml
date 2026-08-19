@@ -8,7 +8,10 @@ template_root: templates
 snapshot_catalog: true
 required_values:
   - workspace.role
-  - build.node_type
+  - build.contexts.login.node_type
+  - build.contexts.login.stages
+  - build.contexts.compute.node_type
+  - build.contexts.compute.stages
   - architecture.target
   - architecture.binary_target
   - architecture.node_types
@@ -43,7 +46,6 @@ required_values:
   - platform.mpi.provider_constraint
   - catalog_scopes.common
   - paths.install_tree
-  - paths.build_stage
   - paths.source_cache
   - paths.misc_cache
   - paths.views_root

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import os
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT_PATH = (
@@ -75,6 +78,100 @@ class PortableCpuTargetTests(unittest.TestCase):
         self.assertEqual(
             CREATE_BUILD_VALUES.portable_cpu_target(manifest),
             ("x86_64_v2", ["compute", "login"]),
+        )
+
+
+class BuildContextTests(unittest.TestCase):
+    def test_login_and_compute_contexts_have_independent_stage_fallbacks(self) -> None:
+        manifest = {
+            "profile_facts": {
+                "node_types": {
+                    "login": {
+                        "role": "build_host",
+                        "build_stage": [
+                            {
+                                "path": "/tmp/tester",
+                                "visibility": "node-local",
+                                "writable": True,
+                                "mount_opts": ["rw"],
+                            }
+                        ],
+                    },
+                    "cpu_compute": {
+                        "role": "runtime",
+                        "build_stage": [
+                            {
+                                "path": "/scratch/tester",
+                                "visibility": "compute-only",
+                                "writable": True,
+                                "mount_opts": ["rw"],
+                            }
+                        ],
+                    },
+                }
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as workdir:
+            with mock.patch.dict(
+                os.environ,
+                {"WORKDIR": workdir, "USER": "tester"},
+                clear=False,
+            ):
+                contexts = CREATE_BUILD_VALUES.build_contexts(
+                    manifest,
+                    system_name="fran",
+                    release="fran-trial-001",
+                )
+
+        self.assertEqual(contexts["login"]["node_type"], "login")
+        self.assertEqual(contexts["compute"]["node_type"], "cpu_compute")
+        self.assertEqual(
+            contexts["login"]["stages"][-1],
+            "${WORKDIR}/cse-spack-stage/fran/fran-trial-001/login",
+        )
+        self.assertEqual(
+            contexts["compute"]["stages"][-1],
+            "${WORKDIR}/cse-spack-stage/fran/fran-trial-001/compute",
+        )
+        self.assertNotEqual(
+            contexts["login"]["stages"],
+            contexts["compute"]["stages"],
+        )
+
+    def test_known_noexec_stage_is_not_rendered(self) -> None:
+        manifest = {
+            "profile_facts": {
+                "node_types": {
+                    "login": {
+                        "build_stage": [
+                            {
+                                "path": "/tmp/tester",
+                                "writable": True,
+                                "mount_opts": ["rw", "noexec"],
+                            }
+                        ]
+                    },
+                    "cpu_compute": {"build_stage": []},
+                }
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as workdir:
+            with mock.patch.dict(
+                os.environ,
+                {"WORKDIR": workdir, "USER": "tester"},
+                clear=False,
+            ):
+                contexts = CREATE_BUILD_VALUES.build_contexts(
+                    manifest,
+                    system_name="fran",
+                    release="fran-trial-001",
+                )
+
+        self.assertEqual(
+            contexts["login"]["stages"],
+            ["${WORKDIR}/cse-spack-stage/fran/fran-trial-001/login"],
         )
 
 

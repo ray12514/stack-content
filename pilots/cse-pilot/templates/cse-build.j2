@@ -22,12 +22,24 @@ readonly CSE_RECORDED_INITIAL_SPACK_ROOT={{ values.spack.initial_root | yaml_sca
 ACTION="tmux"
 REQUESTED_SPACK_MODE="auto"
 REQUESTED_SURFACE="all"
+CSE_NODE_CONTEXT="${CSE_NODE_CONTEXT:-}"
 ACTION_SET=0
+CONTEXT_SET=0
 
 usage() {
   cat <<'EOF'
-Usage: ./cse-build [ACTION] [--spack-mode auto|shared|local]
+Usage: ./cse-build [login|compute] [ACTION]
+                   [--spack-mode auto|shared|local]
                    [--surface all|shared|platform]
+
+Node context:
+  login      Use the reviewed login-node stages, with an executable WORKDIR
+             fallback. Intended for bootstrap, concretize, and source fetch.
+  compute    Use the reviewed compute-node stages, with a separate executable
+             WORKDIR fallback. Intended for package installation.
+
+The context may appear before or after ACTION. A prepared shell inherits its
+context, so commands inside it do not need to repeat login or compute.
 
 Actions:
   tmux        Create or reattach the release build session (default).
@@ -68,6 +80,11 @@ note() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    login|compute)
+      [ "$CONTEXT_SET" -eq 0 ] || fail "only one node context may be selected"
+      CSE_NODE_CONTEXT="$1"
+      CONTEXT_SET=1
+      ;;
     tmux|shell|status|concretize|verify|fetch|install)
       [ "$ACTION_SET" -eq 0 ] || fail "only one action may be selected"
       ACTION="$1"
@@ -99,6 +116,12 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+
+case "$CSE_NODE_CONTEXT" in
+  login|compute) ;;
+  "") fail "select a node context: ./cse-build login or ./cse-build compute" ;;
+  *) fail "inherited node context must be login or compute: $CSE_NODE_CONTEXT" ;;
+esac
 
 case "$REQUESTED_SPACK_MODE" in
   auto|shared|local) ;;
@@ -144,6 +167,8 @@ esac
   "workspace setup is missing under $CSE_WORKSPACE_ROOT"
 [ -r "$CSE_WORKSPACE_ROOT/env/prepare-module-state.sh" ] || fail \
   "module-state preparation is missing under $CSE_WORKSPACE_ROOT"
+[ -r "$CSE_WORKSPACE_ROOT/env/select-build-context.sh" ] || fail \
+  "build-context selector is missing under $CSE_WORKSPACE_ROOT"
 [ -w "$CSE_WORKSPACE_ROOT" ] || fail \
   "workspace is not writable by $USER: $CSE_WORKSPACE_ROOT"
 
@@ -151,6 +176,10 @@ case " $(id -Gn) " in
   *" $CSE_RECORDED_GROUP "*) ;;
   *) fail "builder is not in required group $CSE_RECORDED_GROUP" ;;
 esac
+
+source "$CSE_WORKSPACE_ROOT/env/select-build-context.sh"
+cse_select_build_context "$CSE_NODE_CONTEXT" || fail \
+  "could not select an executable $CSE_NODE_CONTEXT build stage"
 
 readonly CSE_LOCAL_SPACK_ROOT="$HOME/STACK_TESTING/spack/$CSE_RECORDED_SPACK_VERSION"
 SELECTED_SPACK_MODE="$REQUESTED_SPACK_MODE"
@@ -281,9 +310,11 @@ fi
 verify_spack
 
 export SPACK_USER_STATE_ROOT="$WORKDIR/$USER/cse-spack/$CSE_RECORDED_SYSTEM/$CSE_RECORDED_SPACK_VERSION"
-export SPACK_USER_CACHE_PATH="$SPACK_USER_STATE_ROOT/cache/$REQUESTED_SURFACE"
+export SPACK_USER_CACHE_PATH="$SPACK_USER_STATE_ROOT/cache/$CSE_NODE_CONTEXT/$REQUESTED_SURFACE"
+export SPACK_BOOTSTRAP_ROOT="$SPACK_USER_STATE_ROOT/bootstrap"
 export SPACK_GNUPGHOME="$SPACK_USER_STATE_ROOT/gpg"
-install -d -m 0700 "$SPACK_USER_CACHE_PATH" "$SPACK_GNUPGHOME"
+install -d -m 0700 \
+  "$SPACK_USER_CACHE_PATH" "$SPACK_BOOTSTRAP_ROOT" "$SPACK_GNUPGHOME"
 
 source "$CSE_WORKSPACE_ROOT/env/prepare-module-state.sh"
 cse_prepare_module_state || fail \
@@ -331,13 +362,18 @@ checkpoint_summary() {
   printf 'System/release: %s / %s\n' \
     "$CSE_RECORDED_SYSTEM" "$CSE_RECORDED_RELEASE"
   printf 'Spack: %s (%s)\n' "$SPACK_ROOT" "$SELECTED_SPACK_MODE"
+  printf 'Node context: %s (%s)\n' \
+    "$CSE_NODE_CONTEXT" "$CSE_BUILD_NODE_TYPE"
+  printf 'Build stage: %s\n' "$CSE_BUILD_STAGE"
   printf 'Concrete locks: %s/%s\n' "$lock_count" "$CSE_ENVIRONMENT_COUNT"
   if [ "$lock_count" -eq 0 ]; then
-    printf 'Next action: ./cse-build concretize\n'
+    printf 'Next action: ./cse-build %s concretize\n' "$CSE_NODE_CONTEXT"
   elif [ "$lock_count" -eq "$CSE_ENVIRONMENT_COUNT" ]; then
-    printf 'Next actions: ./cse-build verify, fetch, or install\n'
+    printf 'Next actions: ./cse-build %s verify, fetch, or install\n' \
+      "$CSE_NODE_CONTEXT"
   else
-    printf 'Next action: ./cse-build concretize (only missing locks are created)\n'
+    printf 'Next action: ./cse-build %s concretize (only missing locks are created)\n' \
+      "$CSE_NODE_CONTEXT"
   fi
 }
 
@@ -456,7 +492,7 @@ case "$ACTION" in
       exec bash --noprofile \
         --rcfile "$CSE_WORKSPACE_ROOT/env/workspace-shell.rc" -i
     elif command -v tmux >/dev/null 2>&1; then
-      readonly CSE_TMUX_SESSION="cse-$CSE_RECORDED_SYSTEM-$CSE_RECORDED_RELEASE"
+      readonly CSE_TMUX_SESSION="cse-$CSE_RECORDED_SYSTEM-$CSE_RECORDED_RELEASE-$CSE_NODE_CONTEXT"
       note "creating or attaching tmux session $CSE_TMUX_SESSION"
       exec tmux new-session -A -s "$CSE_TMUX_SESSION" \
         -c "$CSE_WORKSPACE_ROOT" \

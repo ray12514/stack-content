@@ -94,20 +94,28 @@ compiler. The MPI scope names the physical product-tree flavor baseline, such
 as `gcc-12.3` or `cce-20.0`. The helper accepts that scope only when the selected
 compiler is from the same family and is at or above the baseline.
 
-The operator selects one reviewed build node type with
-`CSE_BUILD_NODE_TYPE`. The helper reads that node type's inspected stage facts
-from the catalog manifest, drops candidates that were unwritable, empty, or on
-a known `noexec` mount, and emits a complete ordered Spack fallback list:
+The helper records two reviewed execution contexts from the catalog manifest:
+`CSE_LOGIN_NODE_TYPE` (default `login`) and `CSE_COMPUTE_NODE_TYPE` (default
+`cpu_compute`). For each context it drops candidates that were unwritable,
+empty, or on a known `noexec` mount and adds a separate `${WORKDIR}` fallback.
+The generated `cse-build` command then tests candidates by executing a small
+probe before Spack starts. This catches site execution policy that is not
+visible in the reported mount options.
 
-1. writable temporary or node-local storage;
-2. other writable inspected scratch paths;
-3. `${WORKDIR}` as the final fallback.
+Use `./cse-build login` for the connected login-node session and
+`./cse-build compute` from the compute allocation. Each command creates or
+reattaches a context-specific tmux session. Direct actions may name the context
+as well: `./cse-build login concretize`, `./cse-build login fetch`, and
+`./cse-build compute install`. Commands launched inside a prepared session
+inherit its context.
 
-Each inspected path is namespaced by the current Spack user, system, and trial
-release. The generated setup script requires the builder's `WORKDIR` to be an
-absolute writable directory. This keeps the workspace portable between CSE
-builders while preventing an unset variable from becoming an unintended
-relative stage path.
+The two contexts use the same environments, lockfiles, install tree, source and
+misc caches, Spack bootstrap store, views, modules, and portable CPU target.
+Only the build stage and per-context mutable command cache differ. This lets a
+login-node concretization prepare Clingo once for later compute-node use. Each
+stage is namespaced by the current Spack user, system, trial release, and
+context. The generated setup requires an absolute writable `WORKDIR` and fails
+if no executable stage is available.
 
 Before this workspace exists, the operator resumes work through a separate
 operator-local session entry point. Run `scripts/create-operator-session.py`
@@ -149,9 +157,10 @@ Cluster Inspector, Stack Composer, this content repository, or the original
 static catalog. The generated `./cse-build` entry point selects or provisions
 the approved shared or builder-local Spack checkout, creates private per-user
 Spack state, restores the environment list and deployment configuration, and
-detects whether zero, some, or all lockfiles already exist. With no action it
-creates or reattaches a tmux session for the system and release; `shell` bypasses
-tmux, and the default falls back to a direct shell when tmux is unavailable.
+detects whether zero, some, or all lockfiles already exist. `login` and
+`compute` create or reattach separate context-specific tmux sessions; `shell`
+bypasses tmux, and the default falls back to a direct shell when tmux is
+unavailable.
 Its `concretize`
 action creates only missing locks; its `install` action verifies all locks and
 continues with `spack install --only-concrete`. Already installed hashes are
@@ -161,9 +170,9 @@ passes the cross-node prefix-lock test, one builder may split the work across
 two nodes with `install --surface shared` for GCC and
 `install --surface platform` for the selected platform compiler. Do not run
 both commands for the same surface, and do not let the per-process job budgets
-oversubscribe one node. The two processes receive separate surface-scoped
-`SPACK_USER_CACHE_PATH` directories while retaining the same locked package
-store and generated source/misc caches.
+oversubscribe one node. The two processes receive separate
+node-context/surface-scoped `SPACK_USER_CACHE_PATH` directories while retaining
+the same locked package store and generated source/misc caches.
 
 The selected package-build CMake is 3.31.12. CMake 4.4.2 is the second public
 version. The workspace overlay recipe adds those two versions to the pinned
@@ -172,7 +181,7 @@ version. The workspace overlay recipe adds those two versions to the pinned
 After all eight environments concretize, run:
 
 ```sh
-./cse-build verify
+./cse-build login verify
 ```
 
 The verifier checks repeated producer hashes, compiler-provider bindings,

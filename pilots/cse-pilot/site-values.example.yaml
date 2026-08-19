@@ -5,7 +5,17 @@ schema_version: 1
 workspace:
   role: build
 build:
-  node_type: cpu_compute
+  contexts:
+    login:
+      node_type: login
+      stages:
+        - $tempdir/${USER}/spack-stage/example-system/trial-001/login
+        - ${WORKDIR}/cse-spack-stage/example-system/trial-001/login
+    compute:
+      node_type: cpu_compute
+      stages:
+        - /scratch/${USER}/spack-stage/example-system/trial-001/compute
+        - ${WORKDIR}/cse-spack-stage/example-system/trial-001/compute
 architecture:
   # One target for every source-built root. The helper selects the highest
   # common portable target, capped at x86_64_v3. Platform externals retain
@@ -79,10 +89,6 @@ catalog_scopes:
 
 paths:
   install_tree: /shared/cse/initial-conversion-trials/restricted/releases/example-system/trial-001/spack/opt
-  build_stage:
-    - $tempdir/${USER}/spack-stage/example-system/trial-001
-    - /scratch/${USER}/spack-stage/example-system/trial-001
-    - ${WORKDIR}/cse-spack-stage/example-system/trial-001
   source_cache: /shared/cse/initial-conversion-trials/restricted/cache/source
   misc_cache: /shared/cse/initial-conversion-trials/restricted/cache/misc
   views_root: /shared/cse/initial-conversion-trials/restricted/releases/example-system/trial-001/views

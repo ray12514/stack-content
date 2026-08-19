@@ -3,9 +3,7 @@ config:
     root: {{ values.paths.install_tree | yaml_scalar }}
     padded_length: 128
   build_stage::
-{% for stage in values.paths.build_stage %}
-    - {{ stage | yaml_scalar }}
-{% endfor %}
+    - ${CSE_BUILD_STAGE}
   source_cache: {{ values.paths.source_cache | yaml_scalar }}
   misc_cache: {{ values.paths.misc_cache | yaml_scalar }}
   build_jobs: {{ values.build_jobs }}

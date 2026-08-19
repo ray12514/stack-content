@@ -4,18 +4,29 @@ Release: `{{ values.release }}`
 
 Workspace role: `{{ values.workspace.role }}`
 
-Reviewed build node type: `{{ values.build.node_type }}`
+Execution contexts:
+
+- login: `{{ values.build.contexts.login.node_type }}`
+- compute: `{{ values.build.contexts.compute.node_type }}`
 
 Portable CPU target: `{{ values.architecture.target }}`
 
 The target is shared by all eight environments and was validated against these
 build/runtime node types: `{{ values.architecture.node_types | join(', ') }}`.
-A node remains in this CPU compatibility check when it also has a GPU. Moving
-the build to another profiled node changes the stage selection, not the target.
+A node remains in this CPU compatibility check when it also has a GPU.
+Switching between login and compute changes operational stage/command-cache
+state, not the target or concrete DAG. The per-builder Spack bootstrap store is
+shared, so login-node concretization prepares Clingo for later compute-node use.
 
-Ordered build-stage fallbacks:
+Login build-stage candidates:
 
-{% for stage in values.paths.build_stage %}
+{% for stage in values.build.contexts.login.stages %}
+- `{{ stage }}`
+{% endfor %}
+
+Compute build-stage candidates:
+
+{% for stage in values.build.contexts.compute.stages %}
 - `{{ stage }}`
 {% endfor %}
 
@@ -42,12 +53,12 @@ Generated environment order (used by the sequential wrapper path):
 {% if values.workspace.role == 'build' %}
 Every GCC environment repeats the same compiler producer group. Every
 environment builds its own Foundation and Core/build-tool roots with its own
-compiler surface. Run `./cse-build concretize`; it creates missing locks and
+compiler surface. Run `./cse-build login concretize`; it creates missing locks and
 uses the approved Spack runtime to run `scripts/verify-lockfiles.py`. Do not
 install if verification reports different GCC hashes or incorrect language
 providers.
 
-The environment is the build execution unit. `./cse-build install` is the
+The environment is the build execution unit. `./cse-build compute install` is the
 simple sequential convenience path; it is not a scheduler. Concurrent
 installation is allowed only after the selected shared install tree passes the
 filesystem prefix-lock smoke test and all eight locks pass verification. The
@@ -88,16 +99,18 @@ builder does not need the tools that generated it and does not reconstruct the
 render inputs. From the workspace root, run:
 
 ```bash
-./cse-build
+./cse-build login
+./cse-build compute
 ```
 
 The generated command reads this workspace's recorded system, release,
 toolchains, deployment paths, environment list, and Spack runtime identity. It
 selects or provisions Spack, creates per-builder cache/keyring state, activates
 Spack and the workspace, detects the lock checkpoint, and creates or reattaches
-a release-specific tmux session. Running `./cse-build` again after a disconnect
-returns to that session. Use `./cse-build shell` for a prepared shell without
-tmux; if tmux is unavailable, the default command falls back to that shell.
+a context-specific tmux session. Running the matching command again after a
+disconnect returns to that session. Use `./cse-build login shell` or
+`./cse-build compute shell` for a prepared shell without tmux; if tmux is
+unavailable, the default command falls back to that shell.
 
 The approved Spack runtime is:
 
@@ -114,8 +127,8 @@ provisioned, it uses
 the identity above. To select one explicitly:
 
 ```bash
-./cse-build --spack-mode shared
-./cse-build --spack-mode local
+./cse-build login --spack-mode shared
+./cse-build compute --spack-mode local
 ```
 
 The same entry point supports `status`, `concretize`, `verify`, `fetch`, and
@@ -131,7 +144,7 @@ change the parent login shell.
 {% else %}
 ## Publication control
 
-`./cse-build status`, `verify`, `shell`, and the default tmux session are
+`./cse-build login status`, `verify`, `shell`, and the login tmux session are
 available for inspection. The generated command blocks `concretize`, `fetch`,
 and ordinary `install` actions in this publication workspace. Follow the CSE
 runbook for lock transfer, build-cache trust, cache-only installation, and

@@ -39,6 +39,24 @@ def render_text(template: str, **context: object) -> str:
 def values() -> dict:
     return {
         "architecture": {"target": "x86_64_v3", "binary_target": "x86_64"},
+        "build": {
+            "contexts": {
+                "login": {
+                    "node_type": "login",
+                    "stages": [
+                        "/unusable/login-stage",
+                        "${WORKDIR}/cse-spack-stage/raider/trial-001/login",
+                    ],
+                },
+                "compute": {
+                    "node_type": "cpu_compute",
+                    "stages": [
+                        "/unusable/compute-stage",
+                        "${WORKDIR}/cse-spack-stage/raider/trial-001/compute",
+                    ],
+                },
+            }
+        },
         "catalog_scopes": {"common": "scopes/common", "platform": None},
         "paths": {"views_root": "/views"},
         "shared": {
@@ -169,9 +187,89 @@ class ToolchainTemplateTests(unittest.TestCase):
             script,
         )
         self.assertIn(
-            'SPACK_USER_CACHE_PATH="$SPACK_USER_STATE_ROOT/cache/$REQUESTED_SURFACE"',
+            'SPACK_USER_CACHE_PATH="$SPACK_USER_STATE_ROOT/cache/'
+            '$CSE_NODE_CONTEXT/$REQUESTED_SURFACE"',
             script,
         )
+        self.assertIn(
+            'SPACK_BOOTSTRAP_ROOT="$SPACK_USER_STATE_ROOT/bootstrap"',
+            script,
+        )
+
+    def test_bootstrap_root_is_shared_across_node_contexts(self) -> None:
+        rendered = render(
+            "configs/common/bootstrap.yaml.j2",
+            values=values(),
+        )
+
+        self.assertEqual(
+            rendered,
+            {"bootstrap": {"root": "${SPACK_BOOTSTRAP_ROOT}"}},
+        )
+
+    def test_cse_build_selects_login_or_compute_context(self) -> None:
+        script = render_text(
+            "cse-build.j2",
+            values={
+                **values(),
+                "system": {"name": "raider"},
+                "release": "trial-001",
+                "workspace": {"role": "build"},
+                "permissions": {"group": "cse"},
+                "spack": {
+                    "source": "https://github.com/spack/spack.git",
+                    "version": "1.2.2",
+                    "tag": "v1.2.2",
+                    "commit": "a" * 40,
+                    "default_mode": "shared",
+                    "shared_root": "/tools/spack/1.2.2",
+                    "initial_root": "/tools/spack/1.2.2",
+                },
+            },
+        )
+
+        self.assertIn("[login|compute]", script)
+        self.assertIn('source "$CSE_WORKSPACE_ROOT/env/select-build-context.sh"', script)
+        self.assertIn('cse_select_build_context "$CSE_NODE_CONTEXT"', script)
+        self.assertIn(
+            'CSE_TMUX_SESSION="cse-$CSE_RECORDED_SYSTEM-'
+            '$CSE_RECORDED_RELEASE-$CSE_NODE_CONTEXT"',
+            script,
+        )
+
+    def test_context_selector_uses_distinct_workdir_fallbacks(self) -> None:
+        selector = render_text(
+            "env/select-build-context.sh.j2",
+            values=values(),
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            selector_path = Path(temp_dir) / "select-build-context.sh"
+            selector_path.write_text(selector, encoding="utf-8")
+            harness = r"""
+set -euo pipefail
+export USER=tester
+export WORKDIR="$1/work"
+mkdir -p "$WORKDIR"
+source "$2"
+cse_select_build_context login
+printf 'login=%s|%s\n' "$CSE_BUILD_NODE_TYPE" "$CSE_BUILD_STAGE"
+cse_select_build_context compute
+printf 'compute=%s|%s\n' "$CSE_BUILD_NODE_TYPE" "$CSE_BUILD_STAGE"
+"""
+            result = subprocess.run(
+                ["bash", "-c", harness, "bash", temp_dir, str(selector_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lines = result.stdout.splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertIn("login=login|", lines[0])
+        self.assertTrue(lines[0].endswith("/raider/trial-001/login"))
+        self.assertIn("compute=cpu_compute|", lines[1])
+        self.assertTrue(lines[1].endswith("/raider/trial-001/compute"))
 
     def test_preloaded_external_module_is_removed_before_spack_runs(self) -> None:
         script = render_text(

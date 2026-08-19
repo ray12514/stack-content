@@ -30,8 +30,28 @@ used in values files.
 | Shared CSE | GCC 12.5.0 | platform Cray MPICH 9.0.1 GNU flavor |
 | Platform | CCE 20.0.0 | platform Cray MPICH 9.0.1 CCE flavor |
 
-Build GCC 12.5.0 in the bootstrap environment. Cray MPICH, libfabric, and
-Cray PMI remain platform externals.
+Build the GCC 12.5.0 compiler producer inside each GCC-surface environment.
+Matching hashes let the shared store reuse it across those environments. Cray
+MPICH, libfabric, and Cray PMI remain platform externals.
+
+Use this reviewed Step 7 selection after the live catalog confirms the module
+chains and flavor prefixes:
+
+```bash
+export CSE_SHARED_COMPILER_REF="gcc@12.5.0"
+export CSE_SHARED_COMPILER_PUBLIC_NAME="init-GCC"
+export CSE_SHARED_MPI_REF="cray-mpich@9.0.1"
+export CSE_SHARED_MPI_SOURCE="external"
+export CSE_PLATFORM_COMPILER_REF="cce@20.0.0"
+export CSE_PLATFORM_COMPILER_PUBLIC_NAME="init-CCE"
+export CSE_PLATFORM_MPI_REF="cray-mpich@9.0.1"
+export CSE_PLATFORM_MPI_SOURCE="external"
+export BUILD_JOBS="<approved-job-count>"
+```
+
+The standard context keys are `login` and `cpu_compute`. Set
+`CSE_LOGIN_NODE_TYPE` or `CSE_COMPUTE_NODE_TYPE` only when Fran's catalog uses
+different keys.
 
 ## Required profile and catalog checks
 
@@ -42,6 +62,9 @@ Cray PMI remain platform externals.
 - Confirm each Cray MPICH static scope contains the matching Cray MPICH
   external and the inspected `cray-pmi` external.
 - Reject cross-CPE combinations even when individual modules load.
+- Do not manually preload `PrgEnv-gnu`, `PrgEnv-cray`, `gcc`, `cce`, or
+  `cray-mpich` before `cse-build`. The workspace's external package records
+  own the exact module chains.
 
 ## Current run record
 

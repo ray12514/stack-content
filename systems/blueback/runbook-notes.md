@@ -78,7 +78,6 @@ export CSE_PLATFORM_COMPILER_REF="cce@21.0.0"
 export CSE_PLATFORM_COMPILER_PUBLIC_NAME="init-CCE"
 export CSE_PLATFORM_MPI_REF="cray-mpich@9.1.0"
 export CSE_PLATFORM_MPI_SOURCE="external"
-export CSE_BUILD_NODE_TYPE="<reviewed-Blueback-build-node-type>"
 export BUILD_JOBS="<approved-job-count>"
 ```
 
@@ -88,11 +87,12 @@ compiler used to build GCC 12.5.0. If catalog review requires another installed
 compiler, set `CSE_SHARED_COMPILER_SEED_REF="<provider>@<version>"` explicitly.
 This seed compiler is separate from the Cray MPICH flavor selection.
 
-Choose `CSE_BUILD_NODE_TYPE` from the actual Blueback profile manifest. Use the
-compute-node key when the packages will be built in a compute allocation. The
-helper emits the reviewed node's writable temporary and scratch candidates,
-followed by the builder's `${WORKDIR}` fallback; no Blueback stage path is
-typed manually here.
+The standard profile keys are `login` and `cpu_compute`. Set
+`CSE_LOGIN_NODE_TYPE` or `CSE_COMPUTE_NODE_TYPE` only when the Blueback catalog
+uses different keys. The helper records both contexts. `./cse-build login`
+selects the reviewed login candidates and `./cse-build compute` selects the
+reviewed compute candidates; both retain a context-specific `${WORKDIR}`
+fallback.
 
 For MPI, the helper must select the GNU baseline scope for the CSE GCC surface
 and the CCE baseline scope for the CCE surface. For the provisional snapshot
@@ -104,6 +104,10 @@ scope and fails rather than substituting one surface's Cray MPICH prefix for
 the other.
 
 - Cray MPICH remains a non-buildable external at its live prefix.
+- Do not manually preload `PrgEnv-gnu`, `PrgEnv-cray`, `gcc`, `cce`, or
+  `cray-mpich` before entering through `cse-build`. The generated external
+  package records own the exact module chains and `cse-build` clears only a
+  selected provider module that was already loaded before Spack needs it.
 - Both Serial environments contain no MPI implementation.
 - Each MPI environment uses the Cray MPICH flavor matched to its compiler
   surface.

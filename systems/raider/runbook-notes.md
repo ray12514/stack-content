@@ -39,6 +39,25 @@ The existing OpenMPI module names AOCC 4.0.0 and therefore is not the selected
 AOCC 4.1.0 pairing. Build OpenMPI 4.1.8 with AOCC 4.1.0 for the platform MPI
 surface, and separately with the CSE GCC 12.5.0 surface.
 
+Use this reviewed Step 7 selection after the current catalog confirms the AOCC
+scope:
+
+```bash
+export CSE_SHARED_COMPILER_REF="gcc@12.5.0"
+export CSE_SHARED_COMPILER_PUBLIC_NAME="init-GCC"
+export CSE_SHARED_MPI_REF="openmpi@4.1.8"
+export CSE_SHARED_MPI_SOURCE="build"
+export CSE_PLATFORM_COMPILER_REF="aocc@4.1.0"
+export CSE_PLATFORM_COMPILER_PUBLIC_NAME="init-AOCC"
+export CSE_PLATFORM_MPI_REF="openmpi@4.1.8"
+export CSE_PLATFORM_MPI_SOURCE="build"
+export BUILD_JOBS="<approved-job-count>"
+```
+
+The standard context keys are `login` and `cpu_compute`. Set
+`CSE_LOGIN_NODE_TYPE` or `CSE_COMPUTE_NODE_TYPE` only when Raider's catalog
+uses different keys.
+
 ## Profile and catalog review additions
 
 In addition to the common runbook checks:
@@ -46,6 +65,17 @@ In addition to the common runbook checks:
 - reject false `/usr` GCC discoveries attached to unrelated library modules;
 - confirm compiler versions from driver output, not module names alone;
 - confirm the selected platform compiler prefix and full module chain.
+
+## Wrong-root recovery
+
+The trial root must be the directory that directly contains `restricted/` and
+`published/`, ending in `/initial-conversion-trials`. An earlier Raider session
+that used the parent CSE directory must not be resumed. Preserve the wrongly
+rooted tree while creating a corrected operator session and workspace. After
+the corrected workspace exists and verifies, inventory the old Raider catalog,
+workspace, locks, install database, and cache before removing only confirmed
+Raider-owned artifacts. Do not delete or move the shared parent
+`/p/app/CSE/restricted` as a unit.
 
 ## Restricted build and cache gates
 

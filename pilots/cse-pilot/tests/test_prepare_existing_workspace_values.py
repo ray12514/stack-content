@@ -19,6 +19,8 @@ SPEC.loader.exec_module(PREPARE_CONTROL_REFRESH_VALUES)
 
 def test_prepares_historical_values_for_current_control_render() -> None:
     historical = {
+        "system": {"name": "blueback"},
+        "release": "trial-001",
         "architecture": {
             "target": "x86_64_v3",
             "node_types": ["cpu_compute", "login"],
@@ -62,10 +64,23 @@ def test_prepares_historical_values_for_current_control_render() -> None:
         "cray-mpich@9.1.0"
     )
     assert prepared["architecture"]["binary_target"] == "x86_64"
-    assert prepared["paths"]["build_stage"] == [
-        "$tempdir/${USER}/spack-stage/blueback/trial-001",
-        "${WORKDIR}/cse-spack-stage/blueback/trial-001",
-    ]
+    assert "build_stage" not in prepared["paths"]
+    assert prepared["build"] == {
+        "contexts": {
+            "login": {
+                "node_type": "login",
+                "stages": [
+                    "${WORKDIR}/cse-spack-stage/blueback/trial-001/login"
+                ],
+            },
+            "compute": {
+                "node_type": "cpu_compute",
+                "stages": [
+                    "${WORKDIR}/cse-spack-stage/blueback/trial-001/compute"
+                ],
+            },
+        }
+    }
     assert prepared["permissions"] == {
         "group": "cse",
         "read": "group",
@@ -85,9 +100,12 @@ def test_prepares_historical_values_for_current_control_render() -> None:
 
 def test_preserves_reviewed_provider_constraint() -> None:
     values = {
+        "system": {"name": "raider"},
+        "release": "trial-001",
         "architecture": {
             "target": "x86_64_v3",
             "binary_target": "x86_64",
+            "node_types": ["login", "cpu_compute"],
         },
         "paths": {"build_stage": ["/scratch/${USER}/spack-stage"]},
         "permissions": {"group": "cse", "read": "group", "write": "group"},

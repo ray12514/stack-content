@@ -8,6 +8,8 @@ cd "$CSE_BUILD_WORKSPACE" || exit 2
 printf '\nCSE build workspace is active.\n'
 printf 'Workspace: %s\n' "$CSE_BUILD_WORKSPACE"
 printf 'Spack: %s\n' "$SPACK_ROOT"
+printf 'Node context: %s (%s)\n' "$CSE_NODE_CONTEXT" "$CSE_BUILD_NODE_TYPE"
+printf 'Build stage: %s\n' "$CSE_BUILD_STAGE"
 printf 'Run ./cse-build --help for status, concretize, fetch, and install actions.\n\n'
 
-PS1="[cse:{{ values.system.name }}:{{ values.release }}] ${PS1:-\\u@\\h:\\w\\$ }"
+PS1="[cse:{{ values.system.name }}:{{ values.release }}:$CSE_NODE_CONTEXT] ${PS1:-\\u@\\h:\\w\\$ }"

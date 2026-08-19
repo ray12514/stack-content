@@ -49,6 +49,15 @@ for _cse_path_name in WORK_ROOT CSE_TRIAL_ROOT CSE_TOOLS_ROOT \
 done
 unset _cse_path_name _cse_path_value
 
+case "$CSE_TRIAL_ROOT" in
+  */initial-conversion-trials) ;;
+  *)
+    _cse_session_error \
+      "CSE_TRIAL_ROOT must end in /initial-conversion-trials: $CSE_TRIAL_ROOT"
+    return 2
+    ;;
+esac
+
 if [[ -n "${SPACK_ENV:-}" ]]; then
   _cse_session_error "start from a shell with no active Spack environment: $SPACK_ENV"
   return 2

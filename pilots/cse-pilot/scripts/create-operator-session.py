@@ -168,7 +168,9 @@ def main() -> int:
 # export CSE_PLATFORM_COMPILER_PUBLIC_NAME="<front-door-name>"
 # export CSE_PLATFORM_MPI_REF="<provider>@<version>"
 # export CSE_PLATFORM_MPI_SOURCE="<external-or-build>"
-# export CSE_BUILD_NODE_TYPE="<reviewed-profile-node-type>"
+# Optional when the catalog does not use the standard node keys.
+# export CSE_LOGIN_NODE_TYPE="<reviewed-login-node-type>"
+# export CSE_COMPUTE_NODE_TYPE="<reviewed-cpu-compute-node-type>"
 # export BUILD_JOBS="<approved-job-count>"
 # Optional: export CSE_CPU_TARGET="x86_64_v2"
 # Optional: export CSE_SHARED_COMPILER_SEED_REF="gcc@<reviewed-version>"

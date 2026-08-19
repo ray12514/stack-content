@@ -73,17 +73,39 @@ def prepare_values(
         architecture["binary_target"] = GENERIC_BINARY_TARGETS[target]
 
     paths = _mapping(prepared.get("paths"), "paths")
-    build_stages = paths.get("build_stage")
-    if not isinstance(build_stages, list) or not build_stages:
-        raise InputError("paths.build_stage must be a non-empty YAML list")
-    valid_stages = all(
-        isinstance(stage, str) and stage.strip() for stage in build_stages
-    )
-    if not valid_stages:
-        raise InputError("every paths.build_stage entry must be a non-empty string")
-    paths["build_stage"] = [
-        stage.replace("$user/", "${USER}/") for stage in build_stages
-    ]
+    paths.pop("build_stage", None)
+
+    system = _mapping(prepared.get("system"), "system")
+    system_name = system.get("name")
+    release = prepared.get("release")
+    if not isinstance(system_name, str) or not system_name.strip():
+        raise InputError("system.name must be a non-empty string")
+    if not isinstance(release, str) or not release.strip():
+        raise InputError("release must be a non-empty string")
+    node_types = architecture.get("node_types")
+    if not isinstance(node_types, list):
+        raise InputError("architecture.node_types must be a list")
+    for required_node_type in ("login", "cpu_compute"):
+        if required_node_type not in node_types:
+            raise InputError(
+                "architecture.node_types must include login and cpu_compute"
+            )
+    prepared["build"] = {
+        "contexts": {
+            "login": {
+                "node_type": "login",
+                "stages": [
+                    f"${{WORKDIR}}/cse-spack-stage/{system_name}/{release}/login"
+                ],
+            },
+            "compute": {
+                "node_type": "cpu_compute",
+                "stages": [
+                    f"${{WORKDIR}}/cse-spack-stage/{system_name}/{release}/compute"
+                ],
+            },
+        }
+    }
 
     permissions = _mapping(prepared.get("permissions"), "permissions")
     permissions["read"] = "group"

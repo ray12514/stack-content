@@ -6,7 +6,7 @@ System: `{{ values.system.name }}`
 Release: `{{ values.release }}`
 
 This is the cache-only publication workspace. It is not the restricted source
-build handoff. `./cse-build status`, `verify`, `shell`, and the default tmux
+build handoff. `./cse-build login status`, `verify`, `shell`, and the login tmux
 session remain available for inspection. The command blocks `concretize`,
 `fetch`, and ordinary `install` actions here. Follow the CSE runbook to copy the
 approved restricted lockfiles, establish build-cache trust, and install with
@@ -36,7 +36,7 @@ an operator-session file before running the entry point.
 From the workspace root, run:
 
 ```bash
-./cse-build
+./cse-build login
 ```
 
 No system, release, compiler, MPI, catalog, install-tree, cache, view, module,
@@ -44,8 +44,9 @@ or environment values need to be entered. The command reads the values rendered
 into this workspace. It selects or provisions the exact approved Spack runtime,
 creates private state for the current builder, activates Spack and this
 workspace, reports the current lock checkpoint, and creates or reattaches a
-tmux session named for this system and release. Run the same command again after
-a disconnect to return to that session.
+tmux session named for this system, release, and login context. Run the same
+command again after a disconnect to return to that session. From a compute
+allocation, use `./cse-build compute` for an independent prepared session.
 
 For an explicit handoff to the recorded shared Spack checkout, use this first
 entry sequence:
@@ -55,21 +56,21 @@ entry sequence:
 cd "<absolute-shared-workspace-path>"
 test -r workspace-manifest.yaml
 test -x ./cse-build
-./cse-build status --spack-mode shared
+./cse-build login status --spack-mode shared
 ```
 
 If all eight lockfiles exist, run
-`./cse-build verify --spack-mode shared`. If any lock is missing, run
-`./cse-build concretize --spack-mode shared`; that action creates only missing
-locks and verifies the complete set. Then run
-`./cse-build --spack-mode shared` to create or reattach the prepared build
+`./cse-build login verify --spack-mode shared`. If any lock is missing, run
+`./cse-build login concretize --spack-mode shared`; that action creates only
+missing locks and verifies the complete set. Then run
+`./cse-build login --spack-mode shared` to create or reattach the prepared build
 session. On later logins, return to the same absolute path and run the last
 command again.
 
 To open the prepared shell without tmux, run:
 
 ```bash
-./cse-build shell
+./cse-build login shell
 ```
 
 If tmux is not installed, the default command reports that fact and opens the
@@ -91,8 +92,8 @@ cannot be provisioned by this builder, automatic mode provisions the local
 checkout instead. To choose explicitly:
 
 ```bash
-./cse-build --spack-mode shared
-./cse-build --spack-mode local
+./cse-build login --spack-mode shared
+./cse-build compute --spack-mode local
 ```
 
 Actions launched from the prepared session retain that session's selected
@@ -103,11 +104,11 @@ created, or partway through installation. These actions resume from the state
 already present:
 
 ```bash
-./cse-build status
-./cse-build concretize
-./cse-build verify
-./cse-build fetch
-./cse-build install
+./cse-build login status
+./cse-build login concretize
+./cse-build login verify
+./cse-build login fetch
+./cse-build compute install
 ```
 
 `concretize` creates only missing lockfiles. It does not replace existing
@@ -121,32 +122,34 @@ unchanged.
 
 The environment is the build execution unit. `cse-build` is a convenience
 entry point for preparing the shell and running common loops; it is not the
-build scheduler. `./cse-build install` processes all eight environments
-sequentially. If all locks have passed `./cse-build verify` and the real shared
-install tree has passed the cross-node prefix-lock test, the operator may split
-the two compiler surfaces across two build nodes:
+build scheduler. `./cse-build compute install` processes all eight environments
+sequentially. If all locks have passed `./cse-build login verify` and the real
+shared install tree has passed the cross-node prefix-lock test, the operator may
+split the two compiler surfaces across two build nodes:
 
 ```bash
 # Node 1: shared GCC surface, sequential within this surface
-./cse-build install --surface shared
+./cse-build compute install --surface shared
 
 # Node 2: platform-compiler surface, sequential within this surface
-./cse-build install --surface platform
+./cse-build compute install --surface platform
 ```
 
 Both commands use the same locked workspace and restricted install tree.
 Spack's prefix/database locks coordinate identical concrete hashes; the
 surface split keeps view, module refresh, and mutable per-user cache roots
-disjoint. The source/misc caches and package store remain shared. Do not run
-two commands for the same surface. `BUILD_JOBS` is a per-process budget, so
-two processes on one node would add their budgets together. `concretize` and
-`verify` remain whole-workspace gates and do not accept `--surface`.
+disjoint. The source/misc caches, per-builder bootstrap store, and package store
+remain shared. Run login concretization before moving to a network-restricted
+compute node so Clingo is already available. Do not run two commands for the
+same surface. `BUILD_JOBS` is a per-process budget, so two processes on one node
+would add their budgets together. `concretize` and `verify` remain
+whole-workspace gates and do not accept `--surface`.
 
 The operator may instead launch any distinct environment directly, on one node
 or across several nodes. Open a prepared shell for each process:
 
 ```bash
-./cse-build shell
+./cse-build compute shell
 
 environment="$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"
 environment_key="${environment//\//-}"
@@ -197,7 +200,7 @@ spack -e <environment> module tcl refresh --delete-tree -y
 ```
 
 The default session uses `tmux new-session -A` with the generated
-`cse-{{ values.system.name }}-{{ values.release }}` session name. Inspect
+`cse-{{ values.system.name }}-{{ values.release }}-<context>` session name. Inspect
 `./cse-build` at any time; it is generated plain Bash, not a compiled build
 engine.
 
