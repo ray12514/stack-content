@@ -237,6 +237,33 @@ grep -nE -B10 -A20 \
   "$CONFIG_LOG"
 ```
 
+If both stage probes pass, reproduce only the failed compiler check in Spack's
+concrete `gmake` build environment. This prints the wrapper, the underlying
+compiler selected through `SPACK_CC`, and the modules visible to that exact
+build environment:
+
+```bash
+GMAKE_ENV="$CSE_BUILD_WORKSPACE/environments/gcc/core"
+CC_PROBE="$CSE_BUILD_STAGE/.cse-gmake-compiler-probe-$$"
+
+if spack -e "$GMAKE_ENV" build-env gmake@4.4.1 -- bash -c '
+  set -x
+  printf "CC=%s\n" "${CC:-<unset>}"
+  printf "SPACK_CC=%s\n" "${SPACK_CC:-<unset>}"
+  printf "LOADEDMODULES=%s\n" "${LOADEDMODULES:-<unset>}"
+  printf "int main(void) { return 0; }\n" > "$1.c"
+  "$CC" --version
+  "$CC" -v "$1.c" -o "$1"
+  "$1"
+' bash "$CC_PROBE"; then
+  echo "gmake compiler environment: PASS"
+else
+  echo "gmake compiler environment: FAIL"
+fi
+
+rm -f "$CC_PROBE.c" "$CC_PROBE"
+```
+
 Interpret the result as follows:
 
 - If either execution probe fails, stop the build and preserve its log. The
@@ -248,6 +275,15 @@ Interpret the result as follows:
   error to diagnose the compiler, linker, runtime, or module environment; do
   not replace the workspace merely because configure printed its generic
   failure message.
+- If the `gmake` compiler-environment probe fails, preserve its complete
+  output. The `SPACK_CC` value and the compiler's own diagnostic distinguish an
+  incomplete external compiler module chain from a bad compiler path, a
+  wrapper problem, or a target/linker failure. Do not retry the full install
+  until that output identifies which input owns the correction.
+- If the `gmake` compiler-environment probe passes, the selected compiler and
+  stage work together outside the package configure step. Preserve the
+  original `config.log`; the failure is then specific to the package build
+  invocation rather than the prepared shell or stage.
 
 The script probe covers the common mount-policy failure. The copied executable
 probe also checks Blueback-specific execution controls that may allow a shell
