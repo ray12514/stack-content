@@ -409,11 +409,15 @@ grep -R -nA3 -B4 \
   'LD_LIBRARY_PATH:' \
   "$CSE_BUILD_WORKSPACE/catalog/scopes/mpi/cray-mpich"
 
-spack -e "$MPI_ENV" concretize --fresh -j 1
+spack -e "$MPI_ENV" concretize -f --reuse-deps -j 1
 spack -e "$MPI_ENV" install --only-concrete -j "$BUILD_JOBS" --fail-fast
 ```
 
 The grep must show the profile-selected Cray libfabric path before the retry.
+The `-f` option is required because the MPI roots already exist in the lock;
+`--fresh` alone changes reuse policy but does not replace an existing concrete
+root. `--reuse-deps` retains unchanged dependency hashes while the affected
+roots are regenerated.
 No rebuild of already completed Core, Common, or Serial packages is required;
 their concrete DAGs and installed prefixes did not depend on this external MPI
 activation metadata.
@@ -449,25 +453,50 @@ install -m 0660 -g "$CSE_GROUP" \
   "$DAKOTA_DESTINATION/"
 ```
 
-Freshly reconcretize only the shared MPI environment. The Dakota package hash
-must change because the source patch is part of its concrete identity; the
-already installed compiler, Foundation, build-tool, Boost, HDF5, NetCDF, FFTW,
-and other dependency hashes remain reusable.
+Force reconcretization of only the shared MPI environment. The Dakota package
+hash must change because the source patch is part of its concrete identity;
+the already installed compiler, Foundation, build-tool, Boost, HDF5, NetCDF,
+FFTW, and other dependency hashes remain reusable. `--fresh` is not sufficient
+for this recovery: it does not replace roots already recorded in `spack.lock`.
 
 ```bash
 environment="$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"
 MPI_ENV="$CSE_BUILD_WORKSPACE/environments/$environment"
 
-spack -e "$MPI_ENV" concretize --fresh -j 1
+spack -e "$MPI_ENV" repo list
+spack -e "$MPI_ENV" find -cl dakota
+spack -e "$MPI_ENV" concretize -f --reuse-deps -j 1
+spack -e "$MPI_ENV" find -cl dakota
+
+cd "$CSE_BUILD_WORKSPACE"
+./cse-build compute verify
+
 spack -e "$MPI_ENV" install --only-concrete \
   -j "$BUILD_JOBS" --fail-fast \
   dakota@6.23.0 dakota@6.24.0
 ```
 
+The repository list must place `cse_trials` before `builtin`. Compare the two
+`find -cl` results: both Dakota hashes must change. If concretization reports
+`No new specs to concretize` and retains the old hashes, stop; the patch is not
+in the concrete roots. A controlled Spack 1.2.2 replay verified that
+`-f --reuse-deps` changes the patched Dakota roots while retaining every
+unchanged dependency hash.
+
 The final CMake configure must continue finding the approved Boost 1.90.0
 prefix, but it must no longer request `boost_systemConfig.cmake`. Do not create
 a fake Boost.System package, change global CMake lookup policy, or remove the
 remaining Program Options, Regex, or Serialization components.
+
+If the configure log reports an `MPIEXEC` under an unrelated site MPI such as
+`/usr/lib64/mpi/gcc/mvapich2`, record it as a separate launcher-selection
+failure. The selected `MPI_CXX_COMPILER` and MPI libraries must still resolve
+to the lane's Cray MPICH flavor. An ambient launcher does not explain the
+Boost.System failure, but it must not be used for configure run tests or final
+MPI validation. Do not filter all of `/usr`, add a Blueback-only source patch,
+or assume that the MPI library prefix provides the site launcher. The durable
+policy is an explicit launcher command selected from the rendered MPI and
+scheduler policy.
 
 ### Build-stage execution diagnosis
 
