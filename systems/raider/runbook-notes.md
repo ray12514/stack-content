@@ -409,7 +409,7 @@ export RAIDER_SOURCE_CACHE="$(
   spack -e "$RAIDER_FETCH_ENV" python -c \
     'import spack.config; print(spack.config.get("config:source_cache"))'
 )"
-export RAIDER_READLINE_CACHE_DIR="$RAIDER_SOURCE_CACHE/archive/${RAIDER_READLINE_PATCH_SHA:0:2}"
+export RAIDER_READLINE_CACHE_DIR="$RAIDER_SOURCE_CACHE/_source-cache/archive/${RAIDER_READLINE_PATCH_SHA:0:2}"
 export RAIDER_READLINE_CACHE_FILE="$RAIDER_READLINE_CACHE_DIR/$RAIDER_READLINE_PATCH_SHA"
 export RAIDER_READLINE_PART_FILE="$RAIDER_READLINE_CACHE_FILE.$$.part"
 
@@ -431,10 +431,16 @@ chmod 0660 "$RAIDER_READLINE_CACHE_FILE"
 ./cse-build login fetch
 ```
 
-The preliminary miss below the private build cache's `_source-cache` namespace
-is expected when that mirror does not yet contain the patch. After the command
-above, Spack reads the checksum-addressed file from the configured restricted
-source cache. Previously downloaded archives remain cached and are reused.
+The generated `config:source_cache` value names the cache root. Spack 1.2.2
+places checksum-addressed artifacts below that root's
+`_source-cache/archive/<digest-prefix>/` mirror layout. Do not omit the
+`_source-cache` path component when seeding a single artifact.
+
+The preliminary miss below the private build cache's separate `_source-cache`
+namespace is expected when that mirror does not yet contain the patch. After
+the command above, Spack reads the checksum-addressed file from the configured
+restricted source cache. Previously downloaded archives remain cached and are
+reused.
 
 ## Restricted build and cache gates
 
