@@ -1,0 +1,23 @@
+diff --git a/cmake/DakotaFindSystemTPLs.cmake b/cmake/DakotaFindSystemTPLs.cmake
+--- a/cmake/DakotaFindSystemTPLs.cmake
++++ b/cmake/DakotaFindSystemTPLs.cmake
+@@ -12,7 +12,7 @@ macro(dakota_find_boost)
+ 
+   # Dakota requires the specified compiled Boost library components
+   # Dakota requires Boost 1.70 or newer ; enforce for all libs in the build
+-  set(dakota_boost_libs program_options regex serialization system)
++  set(dakota_boost_libs program_options regex serialization)
+ 
+   if(DAKOTA_APPLE_FIX_BOOSTLIBS)
+     # This approach requires separate include and lib dirs
+@@ -38,8 +38,8 @@ macro(dakota_find_boost)
+   find_package(Boost 1.70 REQUIRED COMPONENTS ${dakota_boost_libs})
+   #message(STATUS "Found Boost version ${Boost_VERSION}")
+ 
+-  set(DAKOTA_BOOST_TARGETS Boost::boost Boost::program_options
+-    Boost::regex Boost::serialization Boost::system)
++  set(DAKOTA_BOOST_TARGETS Boost::boost Boost::program_options Boost::regex
++    Boost::serialization)
+ 
+   set(dakota_boost_libs "${dakota_boost_libs}" CACHE STRING "")
+   set(dakota_boost_version "${Boost_VERSION_MAJOR}.${Boost_VERSION_MINOR}.${Boost_VERSION_PATCH}" CACHE STRING "")
