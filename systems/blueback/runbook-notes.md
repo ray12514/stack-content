@@ -234,9 +234,9 @@ env |
 ```
 
 If the GNU-specific values are absent or do not select
-`9.1.0/ofi/gnu/12.3`, reload only Cray MPICH with the GNU family selector. Do
-not load the complete `PrgEnv-gnu` module because it can replace the CSE GCC
-12.5 compiler with the site-default compiler.
+`9.1.0/ofi/gnu/12.3`, reload only Cray MPICH with the GNU family selector for
+the manual wrapper probe. Do not load the complete `PrgEnv-gnu` module because
+it can replace the CSE GCC 12.5 compiler with the site-default compiler.
 
 ```bash
 module unload cray-mpich/9.1.0 2>/dev/null || true
@@ -267,14 +267,34 @@ Only a zero probe status authorizes the retry. The same locked environment and
 shared store retain completed packages and retry the failed FFTW roots:
 
 ```bash
+module unload cray-mpich/9.1.0 2>/dev/null || true
+
 environment="$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"
 environment_key="${environment//\//-}"
 export SPACK_USER_CACHE_PATH="$SPACK_USER_STATE_ROOT/cache/$environment_key"
 install -d -m 0700 "$SPACK_USER_CACHE_PATH"
 
+export PE_ENV=GNU
 spack -e "$CSE_BUILD_WORKSPACE/environments/$environment" \
   install --only-concrete -j "$BUILD_JOBS" --fail-fast
+install_status=$?
+unset PE_ENV
+
+printf 'MPI environment install status: %s\n' "$install_status"
 ```
+
+Leave `cray-mpich/9.1.0` unloaded before invoking Spack, and keep `PE_ENV=GNU`
+set until the Spack command returns. Spack 1.2.2 removes the standard
+compiler and library search variables for a normal clean build, but it does
+not remove this Cray family selector. Spack then loads the locked external
+module under the GNU family before applying its own compiler-wrapper
+environment for CSE GCC 12.5. Preloading `cray-mpich` can also cause Spack's
+module-load check to fail because the loaded-module list does not change.
+
+Do not add `--dirty`. The clean build environment plus the explicit provider
+selector is intentional. For the CCE lane, the equivalent selector is
+`PE_ENV=CRAY`; the generic Cray provider policy must supply the selector that
+matches each selected compiler family.
 
 If the wrapper probe still fails, preserve the first linker diagnostic instead
 of retrying the full install:
