@@ -88,6 +88,14 @@ from `stack-planning/docs/`.
 Record only scheduler allocations, transfers, environment activation, or other
 commands that differ from the canonical runbook.
 
+During an active system trial, put the exact system-specific diagnostic or
+recovery commands in this file before handing them to an operator. Label an
+unverified action as a diagnosis or proposed test, include the expected
+pass/fail evidence, and replace it with the confirmed recovery only after the
+target-system result is known. Required operating commands must not exist only
+in chat or in an untracked note. Promote a reusable procedure to the canonical
+runbook after it has been validated across the applicable system family.
+
 ## Acceptance status
 
 - [ ] Profile verified against the live system

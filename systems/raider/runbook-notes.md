@@ -442,6 +442,56 @@ the command above, Spack reads the checksum-addressed file from the configured
 restricted source cache. Previously downloaded archives remain cached and are
 reused.
 
+## Dakota 6.24 Boost diagnosis (2026-08-20)
+
+Raider reached Dakota 6.24 configuration with both `MPI_CXX_LIBRARIES` and
+`MPIEXEC` under the CSE-built OpenMPI 4.1.8 prefix, and CMake reported Boost
+1.90.0. The visible CMP0144 and CMP0167 messages are developer warnings; they
+are not the fatal error. This differs from the earlier ambient-MPI failure in
+which CMake selected an implementation below `/usr/lib64/mpi`.
+
+The CSE trial overlay applies `boost-system-header-only.patch` to Dakota
+6.23.0 and 6.24.0. Before changing the spec or reconcretizing again, verify the
+actual staged source and capture the fatal end of the build log:
+
+```bash
+cd "$BUILD_WORKSPACE"
+./cse-build compute
+
+export RAIDER_DAKOTA_STAGE="$(
+  ls -td "$CSE_BUILD_STAGE"/spack-stage-dakota-6.24.0-* 2>/dev/null \
+    | head -1
+)"
+
+printf 'RAIDER_DAKOTA_STAGE=%s\n' "$RAIDER_DAKOTA_STAGE"
+test -n "$RAIDER_DAKOTA_STAGE"
+test -d "$RAIDER_DAKOTA_STAGE/spack-src"
+
+grep -RFn 'Boost::system' \
+  "$RAIDER_DAKOTA_STAGE/spack-src/cmake/DakotaFindSystemTPLs.cmake" \
+  "$RAIDER_DAKOTA_STAGE/spack-src/src/plugins/CMakeLists.txt" \
+  "$RAIDER_DAKOTA_STAGE/spack-src/src/surrogates/unit/CMakeLists.txt" \
+  || true
+
+tail -n 150 "$RAIDER_DAKOTA_STAGE/spack-build-out.txt"
+```
+
+Interpret the result as follows:
+
+- No `Boost::system` matches means all three known Dakota call sites were
+  patched. Diagnose the final error in `spack-build-out.txt`; do not treat the
+  policy warnings as the failure.
+- Any `Boost::system` match means the staged source is unpatched or only
+  partially patched. Stop the install and verify that the `cse_trials` package
+  repository precedes the builtin repository before creating a fresh Dakota
+  concrete hash.
+- If the stage or log is missing, preserve the failed install output and use
+  its reported Dakota stage path. Do not guess at a different stage.
+
+Record the grep output, the final 150 log lines, the Dakota concrete hash, and
+the active `cse_trials` repository path in the Raider trial evidence before
+selecting the next recovery action.
+
 ## Restricted build and cache gates
 
 - Both compiler surfaces and both CSE-built OpenMPI toolchains must be explicit
