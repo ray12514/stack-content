@@ -29,8 +29,8 @@ class PackageRepoOverlayTests(unittest.TestCase):
         )
 
     @unittest.skipUnless(shutil.which("patch"), "patch is not installed")
-    def test_dakota_patch_removes_only_removed_boost_system_component(self) -> None:
-        source = """\
+    def test_dakota_patch_removes_all_removed_boost_system_references(self) -> None:
+        find_system_tpls_source = """\
 macro(dakota_find_boost)
 
   if(WIN32)
@@ -73,12 +73,56 @@ macro(dakota_find_boost)
   set(dakota_boost_version "${Boost_VERSION_MAJOR}.${Boost_VERSION_MINOR}.${Boost_VERSION_PATCH}" CACHE STRING "")
 endmacro()
 """
+        plugins_source = """\
+set_target_properties(generic_python_plugin PROPERTIES CXX_STANDARD 17)
+set_target_properties(generic_python_plugin PROPERTIES CXX_VISIBILITY_PRESET hidden)
+
+find_package(Boost 1.70 REQUIRED COMPONENTS system)
+# handle special case for gcc filesystem support
+if((CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0) OR DAKOTA_LINK_STDCPPFS)
+  target_link_libraries(generic_python_plugin
+    PUBLIC Boost::system stdc++fs
+    PRIVATE pybind11::embed Python::Python
+  )
+else()
+    target_link_libraries(generic_python_plugin
+      PUBLIC Boost::system
+      PRIVATE pybind11::embed Python::Python
+    )
+endif()
+"""
+        surrogates_unit_source = """\
+endif()
+
+dakota_add_unit_test(NAME surrogates_polynomial_regression
+  SOURCES PolynomialRegressionTest.cpp
+  LINK_LIBS dakota_surrogates Boost::system )
+
+dakota_add_unit_test(NAME surrogates_tools
+  SOURCES SurrogatesToolsTest.cpp
+
+if(DAKOTA_PYTHON_SURROGATES)
+
+  dakota_add_unit_test(NAME surrogates_python_pybind11
+    SOURCES PythonSurrogatesTest.cpp
+    LINK_LIBS dakota_surrogates Boost::system )
+  # Rationale: This includes Teuchos headers and needs to link to the
+  # ParameterList components. It also includes SurrogatesPython.hpp, which
+  # depends on pybind11 headers that are build-only details of dakota_surrogates.
+"""
         patch_path = PACKAGE_ROOT / "dakota" / "boost-system-header-only.patch"
 
         with tempfile.TemporaryDirectory() as temporary:
-            source_path = Path(temporary) / "cmake" / "DakotaFindSystemTPLs.cmake"
-            source_path.parent.mkdir()
-            source_path.write_text(source, encoding="utf-8")
+            source_root = Path(temporary)
+            sources = {
+                Path("cmake/DakotaFindSystemTPLs.cmake"): find_system_tpls_source,
+                Path("src/plugins/CMakeLists.txt"): plugins_source,
+                Path("src/surrogates/unit/CMakeLists.txt"): surrogates_unit_source,
+            }
+            for relative_path, contents in sources.items():
+                source_path = source_root / relative_path
+                source_path.parent.mkdir(parents=True, exist_ok=True)
+                source_path.write_text(contents, encoding="utf-8")
             result = subprocess.run(
                 ["patch", "-p1", "--input", str(patch_path)],
                 cwd=temporary,
@@ -86,16 +130,30 @@ endmacro()
                 text=True,
                 capture_output=True,
             )
-            patched = source_path.read_text(encoding="utf-8")
+            patched_sources = {
+                relative_path: (source_root / relative_path).read_text(encoding="utf-8")
+                for relative_path in sources
+            }
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(
-            "set(dakota_boost_libs program_options regex serialization)", patched
+            "set(dakota_boost_libs program_options regex serialization)",
+            patched_sources[Path("cmake/DakotaFindSystemTPLs.cmake")],
         )
-        self.assertIn("Boost::serialization)", patched)
-        self.assertNotIn("Boost::system", patched)
-        self.assertIn("Boost::program_options", patched)
-        self.assertIn("Boost::regex", patched)
+        self.assertIn(
+            "Boost::serialization)",
+            patched_sources[Path("cmake/DakotaFindSystemTPLs.cmake")],
+        )
+        self.assertIn(
+            "Boost::program_options",
+            patched_sources[Path("cmake/DakotaFindSystemTPLs.cmake")],
+        )
+        self.assertIn(
+            "Boost::regex",
+            patched_sources[Path("cmake/DakotaFindSystemTPLs.cmake")],
+        )
+        for relative_path, patched in patched_sources.items():
+            self.assertNotIn("Boost::system", patched, str(relative_path))
 
 
 if __name__ == "__main__":
