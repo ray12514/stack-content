@@ -218,12 +218,13 @@ Cray MPICH GNU flavor but FFTW configure reports all of the following:
 - the `MPI_Init`, `-lmpi`, and `-lmpich` link probes fail; and
 - configure ends with `could not find mpi library for --enable-mpi`.
 
-This is an external-module activation or link-environment failure. It is not a
-reason to reconcretize, edit `spack.yaml`, or replace the Cray MPICH external.
-The `cray-mpich` module uses the selected Cray programming-environment family
-to establish `CRAY_MPICH_PREFIX`, `CRAY_MPICH_DIR`, `MPICH_DIR`, MPI search
-paths, and `CRAY_LD_LIBRARY_PATH`. The accelerator-specific `PE_MPICH_GTL_*`
-values are not required for the CPU-only trial lane.
+This is a difference between the interactive module environment and Spack's
+clean package build environment. It is not, by itself, a reason to
+reconcretize, edit `spack.yaml`, or replace the Cray MPICH external. The
+`cray-mpich` module uses the selected Cray programming-environment family to
+establish `CRAY_MPICH_PREFIX`, `CRAY_MPICH_DIR`, `MPICH_DIR`, MPI search paths,
+and `CRAY_LD_LIBRARY_PATH`. The accelerator-specific `PE_MPICH_GTL_*` values
+are not required for the CPU-only trial lane.
 
 Remain in the prepared `cse-build compute` shell. First inspect the active
 selection:
@@ -235,8 +236,9 @@ env |
 
 If the GNU-specific values are absent or do not select
 `9.1.0/ofi/gnu/12.3`, reload only Cray MPICH with the GNU family selector for
-the manual wrapper probe. Do not load the complete `PrgEnv-gnu` module because
-it can replace the CSE GCC 12.5 compiler with the site-default compiler.
+an interactive control probe. Do not load the complete `PrgEnv-gnu` module
+because it can replace the CSE GCC 12.5 compiler with the site-default
+compiler.
 
 ```bash
 module unload cray-mpich/9.1.0 2>/dev/null || true
@@ -263,61 +265,96 @@ rm -f "$MPI_PROBE.c" "$MPI_PROBE"
 printf 'MPI probe status: %s\n' "$probe_status"
 ```
 
-Only a zero probe status authorizes the retry. The same locked environment and
-shared store retain completed packages and retry the failed FFTW roots:
+The interactive probe is only a control. A zero status proves that the prefix
+and native wrapper work in the current shell; it does not prove that Spack's
+clean FFTW build environment contains the same compiler and link state. Do not
+retry the full install by exporting `PE_ENV=GNU` around `spack install`: that
+selector is necessary for the GNU flavor, but Blueback testing showed that it
+is not sufficient to make FFTW link `MPI_Init`.
+
+Reproduce the failed link inside the exact locked FFTW build environment. The
+following block derives the concrete FFTW hash from its retained stage, prints
+only the variables relevant to the compiler/MPI boundary, shows the native
+wrapper command, and compiles one MPI program through the same Spack build
+environment:
 
 ```bash
-module unload cray-mpich/9.1.0 2>/dev/null || true
-
 environment="$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"
-environment_key="${environment//\//-}"
-export SPACK_USER_CACHE_PATH="$SPACK_USER_STATE_ROOT/cache/$environment_key"
-install -d -m 0700 "$SPACK_USER_CACHE_PATH"
-
-export PE_ENV=GNU
-spack -e "$CSE_BUILD_WORKSPACE/environments/$environment" \
-  install --only-concrete -j "$BUILD_JOBS" --fail-fast
-install_status=$?
-unset PE_ENV
-
-printf 'MPI environment install status: %s\n' "$install_status"
-```
-
-Leave `cray-mpich/9.1.0` unloaded before invoking Spack, and keep `PE_ENV=GNU`
-set until the Spack command returns. Spack 1.2.2 removes the standard
-compiler and library search variables for a normal clean build, but it does
-not remove this Cray family selector. Spack then loads the locked external
-module under the GNU family before applying its own compiler-wrapper
-environment for CSE GCC 12.5. Preloading `cray-mpich` can also cause Spack's
-module-load check to fail because the loaded-module list does not change.
-
-Do not add `--dirty`. The clean build environment plus the explicit provider
-selector is intentional. For the CCE lane, the equivalent selector is
-`PE_ENV=CRAY`; the generic Cray provider policy must supply the selector that
-matches each selected compiler family.
-
-If the wrapper probe still fails, preserve the first linker diagnostic instead
-of retrying the full install:
-
-```bash
-FFTW_LOG="$(
+MPI_ENV="$CSE_BUILD_WORKSPACE/environments/$environment"
+MPI_CONFIG_LOG="$(
   find "$CSE_BUILD_STAGE" \
     -type f \
     -path '*spack-stage-fftw-3.3.11-*/spack-src/config.log' \
     -print |
     tail -1
 )"
+MPI_STAGE_NAME="$(
+  printf '%s\n' "$MPI_CONFIG_LOG" |
+    tr '/' '\n' |
+    grep -E '^spack-stage-fftw-3[.]3[.]11-[[:alnum:]]+$' |
+    tail -1
+)"
 
-printf 'FFTW config log: %s\n' "$FFTW_LOG"
-grep -nE -B12 -A35 \
-  'checking for mpicc|checking for MPI_Init|cannot find|undefined reference|collect2:|ld:|error:' \
-  "$FFTW_LOG"
+if [ -z "$MPI_STAGE_NAME" ]; then
+  echo "could not derive the failed FFTW stage from: $MPI_CONFIG_LOG" >&2
+else
+  MPI_HASH="${MPI_STAGE_NAME#spack-stage-fftw-3.3.11-}"
+  MPI_BUILD_PROBE="$CSE_BUILD_STAGE/.cse-fftw-mpi-build-probe-$$"
+
+  printf 'FFTW config log: %s\n' "$MPI_CONFIG_LOG"
+  printf 'failed FFTW hash: %s\n' "$MPI_HASH"
+
+  module unload cray-mpich/9.1.0 2>/dev/null || true
+  export PE_ENV=GNU
+
+  spack -e "$MPI_ENV" build-env "/$MPI_HASH" -- bash -c '
+    set -x
+    env | grep -E \
+      "^(PE_ENV|CRAY_MPICH_(BASEDIR|PREFIX|DIR)|MPICH_DIR|CRAY_LD_LIBRARY_PATH|LD_LIBRARY_PATH|LIBRARY_PATH|CC|SPACK_CC|MPICC)=" \
+      | sort
+    command -v mpicc
+    "$MPICC" -show 2>/dev/null || "$MPICC" --showme 2>/dev/null || true
+    printf "#include <mpi.h>\nint main(int argc,char **argv){MPI_Init(&argc,&argv);MPI_Finalize();return 0;}\n" \
+      > "$1.c"
+    "$MPICC" -v "$1.c" -o "$1"
+    "$1"
+  ' bash "$MPI_BUILD_PROBE"
+  build_probe_status=$?
+
+  unset PE_ENV
+  rm -f "$MPI_BUILD_PROBE.c" "$MPI_BUILD_PROBE"
+  printf 'Spack FFTW build-environment MPI probe status: %s\n' \
+    "$build_probe_status"
+fi
 ```
 
-The permanent correction belongs in the generic Cray provider activation
-policy: select the compiler family while activating the exact Cray MPICH
-module, without loading a conflicting `PrgEnv-*` compiler module. Do not turn
-this Blueback recovery into an FFTW package override.
+Preserve the first linker diagnostic from this probe and the matching FFTW
+configure excerpt:
+
+```bash
+grep -nE -B12 -A35 \
+  'checking for mpicc|checking for MPI_Init|cannot find|undefined reference|collect2:|ld:|error:' \
+  "$MPI_CONFIG_LOG"
+```
+
+Interpret the result before changing policy:
+
+- If `MPICC`, `PE_ENV`, or the `CRAY_MPICH_*` values select the wrong flavor,
+  correct generic external-provider activation.
+- If the wrapper's shown command selects the wrong underlying compiler,
+  correct the compiler-to-MPI toolchain binding; do not add an FFTW override.
+- If the wrapper selects the intended compiler but the linker cannot resolve a
+  Cray MPI dependency, compare the printed clean-build library variables with
+  the interactive control and carry only the provider-owned link state needed
+  by the external.
+- If this exact build-environment probe passes while FFTW configure fails, the
+  remaining fault is in how the FFTW recipe invokes MPI rather than in the
+  external provider activation.
+
+Do not add `--dirty`. The permanent fix must work in Spack's normal clean build
+environment. Do not encode `PE_ENV=GNU` as a Blueback- or FFTW-specific rule;
+the generic Cray provider policy must derive the compiler-family selector and
+provider-owned link state from the selected compiler/Cray MPICH pairing.
 
 ### Build-stage execution diagnosis
 
