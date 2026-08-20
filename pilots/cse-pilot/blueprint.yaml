@@ -26,6 +26,7 @@ required_values:
   - shared.compiler.modules
   - shared.compiler.build_with.name
   - shared.compiler.build_with.version
+  - shared.compiler.build_with.modules
   - shared.catalog_scopes.compiler
   - shared.mpi.name
   - shared.mpi.version

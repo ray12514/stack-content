@@ -162,6 +162,11 @@ Use the operator session through profile/catalog/value preparation, then use
 `<workspace>/cse-build` for concretize, fetch, install, verify, and builder
 handoff. It is executable Bash and can be run directly from a default `tcsh`
 login; it must not be sourced. The two scripts do not overlap in ownership.
+Before Spack starts, `cse-build` removes any ambient Cray `PrgEnv-*` module and
+clears `PE_ENV`. The reviewed external compiler module chain then establishes
+the correct programming environment when Spack activates that compiler. This
+prevents a login-node default such as `PE_ENV=CRAY` from making a GCC build
+select CCE-only compiler flags.
 
 The complete workspace is also the builder-resume boundary. It records the
 approved Spack source, version, tag, and commit and contains the selected

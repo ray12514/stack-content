@@ -739,6 +739,7 @@ def main() -> int:
                     "build_with": {
                         "name": shared_seed_name,
                         "version": shared_seed_version,
+                        "modules": module_map.get(shared_seed_scope_path, []),
                     },
                 },
                 "mpi": shared_mpi,

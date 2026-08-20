@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 
 # Spack 1.2.2 treats loading an already-loaded external module as a failure
-# because LOADEDMODULES does not change. Remove only the selected external
-# compiler/MPI modules from this cse-build process before Spack activates them.
-# The parent login shell is unchanged because cse-build is executed, not sourced.
+# because LOADEDMODULES does not change. Remove selected external modules and a
+# conflicting ambient Cray programming environment from this cse-build process
+# before Spack activates the reviewed module chain. The parent login shell is
+# unchanged because cse-build is executed, not sourced.
 CSE_EXTERNAL_MODULES=(
 {% for module in values.shared.compiler.modules %}
+  {{ module | yaml_scalar }}
+{% endfor %}
+{% for module in values.shared.compiler.build_with.modules %}
   {{ module | yaml_scalar }}
 {% endfor %}
 {% for module in values.shared.mpi.modules %}
@@ -28,8 +32,25 @@ cse_module_is_loaded() {
   esac
 }
 
+cse_catalog_uses_cray_programming_environments() {
+  local external_module
+  for external_module in "${CSE_EXTERNAL_MODULES[@]}"; do
+    case "${external_module%%/*}" in
+      PrgEnv-*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
 cse_prepare_module_state() {
-  local external_module found=0
+  local external_module loaded_module found=0
+
+  # PE_ENV is a compiler-family marker used by upstream build systems. A Cray
+  # login default can leave PE_ENV=CRAY in a process that Spack later drives
+  # with GCC, causing packages such as LAPACK to select CCE-only flags. Start
+  # neutral; an external compiler's reviewed module chain will establish the
+  # correct marker when Spack activates that compiler.
+  unset PE_ENV
 
   for external_module in "${CSE_EXTERNAL_MODULES[@]}"; do
     if cse_module_is_loaded "$external_module"; then
@@ -37,11 +58,31 @@ cse_prepare_module_state() {
       break
     fi
   done
+
+  if cse_catalog_uses_cray_programming_environments; then
+    while IFS= read -r loaded_module; do
+      case "${loaded_module%%/*}" in
+        PrgEnv-*) found=1 ;;
+      esac
+    done < <(tr ':' '\n' <<<"${LOADEDMODULES:-}")
+  fi
   [ "$found" -eq 1 ] || return 0
 
   if ! type module >/dev/null 2>&1; then
     printf 'cse-build: configured external module is loaded, but the module command is unavailable\n' >&2
     return 2
+  fi
+
+  if cse_catalog_uses_cray_programming_environments; then
+    while IFS= read -r loaded_module; do
+      case "${loaded_module%%/*}" in
+        PrgEnv-*)
+          printf 'cse-build: unloading ambient Cray programming environment: %s\n' \
+            "$loaded_module"
+          module unload "$loaded_module" || return 2
+          ;;
+      esac
+    done < <(tr ':' '\n' <<<"${LOADEDMODULES:-}")
   fi
 
   for external_module in "${CSE_EXTERNAL_MODULES[@]}"; do

@@ -44,6 +44,7 @@ shared:
     build_with:
       name: gcc
       version: 11.4.0
+      modules: [gcc/11.4.0]
   mpi:
     name: openmpi
     version: 4.1.8

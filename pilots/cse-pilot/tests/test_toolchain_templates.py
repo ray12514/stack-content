@@ -72,7 +72,11 @@ def values() -> dict:
                 "version": "12.5.0",
                 "source": "build",
                 "modules": [],
-                "build_with": {"name": "gcc", "version": "12.2.1"},
+                "build_with": {
+                    "name": "gcc",
+                    "version": "12.2.1",
+                    "modules": ["PrgEnv-gnu/8.7.0", "gcc-native/12.3"],
+                },
             },
             "mpi": {
                 "name": "openmpi",
@@ -503,6 +507,45 @@ printf '%s\n' "$LOADEDMODULES"
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.splitlines()[-1], "site/base")
+
+    def test_conflicting_cray_programming_environment_is_removed(self) -> None:
+        test_values = values()
+        test_values["platform"]["compiler"]["modules"] = [
+            "PrgEnv-aocc/8.7.0",
+            "aocc/4.1.0",
+        ]
+        script = render_text(
+            "env/prepare-module-state.sh.j2",
+            values=test_values,
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script_path = Path(temp_dir) / "prepare-module-state.sh"
+            script_path.write_text(script, encoding="utf-8")
+            harness = r"""
+set -euo pipefail
+export LOADEDMODULES='PrgEnv-cray/8.7.0:cce/21.0.0:site/base'
+export PE_ENV=CRAY
+module() {
+  [ "$1" = unload ] || return 2
+  [ "$2" = PrgEnv-cray/8.7.0 ] || return 3
+  LOADEDMODULES="${LOADEDMODULES#PrgEnv-cray/8.7.0:}"
+  export LOADEDMODULES
+}
+source "$1"
+cse_prepare_module_state
+printf 'modules=%s\n' "$LOADEDMODULES"
+printf 'pe=%s\n' "${PE_ENV-<unset>}"
+"""
+            result = subprocess.run(
+                ["bash", "-c", harness, "bash", str(script_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("modules=cce/21.0.0:site/base", result.stdout)
+        self.assertIn("pe=<unset>", result.stdout)
 
     def test_language_provider_preferences_are_surface_specific(self) -> None:
         test_values = values()
