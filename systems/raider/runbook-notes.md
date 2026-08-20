@@ -292,6 +292,59 @@ continuing.
    used them. The corrected workspace and cache must not retain an upstream,
    mirror, include, or install-tree reference to the wrong root.
 
+## Readline 8.3 patch fetch recovery (2026-08-20)
+
+Raider's login-node fetch reached the network and downloaded the other sources,
+but the GNU mirror redirect selected
+`mirror.us-midwest-1.nexcess.net`, which returned HTTP 404 for
+`readline83-003`. This is a remote mirror synchronization failure, not a login
+context, workspace, build-stage, or source-cache path failure. The canonical
+GNU file has the checksum required by the pinned Readline recipe:
+
+```text
+72dee13601ce38f6746eb15239999a7c56f8e1ff5eb1ec8153a1f213e4acdb29
+```
+
+Seed that one verified patch into the source cache selected by the generated
+GCC Core environment, then rerun the normal fetch. Do not reconcretize or
+replace the existing lockfiles:
+
+```bash
+cd "$BUILD_WORKSPACE"
+
+export RAIDER_FETCH_ENV="$BUILD_WORKSPACE/environments/gcc/core"
+export RAIDER_READLINE_PATCH_SHA="72dee13601ce38f6746eb15239999a7c56f8e1ff5eb1ec8153a1f213e4acdb29"
+export RAIDER_SOURCE_CACHE="$(
+  spack -e "$RAIDER_FETCH_ENV" python -c \
+    'import spack.config; print(spack.config.get("config:source_cache"))'
+)"
+export RAIDER_READLINE_CACHE_DIR="$RAIDER_SOURCE_CACHE/archive/${RAIDER_READLINE_PATCH_SHA:0:2}"
+export RAIDER_READLINE_CACHE_FILE="$RAIDER_READLINE_CACHE_DIR/$RAIDER_READLINE_PATCH_SHA"
+export RAIDER_READLINE_PART_FILE="$RAIDER_READLINE_CACHE_FILE.$$.part"
+
+printf 'RAIDER_SOURCE_CACHE=%s\n' "$RAIDER_SOURCE_CACHE"
+test -n "$RAIDER_SOURCE_CACHE"
+umask 0007
+mkdir -p "$RAIDER_READLINE_CACHE_DIR"
+test -w "$RAIDER_READLINE_CACHE_DIR"
+
+curl -fL --retry 5 \
+  https://ftp.gnu.org/gnu/readline/readline-8.3-patches/readline83-003 \
+  -o "$RAIDER_READLINE_PART_FILE"
+printf '%s  %s\n' \
+  "$RAIDER_READLINE_PATCH_SHA" "$RAIDER_READLINE_PART_FILE" \
+  | sha256sum -c -
+mv "$RAIDER_READLINE_PART_FILE" "$RAIDER_READLINE_CACHE_FILE"
+chmod 0660 "$RAIDER_READLINE_CACHE_FILE"
+
+./cse-build login fetch
+```
+
+The preliminary miss below the private build cache's `_source-cache` namespace
+is expected when that mirror does not yet contain the patch. After the command
+above, Spack reads the checksum-addressed file from the configured restricted
+source cache. Previously downloaded archives remain cached and are reused.
+
 ## Restricted build and cache gates
 
 - Both compiler surfaces and both CSE-built OpenMPI toolchains must be explicit
