@@ -423,6 +423,52 @@ environment. Do not encode `PE_ENV=GNU` as a Blueback- or FFTW-specific rule;
 the generic Cray provider policy must derive the compiler-family selector and
 provider-owned link state from the selected compiler/Cray MPICH pairing.
 
+#### Dakota 6.23/6.24 recovery with Boost 1.90
+
+Dakota 6.23.0 and 6.24.0 still request the compiled Boost.System CMake
+component and `Boost::system` target. Boost.System is header-only for every
+Boost release those Dakota versions support, and Boost 1.89 removed the
+compiled compatibility stub. A failure looking for
+`boost_systemConfig.cmake` is therefore a Dakota source-compatibility issue,
+not a missing Boost variant or a reason to rebuild Boost.
+
+When package installation has already started, do not overwrite the complete
+workspace. Pull Stack Content, copy only the tracked Dakota overlay into the
+workspace package repository, and retain group access:
+
+```bash
+git -C "$CONTENT" pull --ff-only
+
+DAKOTA_SOURCE="$CONTENT/pilots/cse-pilot/templates/package-repos/spack_repo/cse_trials/packages/dakota"
+DAKOTA_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/spack_repo/cse_trials/packages/dakota"
+
+install -d -m 2770 -g "$CSE_GROUP" "$DAKOTA_DESTINATION"
+install -m 0660 -g "$CSE_GROUP" \
+  "$DAKOTA_SOURCE/package.py" \
+  "$DAKOTA_SOURCE/boost-system-header-only.patch" \
+  "$DAKOTA_DESTINATION/"
+```
+
+Freshly reconcretize only the shared MPI environment. The Dakota package hash
+must change because the source patch is part of its concrete identity; the
+already installed compiler, Foundation, build-tool, Boost, HDF5, NetCDF, FFTW,
+and other dependency hashes remain reusable.
+
+```bash
+environment="$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"
+MPI_ENV="$CSE_BUILD_WORKSPACE/environments/$environment"
+
+spack -e "$MPI_ENV" concretize --fresh -j 1
+spack -e "$MPI_ENV" install --only-concrete \
+  -j "$BUILD_JOBS" --fail-fast \
+  dakota@6.23.0 dakota@6.24.0
+```
+
+The final CMake configure must continue finding the approved Boost 1.90.0
+prefix, but it must no longer request `boost_systemConfig.cmake`. Do not create
+a fake Boost.System package, change global CMake lookup policy, or remove the
+remaining Program Options, Regex, or Serialization components.
+
 ### Build-stage execution diagnosis
 
 A Spack build stage must be writable and searchable, have usable space and
