@@ -176,8 +176,9 @@ the other.
 - Cray MPICH remains a non-buildable external at its live prefix.
 - Do not manually preload `PrgEnv-gnu`, `PrgEnv-cray`, `gcc`, `cce`, or
   `cray-mpich` before entering through `cse-build`. The generated external
-  package records own the exact module chains and `cse-build` clears only a
-  selected provider module that was already loaded before Spack needs it.
+  package records own the exact module chains. If a prepared shell inherited a
+  conflicting `PrgEnv-*` module or `PE_ENV` compiler-family marker, use the
+  targeted recovery below rather than hand-loading a second toolchain.
 - Both Serial environments contain no MPI implementation.
 - Each MPI environment uses the Cray MPICH flavor matched to its compiler
   surface.
@@ -185,6 +186,118 @@ the other.
   specs enter the private CSE build cache.
 - The cache contains CSE-built packages only; it does not attempt to package or
   relocate the platform-owned CPE or Cray MPICH installations.
+
+### GNU LAPACK reports `-sinteger64`
+
+LAPACK 3.12.1 uses `PE_ENV=CRAY` to select the CCE `-sinteger64` flag for its
+ILP64 targets. If the build command shows GNU `gfortran` followed by
+`unrecognized command-line option '-sinteger64'`, the GCC surface inherited a
+Cray programming-environment marker from the login shell. This is not a LAPACK
+version or BLAS-provider error, and it does not require reconcretization.
+
+To resume a failed install, run from its prepared shell:
+
+```bash
+unset PE_ENV
+./cse-build compute install --surface shared
+```
+
+The failed LAPACK prefix is incomplete, so Spack retries it while retaining
+the completed Core prefixes and any successful Common dependencies in the
+shared store. The workspace-template automation is tracked separately; until
+it is released and the workspace is regenerated, repeat this cleanup in each
+new prepared shell that inherited the wrong marker.
+
+### GNU FFTW cannot link `MPI_Init` with Cray MPICH
+
+This recovery applies when the GCC MPI environment selects the reviewed
+Cray MPICH GNU flavor but FFTW configure reports all of the following:
+
+- `mpicc` resolves to
+  `/opt/cray/pe/mpich/9.1.0/ofi/gnu/12.3/bin/mpicc`;
+- the `MPI_Init`, `-lmpi`, and `-lmpich` link probes fail; and
+- configure ends with `could not find mpi library for --enable-mpi`.
+
+This is an external-module activation or link-environment failure. It is not a
+reason to reconcretize, edit `spack.yaml`, or replace the Cray MPICH external.
+The `cray-mpich` module uses the selected Cray programming-environment family
+to establish `CRAY_MPICH_PREFIX`, `CRAY_MPICH_DIR`, `MPICH_DIR`, MPI search
+paths, and `CRAY_LD_LIBRARY_PATH`. The accelerator-specific `PE_MPICH_GTL_*`
+values are not required for the CPU-only trial lane.
+
+Remain in the prepared `cse-build compute` shell. First inspect the active
+selection:
+
+```bash
+env |
+  grep -E '^(PE_ENV|CRAY_MPICH_(BASEDIR|PREFIX|DIR)|MPICH_DIR|CRAY_LD_LIBRARY_PATH)='
+```
+
+If the GNU-specific values are absent or do not select
+`9.1.0/ofi/gnu/12.3`, reload only Cray MPICH with the GNU family selector. Do
+not load the complete `PrgEnv-gnu` module because it can replace the CSE GCC
+12.5 compiler with the site-default compiler.
+
+```bash
+module unload cray-mpich/9.1.0 2>/dev/null || true
+
+export PE_ENV=GNU
+module load cray-mpich/9.1.0
+unset PE_ENV
+```
+
+Verify the exact external wrapper before restarting the environment install:
+
+```bash
+MPI_PROBE="$CSE_BUILD_STAGE/.cse-mpi-probe-$$"
+
+printf '#include <mpi.h>\nint main(int argc,char **argv){MPI_Init(&argc,&argv);MPI_Finalize();return 0;}\n' \
+  > "$MPI_PROBE.c"
+
+/opt/cray/pe/mpich/9.1.0/ofi/gnu/12.3/bin/mpicc \
+  "$MPI_PROBE.c" -o "$MPI_PROBE"
+
+"$MPI_PROBE"
+probe_status=$?
+rm -f "$MPI_PROBE.c" "$MPI_PROBE"
+printf 'MPI probe status: %s\n' "$probe_status"
+```
+
+Only a zero probe status authorizes the retry. The same locked environment and
+shared store retain completed packages and retry the failed FFTW roots:
+
+```bash
+environment="$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"
+environment_key="${environment//\//-}"
+export SPACK_USER_CACHE_PATH="$SPACK_USER_STATE_ROOT/cache/$environment_key"
+install -d -m 0700 "$SPACK_USER_CACHE_PATH"
+
+spack -e "$CSE_BUILD_WORKSPACE/environments/$environment" \
+  install --only-concrete -j "$BUILD_JOBS" --fail-fast
+```
+
+If the wrapper probe still fails, preserve the first linker diagnostic instead
+of retrying the full install:
+
+```bash
+FFTW_LOG="$(
+  find "$CSE_BUILD_STAGE" \
+    -type f \
+    -path '*spack-stage-fftw-3.3.11-*/spack-src/config.log' \
+    -print |
+    tail -1
+)"
+
+printf 'FFTW config log: %s\n' "$FFTW_LOG"
+grep -nE -B12 -A35 \
+  'checking for mpicc|checking for MPI_Init|cannot find|undefined reference|collect2:|ld:|error:' \
+  "$FFTW_LOG"
+```
+
+The permanent correction belongs in the generic Cray provider activation
+policy: select the compiler family while activating the exact Cray MPICH
+module, without loading a conflicting `PrgEnv-*` compiler module. Do not turn
+this Blueback recovery into an FFTW package override.
 
 ### Build-stage execution diagnosis
 
