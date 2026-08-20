@@ -15,5 +15,9 @@ packages:
       - spec: "{{ external.spec }}"
         prefix: {{ external.prefix }}
         modules: {{ external.modules | yaml_flow }}
+{% if external.get("extra_attributes") %}
+        extra_attributes:
+{{ external.extra_attributes | to_yaml | indent(10, true) }}
+{% endif %}
 {% endfor %}
 {% endfor %}

@@ -374,6 +374,50 @@ Interpret the result before changing policy:
   remaining fault is in how the FFTW recipe invokes MPI rather than in the
   external provider activation.
 
+#### Resolved Blueback cause and workspace recovery
+
+The retained Blueback failure reached the fourth case above. The exact Spack
+build environment selected GCC 12.5 and
+`/opt/cray/pe/mpich/9.1.0/ofi/gnu/12.3`, but the linker reported that
+`libfabric.so.1` was not found and then emitted unresolved `FABRIC_1.x`
+symbols from `libmpi_gnu.so`.
+
+The permanent renderer fix attaches the selected Cray platform libfabric to
+the external Cray MPICH record through Spack's supported external environment
+metadata. The libfabric version and prefix come from the inspected profile;
+the Blueback result is expected to contain:
+
+```yaml
+extra_attributes:
+  environment:
+    prepend_path:
+      LD_LIBRARY_PATH: /opt/cray/libfabric/2.3.1/lib64
+```
+
+Do not paste that version into source policy. Verify the value after rerender;
+it must track the selected `/opt/cray/libfabric` fact from the current profile.
+
+After pulling the updated Stack Composer and Stack Content branches, rerender
+the static catalog and refresh the workspace through the normal runbook steps.
+Freshly reconcretize only the affected MPI environment, then retry its install:
+
+```bash
+environment="$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"
+MPI_ENV="$CSE_BUILD_WORKSPACE/environments/$environment"
+
+grep -R -nA3 -B4 \
+  'LD_LIBRARY_PATH:' \
+  "$CSE_BUILD_WORKSPACE/catalog/scopes/mpi/cray-mpich"
+
+spack -e "$MPI_ENV" concretize --fresh -j 1
+spack -e "$MPI_ENV" install --only-concrete -j "$BUILD_JOBS" --fail-fast
+```
+
+The grep must show the profile-selected Cray libfabric path before the retry.
+No rebuild of already completed Core, Common, or Serial packages is required;
+their concrete DAGs and installed prefixes did not depend on this external MPI
+activation metadata.
+
 Do not add `--dirty`. The permanent fix must work in Spack's normal clean build
 environment. Do not encode `PE_ENV=GNU` as a Blueback- or FFTW-specific rule;
 the generic Cray provider policy must derive the compiler-family selector and
