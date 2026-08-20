@@ -67,6 +67,97 @@ In addition to the common runbook checks:
 - confirm compiler versions from driver output, not module names alone;
 - confirm the selected platform compiler prefix and full module chain.
 
+## Missing operator-session recovery
+
+The generated operator activation script is stored in the operator's home
+tree, not in the shared build workspace. If
+`$WORK_ROOT/operator-sessions/raider/` is missing while the correctly rooted
+Raider workspace still exists, recreate only the operator session. Do not
+rerender the catalog, reinitialize the workspace, or reconcretize its existing
+lockfiles for this recovery.
+
+A path ending in `operator-sessions/raider//activate.sh` means the shell's
+release variable is empty. Recover the release identities from the durable
+workspace manifest rather than guessing them:
+
+```bash
+export WORK_ROOT="$HOME/STACK_TESTING"
+export CONTENT="$WORK_ROOT/stack-content"
+export RAIDER_TRIAL_ROOT="/p/app/CSE/initial-conversion-trials"
+export RAIDER_WORKSPACE_PARENT="$RAIDER_TRIAL_ROOT/restricted/workspaces/raider/initial-conversion-trials"
+
+find "$RAIDER_WORKSPACE_PARENT" \
+  -mindepth 2 -maxdepth 2 \
+  -name workspace-manifest.yaml -print
+```
+
+Select the current correctly rooted release printed above. Substitute that
+exact directory name below when it is not `raider-trial-001`:
+
+```bash
+export RAIDER_TRIAL_RELEASE="raider-trial-001"
+export RAIDER_MANIFEST="$RAIDER_WORKSPACE_PARENT/$RAIDER_TRIAL_RELEASE/workspace-manifest.yaml"
+
+test -r "$RAIDER_MANIFEST"
+
+export RAIDER_CATALOG_RELEASE="$(
+  awk '$1 == "release:" {print $2; exit}' "$RAIDER_MANIFEST"
+)"
+
+test -n "$RAIDER_CATALOG_RELEASE"
+printf 'trial=%s\ncatalog=%s\n' \
+  "$RAIDER_TRIAL_RELEASE" "$RAIDER_CATALOG_RELEASE"
+```
+
+Recreate the local activation descriptor with the current checked-out Stack
+Content script and the reviewed shared tool root. Do not pass `--overwrite`;
+an existing session must be reviewed instead of silently replaced:
+
+```bash
+export STACK_BRANCH="codex/simplified-render-plan"
+export RAIDER_TOOLS_ROOT="/p/app/CSE/tools"
+export RAIDER_BOOTSTRAP_PYTHON="$WORK_ROOT/stack-composer/.venv/bin/python"
+
+test -x "$RAIDER_BOOTSTRAP_PYTHON"
+test -d "$RAIDER_TOOLS_ROOT/spack/1.2.2/.git"
+
+"$RAIDER_BOOTSTRAP_PYTHON" \
+  "$CONTENT/pilots/cse-pilot/scripts/create-operator-session.py" \
+  --system raider \
+  --work-root "$WORK_ROOT" \
+  --trial-root "$RAIDER_TRIAL_ROOT" \
+  --tools-root "$RAIDER_TOOLS_ROOT" \
+  --bootstrap-python "$RAIDER_BOOTSTRAP_PYTHON" \
+  --spack-mode shared \
+  --catalog-release "$RAIDER_CATALOG_RELEASE" \
+  --trial-release "$RAIDER_TRIAL_RELEASE" \
+  --branch "$STACK_BRANCH" \
+  --group cse
+```
+
+Source and verify the recovered session before entering the existing build
+workspace:
+
+```bash
+source "$WORK_ROOT/operator-sessions/raider/$RAIDER_TRIAL_RELEASE/activate.sh"
+
+test "$SYSTEM_NAME" = "raider"
+test "$TRIAL_RELEASE" = "$RAIDER_TRIAL_RELEASE"
+test "$CATALOG_RELEASE" = "$RAIDER_CATALOG_RELEASE"
+test -r "$BUILD_WORKSPACE/workspace-manifest.yaml"
+test -x "$BUILD_WORKSPACE/cse-build"
+cse_session_status
+
+cd "$BUILD_WORKSPACE"
+./cse-build compute
+```
+
+The session generator also creates a blank `provider-selections.sh` scaffold.
+That scaffold does not change or block the existing workspace's `cse-build`
+entry point. Restore the reviewed Raider selections before regenerating build
+values or initializing a replacement workspace; do not copy selections from
+an obsolete or wrongly rooted release.
+
 ## Wrong-root recovery
 
 The trial root must be the directory that directly contains `restricted/` and
