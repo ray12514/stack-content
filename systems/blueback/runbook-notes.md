@@ -284,7 +284,7 @@ MPI_ENV="$CSE_BUILD_WORKSPACE/environments/$environment"
 MPI_CONFIG_LOG="$(
   find "$CSE_BUILD_STAGE" \
     -type f \
-    -path '*spack-stage-fftw-3.3.11-*/spack-src/config.log' \
+    -path '*spack-stage-fftw-3.3.11-*/spack-src/*/config.log' \
     -print |
     tail -1
 )"
@@ -310,19 +310,38 @@ else
   spack -e "$MPI_ENV" build-env "/$MPI_HASH" -- bash -c '
     set -x
     env | grep -E \
-      "^(PE_ENV|CRAY_MPICH_(BASEDIR|PREFIX|DIR)|MPICH_DIR|CRAY_LD_LIBRARY_PATH|LD_LIBRARY_PATH|LIBRARY_PATH|CC|SPACK_CC|MPICC)=" \
+      "^(PE_ENV|CRAY_MPICH_(BASEDIR|PREFIX|DIR)|MPICH_DIR|CRAY_LD_LIBRARY_PATH|LD_LIBRARY_PATH|LIBRARY_PATH|CC|SPACK_CC|MPICC|MPICH_CC|MPICH_CXX|MPICH_FC)=" \
       | sort
     command -v mpicc
     "$MPICC" -show 2>/dev/null || "$MPICC" --showme 2>/dev/null || true
     printf "#include <mpi.h>\nint main(int argc,char **argv){MPI_Init(&argc,&argv);MPI_Finalize();return 0;}\n" \
       > "$1.c"
-    "$MPICC" -v "$1.c" -o "$1"
-    "$1"
+    if "$MPICC" -v "$1.c" -o "$1.spack" && "$1.spack"; then
+      spack_bound_status=0
+    else
+      spack_bound_status=$?
+    fi
+    printf "Spack-bound MPICH wrapper status: %s\n" "$spack_bound_status"
+
+    unset MPICH_CC MPICH_CXX MPICH_FC MPICH_F77 MPICH_F90
+    "$MPICC" -show 2>/dev/null || "$MPICC" --showme 2>/dev/null || true
+    if "$MPICC" -v "$1.c" -o "$1.native" && "$1.native"; then
+      native_wrapper_status=0
+    else
+      native_wrapper_status=$?
+    fi
+    printf "Native MPICH wrapper status: %s\n" "$native_wrapper_status"
+
+    rm -f "$1.c" "$1.spack" "$1.native"
+    test "$spack_bound_status" -eq 0
   ' bash "$MPI_BUILD_PROBE"
   build_probe_status=$?
 
   unset PE_ENV
-  rm -f "$MPI_BUILD_PROBE.c" "$MPI_BUILD_PROBE"
+  rm -f "$MPI_BUILD_PROBE.c" \
+    "$MPI_BUILD_PROBE" \
+    "$MPI_BUILD_PROBE.spack" \
+    "$MPI_BUILD_PROBE.native"
   printf 'Spack FFTW build-environment MPI probe status: %s\n' \
     "$build_probe_status"
 fi
@@ -343,6 +362,10 @@ Interpret the result before changing policy:
   correct generic external-provider activation.
 - If the wrapper's shown command selects the wrong underlying compiler,
   correct the compiler-to-MPI toolchain binding; do not add an FFTW override.
+- If the native-wrapper control passes but the Spack-bound wrapper fails, the
+  failure is specifically in the `MPICH_CC` compiler override used to bind the
+  MPI consumer to CSE GCC 12.5. Do not accept the native result as a fix: it
+  would silently build the package with the Cray flavor's baseline compiler.
 - If the wrapper selects the intended compiler but the linker cannot resolve a
   Cray MPI dependency, compare the printed clean-build library variables with
   the interactive control and carry only the provider-owned link state needed
