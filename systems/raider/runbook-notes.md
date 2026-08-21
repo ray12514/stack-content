@@ -514,6 +514,65 @@ Record the grep output, the final 150 log lines, the Dakota concrete hash, and
 the active `cse_trials` repository path in the Raider trial evidence before
 selecting the next recovery action.
 
+### Recover an already-rendered Raider workspace
+
+A fatal `Boost::system` target error from
+`src/surrogates/unit/CMakeLists.txt:26` means the concrete Dakota root predates
+the complete CSE overlay, or the generated workspace copy of that overlay is
+not active. It is not an MPI failure when `MPI_CXX_LIBRARIES` and `MPIEXEC`
+already resolve below the CSE OpenMPI prefix.
+
+Update the generated workspace overlay, prove that it is byte-for-byte current,
+force only the affected Dakota roots to receive new hashes, and retry Dakota:
+
+```bash
+git -C "$CONTENT" pull --ff-only
+
+RAIDER_DAKOTA_SOURCE="$CONTENT/pilots/cse-pilot/package-repos/cse_trials/packages/dakota"
+RAIDER_DAKOTA_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/cse_trials/packages/dakota"
+
+install -d -m 2770 -g "$CSE_GROUP" "$RAIDER_DAKOTA_DESTINATION"
+install -m 0660 -g "$CSE_GROUP" \
+  "$RAIDER_DAKOTA_SOURCE/package.py" \
+  "$RAIDER_DAKOTA_SOURCE/boost-system-header-only.patch" \
+  "$RAIDER_DAKOTA_DESTINATION/"
+
+cmp "$RAIDER_DAKOTA_SOURCE/package.py" \
+  "$RAIDER_DAKOTA_DESTINATION/package.py"
+cmp "$RAIDER_DAKOTA_SOURCE/boost-system-header-only.patch" \
+  "$RAIDER_DAKOTA_DESTINATION/boost-system-header-only.patch"
+
+environment="$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"
+MPI_ENV="$CSE_BUILD_WORKSPACE/environments/$environment"
+test -f "$MPI_ENV/spack.yaml"
+
+spack -e "$MPI_ENV" repo list
+
+printf 'Dakota hashes before forced reconcretization:\n'
+spack -e "$MPI_ENV" find -cl dakota
+
+spack -e "$MPI_ENV" concretize -f --reuse-deps -j 1
+
+printf 'Dakota hashes after forced reconcretization:\n'
+spack -e "$MPI_ENV" find -cl dakota
+
+cd "$CSE_BUILD_WORKSPACE"
+./cse-build compute verify
+
+spack -e "$MPI_ENV" install --only-concrete \
+  -j "$BUILD_JOBS" --fail-fast \
+  dakota@6.23.0 dakota@6.24.0
+```
+
+Both `cmp` commands must exit zero, `spack repo list` must show the generated
+workspace `cse_trials` repository ahead of the builtin repository, and both
+Dakota hashes must change. If either hash does not change, stop; do not spend
+another build attempt on the old concrete root. Correct the repository order
+or workspace overlay first.
+
+This recovery preserves the workspace, OpenMPI, Boost, and all other installed
+dependencies. Do not delete the workspace or reconcretize unrelated roots.
+
 ## Restricted build and cache gates
 
 - Both compiler surfaces and both CSE-built OpenMPI toolchains must be explicit
