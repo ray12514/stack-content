@@ -459,34 +459,56 @@ cd "$BUILD_WORKSPACE"
 ./cse-build compute
 
 export RAIDER_DAKOTA_STAGE="$(
-  ls -td "$CSE_BUILD_STAGE"/spack-stage-dakota-6.24.0-* 2>/dev/null \
+  find "$CSE_BUILD_STAGE" -maxdepth 1 -type d \
+    -name 'spack-stage-dakota-6.24.0-*' \
+    -exec ls -td {} + 2>/dev/null \
+    | head -1
+)"
+export RAIDER_DAKOTA_LOG="$(
+  find "$CSE_BUILD_STAGE" -maxdepth 1 -type f \
+    -name 'spack-stage-dakota-6.24.0-*.log' \
+    -exec ls -t {} + 2>/dev/null \
     | head -1
 )"
 
-printf 'RAIDER_DAKOTA_STAGE=%s\n' "$RAIDER_DAKOTA_STAGE"
-test -n "$RAIDER_DAKOTA_STAGE"
-test -d "$RAIDER_DAKOTA_STAGE/spack-src"
+printf 'RAIDER_DAKOTA_STAGE=%s\nRAIDER_DAKOTA_LOG=%s\n' \
+  "$RAIDER_DAKOTA_STAGE" "$RAIDER_DAKOTA_LOG"
 
-grep -RFn 'Boost::system' \
-  "$RAIDER_DAKOTA_STAGE/spack-src/cmake/DakotaFindSystemTPLs.cmake" \
-  "$RAIDER_DAKOTA_STAGE/spack-src/src/plugins/CMakeLists.txt" \
-  "$RAIDER_DAKOTA_STAGE/spack-src/src/surrogates/unit/CMakeLists.txt" \
-  || true
+if test -n "$RAIDER_DAKOTA_STAGE" \
+  && test -d "$RAIDER_DAKOTA_STAGE/spack-src"; then
+  grep -RFn 'Boost::system' \
+    "$RAIDER_DAKOTA_STAGE/spack-src/cmake/DakotaFindSystemTPLs.cmake" \
+    "$RAIDER_DAKOTA_STAGE/spack-src/src/plugins/CMakeLists.txt" \
+    "$RAIDER_DAKOTA_STAGE/spack-src/src/surrogates/unit/CMakeLists.txt" \
+    || true
+else
+  printf 'No retained Dakota 6.24 stage directory was found.\n' >&2
+fi
 
-tail -n 150 "$RAIDER_DAKOTA_STAGE/spack-build-out.txt"
+if test -n "$RAIDER_DAKOTA_STAGE" \
+  && test -f "$RAIDER_DAKOTA_STAGE/spack-build-out.txt"; then
+  tail -n 150 "$RAIDER_DAKOTA_STAGE/spack-build-out.txt"
+elif test -n "$RAIDER_DAKOTA_LOG" && test -f "$RAIDER_DAKOTA_LOG"; then
+  tail -n 150 "$RAIDER_DAKOTA_LOG"
+else
+  printf 'No Dakota 6.24 failure log was found.\n' >&2
+fi
 ```
 
 Interpret the result as follows:
 
-- No `Boost::system` matches means all three known Dakota call sites were
-  patched. Diagnose the final error in `spack-build-out.txt`; do not treat the
-  policy warnings as the failure.
+- A retained stage directory with no `Boost::system` matches means all three
+  known Dakota call sites were patched. Diagnose the final error in the build
+  output; do not treat the policy warnings as the failure.
 - Any `Boost::system` match means the staged source is unpatched or only
   partially patched. Stop the install and verify that the `cse_trials` package
   repository precedes the builtin repository before creating a fresh Dakota
   concrete hash.
-- If the stage or log is missing, preserve the failed install output and use
-  its reported Dakota stage path. Do not guess at a different stage.
+- If Spack removed the stage directory but retained its sibling `.log` file,
+  source-level patch verification is unavailable. Use the log to identify the
+  actual failure; do not infer from the missing stage that the patch was absent.
+- If neither the stage nor its sibling log exists, preserve the failed install
+  output and use the exact path Spack reported. Do not guess at another stage.
 
 Record the grep output, the final 150 log lines, the Dakota concrete hash, and
 the active `cse_trials` repository path in the Raider trial evidence before
