@@ -442,9 +442,9 @@ the command above, Spack reads the checksum-addressed file from the configured
 restricted source cache. Previously downloaded archives remain cached and are
 reused.
 
-## Dakota 6.24 Boost diagnosis (2026-08-20)
+## Dakota 6.23/6.24 Boost diagnosis (2026-08-20)
 
-Raider reached Dakota 6.24 configuration with both `MPI_CXX_LIBRARIES` and
+Raider reached Dakota configuration with both `MPI_CXX_LIBRARIES` and
 `MPIEXEC` under the CSE-built OpenMPI 4.1.8 prefix, and CMake reported Boost
 1.90.0. The visible CMP0144 and CMP0167 messages are developer warnings; they
 are not the fatal error. This differs from the earlier ambient-MPI failure in
@@ -460,13 +460,13 @@ cd "$BUILD_WORKSPACE"
 
 export RAIDER_DAKOTA_STAGE="$(
   find "$CSE_BUILD_STAGE" -maxdepth 1 -type d \
-    -name 'spack-stage-dakota-6.24.0-*' \
+    -name 'spack-stage-dakota-6.2[34].0-*' \
     -exec ls -td {} + 2>/dev/null \
     | head -1
 )"
 export RAIDER_DAKOTA_LOG="$(
   find "$CSE_BUILD_STAGE" -maxdepth 1 -type f \
-    -name 'spack-stage-dakota-6.24.0-*.log' \
+    -name 'spack-stage-dakota-6.2[34].0-*.log' \
     -exec ls -t {} + 2>/dev/null \
     | head -1
 )"
@@ -482,7 +482,7 @@ if test -n "$RAIDER_DAKOTA_STAGE" \
     "$RAIDER_DAKOTA_STAGE/spack-src/src/surrogates/unit/CMakeLists.txt" \
     || true
 else
-  printf 'No retained Dakota 6.24 stage directory was found.\n' >&2
+  printf 'No retained Dakota 6.23/6.24 stage directory was found.\n' >&2
 fi
 
 if test -n "$RAIDER_DAKOTA_STAGE" \
@@ -528,8 +528,8 @@ force only the affected Dakota roots to receive new hashes, and retry Dakota:
 ```bash
 git -C "$CONTENT" pull --ff-only
 
-RAIDER_DAKOTA_SOURCE="$CONTENT/pilots/cse-pilot/package-repos/cse_trials/packages/dakota"
-RAIDER_DAKOTA_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/cse_trials/packages/dakota"
+RAIDER_DAKOTA_SOURCE="$CONTENT/pilots/cse-pilot/templates/package-repos/spack_repo/cse_trials/packages/dakota"
+RAIDER_DAKOTA_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/spack_repo/cse_trials/packages/dakota"
 
 install -d -m 2770 -g "$CSE_GROUP" "$RAIDER_DAKOTA_DESTINATION"
 install -m 0660 -g "$CSE_GROUP" \
@@ -542,33 +542,39 @@ cmp "$RAIDER_DAKOTA_SOURCE/package.py" \
 cmp "$RAIDER_DAKOTA_SOURCE/boost-system-header-only.patch" \
   "$RAIDER_DAKOTA_DESTINATION/boost-system-header-only.patch"
 
-environment="$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"
-MPI_ENV="$CSE_BUILD_WORKSPACE/environments/$environment"
-test -f "$MPI_ENV/spack.yaml"
+for environment in \
+  "$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME" \
+  "$PLATFORM_COMPILER_NAME/mpi-$PLATFORM_MPI_NAME"; do
+  MPI_ENV="$CSE_BUILD_WORKSPACE/environments/$environment"
+  test -f "$MPI_ENV/spack.yaml"
 
-spack -e "$MPI_ENV" repo list
+  spack -e "$MPI_ENV" repo list
 
-printf 'Dakota hashes before forced reconcretization:\n'
-spack -e "$MPI_ENV" find -cl dakota
+  printf 'Dakota hashes before forced reconcretization (%s):\n' \
+    "$environment"
+  spack -e "$MPI_ENV" find -cl dakota
 
-spack -e "$MPI_ENV" concretize -f --reuse-deps -j 1
+  spack -e "$MPI_ENV" concretize -f --reuse-deps -j 1
 
-printf 'Dakota hashes after forced reconcretization:\n'
-spack -e "$MPI_ENV" find -cl dakota
+  printf 'Dakota hashes after forced reconcretization (%s):\n' \
+    "$environment"
+  spack -e "$MPI_ENV" find -cl dakota
+done
 
 cd "$CSE_BUILD_WORKSPACE"
 ./cse-build compute verify
 
-spack -e "$MPI_ENV" install --only-concrete \
+RAIDER_SHARED_MPI_ENV="$CSE_BUILD_WORKSPACE/environments/$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"
+spack -e "$RAIDER_SHARED_MPI_ENV" install --only-concrete \
   -j "$BUILD_JOBS" --fail-fast \
   dakota@6.23.0 dakota@6.24.0
 ```
 
-Both `cmp` commands must exit zero, `spack repo list` must show the generated
-workspace `cse_trials` repository ahead of the builtin repository, and both
-Dakota hashes must change. If either hash does not change, stop; do not spend
-another build attempt on the old concrete root. Correct the repository order
-or workspace overlay first.
+Both `cmp` commands must exit zero. For both MPI environments, `spack repo
+list` must show the generated workspace `cse_trials` repository ahead of the
+builtin repository, and both Dakota hashes must change. If a Dakota hash does
+not change, stop; do not spend another build attempt on the old concrete root.
+Correct the repository order or workspace overlay first.
 
 This recovery preserves the workspace, OpenMPI, Boost, and all other installed
 dependencies. Do not delete the workspace or reconcretize unrelated roots.

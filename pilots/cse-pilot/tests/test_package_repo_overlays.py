@@ -16,9 +16,33 @@ PACKAGE_ROOT = (
     / "cse_trials"
     / "packages"
 )
+RAIDER_NOTES = Path(__file__).resolve().parents[3] / "systems" / "raider" / "runbook-notes.md"
 
 
 class PackageRepoOverlayTests(unittest.TestCase):
+    def test_raider_recovery_uses_rendered_dakota_overlay_paths(self) -> None:
+        notes = RAIDER_NOTES.read_text(encoding="utf-8")
+
+        self.assertIn(
+            'RAIDER_DAKOTA_SOURCE="$CONTENT/pilots/cse-pilot/templates/'
+            'package-repos/spack_repo/cse_trials/packages/dakota"',
+            notes,
+        )
+        self.assertIn(
+            'RAIDER_DAKOTA_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/'
+            'spack_repo/cse_trials/packages/dakota"',
+            notes,
+        )
+        self.assertIn("-name 'spack-stage-dakota-6.2[34].0-*'", notes)
+        self.assertIn(
+            '"$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"',
+            notes,
+        )
+        self.assertIn(
+            '"$PLATFORM_COMPILER_NAME/mpi-$PLATFORM_MPI_NAME"',
+            notes,
+        )
+
     def test_dakota_overlay_limits_boost_system_fix_to_trial_versions(self) -> None:
         recipe = (PACKAGE_ROOT / "dakota" / "package.py").read_text(encoding="utf-8")
 
