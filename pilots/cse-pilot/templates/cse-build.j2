@@ -423,6 +423,11 @@ verify_scopes() {
   done
 }
 
+verify_workspace_inputs() {
+  spack python "$CSE_WORKSPACE_ROOT/scripts/verify-lockfiles.py" \
+    --workspace-only
+}
+
 verify_locks() {
   require_all_locks
   spack python "$CSE_WORKSPACE_ROOT/scripts/verify-lockfiles.py"
@@ -482,6 +487,7 @@ install_selected() {
   done
 }
 
+verify_workspace_inputs
 verify_scopes
 
 case "$ACTION" in

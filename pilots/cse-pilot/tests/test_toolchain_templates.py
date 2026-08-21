@@ -5,6 +5,7 @@ import json
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -350,6 +351,83 @@ class ToolchainTemplateTests(unittest.TestCase):
         self.assertEqual(future_annotations, [])
         self.assertEqual(builtin_generics, [])
         compile(script, "verify-lockfiles.py", "exec")
+
+    def test_workspace_gate_rejects_an_incomplete_dakota_overlay(self) -> None:
+        script = render_text(
+            "scripts/verify-lockfiles.py.j2",
+            values=values(),
+            data={
+                "roster": {
+                    "cmake": {
+                        "build_default": "3.31.12",
+                        "current": "4.4.2",
+                    }
+                }
+            },
+        )
+        dakota_source = (
+            TEMPLATE_ROOT
+            / "package-repos"
+            / "spack_repo"
+            / "cse_trials"
+            / "packages"
+            / "dakota"
+        )
+        current_patch = (dakota_source / "boost-system-header-only.patch").read_text(
+            encoding="utf-8"
+        )
+        incomplete_patch = current_patch.split(
+            "diff --git a/src/surrogates/unit/CMakeLists.txt", 1
+        )[0]
+
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary) / "workspace"
+            script_path = workspace / "scripts" / "verify-lockfiles.py"
+            overlay = (
+                workspace
+                / "package-repos"
+                / "spack_repo"
+                / "cse_trials"
+                / "packages"
+                / "dakota"
+            )
+            script_path.parent.mkdir(parents=True)
+            overlay.mkdir(parents=True)
+            script_path.write_text(script, encoding="utf-8")
+            shutil.copyfile(dakota_source / "package.py", overlay / "package.py")
+            (overlay / "boost-system-header-only.patch").write_text(
+                current_patch, encoding="utf-8"
+            )
+
+            current = subprocess.run(
+                [sys.executable, str(script_path), "--workspace-only"],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+            (overlay / "boost-system-header-only.patch").write_text(
+                incomplete_patch, encoding="utf-8"
+            )
+            stale = subprocess.run(
+                [sys.executable, str(script_path), "--workspace-only"],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+
+        self.assertEqual(current.returncode, 0, current.stderr)
+        self.assertIn("Workspace input verification passed", current.stdout)
+        self.assertNotEqual(stale.returncode, 0)
+        self.assertIn("Dakota overlay is incomplete", stale.stderr)
+
+    def test_cse_build_checks_workspace_inputs_before_actions(self) -> None:
+        template = (TEMPLATE_ROOT / "cse-build.j2").read_text(encoding="utf-8")
+
+        self.assertIn("verify_workspace_inputs()", template)
+        self.assertLess(
+            template.index("\nverify_workspace_inputs\n"),
+            template.index("\nverify_scopes\n"),
+        )
 
     def test_cse_build_prepares_modules_before_activating_spack(self) -> None:
         template = (TEMPLATE_ROOT / "cse-build.j2").read_text(encoding="utf-8")
