@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import ast
+import grp
 import json
+import os
+import pwd
 import shlex
 import shutil
 import subprocess
@@ -164,6 +167,174 @@ class ToolchainTemplateTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Usage: ./cse-build", result.stdout)
+
+    @unittest.skipUnless(shutil.which("tcsh"), "tcsh is not installed")
+    def test_cse_build_shared_status_is_a_self_contained_tcsh_handoff(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            workspace = root / "workspace"
+            spack_root = root / "shared-spack"
+            builder_home = root / "builder-home"
+            workdir = root / "work"
+            workspace.mkdir()
+            builder_home.mkdir()
+            workdir.mkdir()
+
+            (spack_root / "bin").mkdir(parents=True)
+            (spack_root / "share" / "spack").mkdir(parents=True)
+            fake_spack = spack_root / "bin" / "spack"
+            fake_spack.write_text(
+                "#!/usr/bin/env bash\n"
+                "set -euo pipefail\n"
+                "if [ \"${1:-}\" = --version ]; then\n"
+                "  printf '1.2.2\\n'\n"
+                "elif [ \"${1:-}\" = python ]; then\n"
+                "  exit 0\n"
+                "elif [ \"${1:-}\" = config ]; then\n"
+                "  exit 0\n"
+                "elif [ \"${1:-}\" = -e ] && [ \"${3:-}\" = config ]; then\n"
+                "  printf 'workspace include active %s/configs/common\\n' \"$CSE_BUILD_WORKSPACE\"\n"
+                "else\n"
+                "  exit 0\n"
+                "fi\n",
+                encoding="utf-8",
+            )
+            fake_spack.chmod(0o755)
+            (spack_root / "share" / "spack" / "setup-env.sh").write_text(
+                'export PATH="$SPACK_ROOT/bin:$PATH"\n',
+                encoding="utf-8",
+            )
+            subprocess.run(
+                ["git", "init", "-q", str(spack_root)],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(spack_root), "config", "user.name", "Test Builder"],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(spack_root),
+                    "config",
+                    "user.email",
+                    "test@example.invalid",
+                ],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(spack_root), "add", "."],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(spack_root), "commit", "-qm", "fixture"],
+                check=True,
+            )
+            commit = subprocess.run(
+                ["git", "-C", str(spack_root), "rev-parse", "HEAD"],
+                check=True,
+                text=True,
+                capture_output=True,
+            ).stdout.strip()
+            subprocess.run(
+                ["git", "-C", str(spack_root), "tag", "v1.2.2"],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(spack_root),
+                    "remote",
+                    "add",
+                    "origin",
+                    "https://example.invalid/spack.git",
+                ],
+                check=True,
+            )
+
+            test_values = {
+                **values(),
+                "build_jobs": 16,
+                "system": {"name": "raider"},
+                "release": "trial-001",
+                "workspace": {"role": "build"},
+                "permissions": {
+                    "group": grp.getgrgid(os.getgid()).gr_name,
+                    "read": "group",
+                    "write": "group",
+                },
+                "spack": {
+                    "source": "https://example.invalid/spack.git",
+                    "version": "1.2.2",
+                    "tag": "v1.2.2",
+                    "commit": commit,
+                    "default_mode": "shared",
+                    "shared_root": str(spack_root),
+                    "initial_root": str(spack_root),
+                },
+            }
+            launcher = workspace / "cse-build"
+            launcher.write_text(
+                render_text("cse-build.j2", values=test_values),
+                encoding="utf-8",
+            )
+            launcher.chmod(0o770)
+            (workspace / "workspace-manifest.yaml").write_text(
+                "schema_version: 1\n",
+                encoding="utf-8",
+            )
+            (workspace / "configs" / "common").mkdir(parents=True)
+            (workspace / "scripts").mkdir()
+            (workspace / "scripts" / "verify-lockfiles.py").write_text(
+                "# fake verifier\n",
+                encoding="utf-8",
+            )
+            env_dir = workspace / "env"
+            env_dir.mkdir()
+            (env_dir / "select-build-context.sh").write_text(
+                render_text("env/select-build-context.sh.j2", values=test_values),
+                encoding="utf-8",
+            )
+            (env_dir / "prepare-module-state.sh").write_text(
+                "cse_prepare_module_state() { :; }\n",
+                encoding="utf-8",
+            )
+            (env_dir / "setup-build-env.sh").write_text(
+                render_text("env/setup-build-env.sh.j2", values=test_values),
+                encoding="utf-8",
+            )
+
+            for path in sorted(spack_root.rglob("*"), reverse=True):
+                path.chmod(0o550 if path.is_dir() or os.access(path, os.X_OK) else 0o440)
+            spack_root.chmod(0o550)
+
+            result = subprocess.run(
+                [
+                    shutil.which("tcsh") or "tcsh",
+                    "-f",
+                    "-c",
+                    f"cd {shlex.quote(str(workspace))} && "
+                    "./cse-build login status --spack-mode shared",
+                ],
+                check=False,
+                text=True,
+                capture_output=True,
+                env={
+                    "HOME": str(builder_home),
+                    "USER": pwd.getpwuid(os.getuid()).pw_name,
+                    "WORKDIR": str(workdir),
+                    "PATH": os.environ["PATH"],
+                },
+            )
+            home_entries = list(builder_home.iterdir())
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Node context: login (login)", result.stdout)
+        self.assertIn("Concrete locks: 0/8", result.stdout)
+        self.assertEqual(home_entries, [])
 
     def test_gcc_producer_explicitly_enables_binutils(self) -> None:
         test_values = values()
