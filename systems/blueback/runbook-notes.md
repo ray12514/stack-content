@@ -135,6 +135,59 @@ installation has started, preserve that release and create a new one.
 
 ## Restricted build and cache gates
 
+### Refresh `cse-build` without replacing the workspace
+
+Use this shortcut when Blueback already has a valid initialized workspace and
+lockfiles, but Stack Content changed `cse-build` or one of its generated helper
+files. It does not rerender the static catalog, replace environment YAML,
+reconcretize, clear caches, or touch installed packages.
+
+Stop active `cse-build` processes first. From the existing operator session,
+synchronize only the two inputs used by this refresh and rebuild Stack Composer
+when its checkout changed:
+
+```bash
+source "$CSE_OPERATOR_SESSION_FILE"
+
+for repo in stack-composer stack-content; do
+  git -C "$WORK_ROOT/$repo" status --short --branch
+done
+# Stop here if either checkout contains unreviewed work.
+
+for repo in stack-composer stack-content; do
+  git -C "$WORK_ROOT/$repo" pull --ff-only
+done
+
+cd "$COMPOSER"
+PYTHON="$CSE_PYTHON" bash scripts/build-pyz.sh
+"$CSE_PYTHON" "$STACK_COMPOSER" --help >/dev/null
+git -C "$COMPOSER" rev-parse HEAD \
+  > "$CSE_TOOL_STATE_ROOT/stack-composer.commit"
+```
+
+Refresh the declared control set in place, then run the read-only status and
+lock verification checks:
+
+```bash
+"$CSE_PYTHON" \
+  "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
+  --composer "$STACK_COMPOSER" \
+  --blueprint "$CONTENT/pilots/cse-pilot" \
+  --values "$BUILD_VALUES" \
+  --workspace "$BUILD_WORKSPACE"
+
+cd "$BUILD_WORKSPACE"
+./cse-build login status
+./cse-build login verify
+```
+
+The refresh renders a disposable workspace, confirms the blueprint, Blueback
+system, and catalog release match, and atomically replaces only `cse-build`,
+its environment helpers, the lock verifier, and the builder handoff note. A
+mismatch stops without changing the existing controls. If environment inputs
+or package overlays changed, use the common runbook's appropriate workspace or
+release recovery instead of this shortcut.
+
 Use this reviewed Step 7 selection:
 
 ```bash

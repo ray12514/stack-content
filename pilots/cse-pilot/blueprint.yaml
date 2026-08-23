@@ -7,6 +7,14 @@ description: |
 template_root: templates
 snapshot_catalog: true
 apply_workspace_permissions: true
+control_files:
+  - cse-build
+  - env/prepare-module-state.sh
+  - env/select-build-context.sh
+  - env/setup-build-env.sh
+  - env/workspace-shell.rc
+  - scripts/verify-lockfiles.py
+  - BUILDER-HANDOFF.md
 required_values:
   - workspace.role
   - build.contexts.login.node_type
