@@ -81,13 +81,41 @@ git -C "$CONTENT" status --short --branch
 git -C "$CONTENT" pull --ff-only origin codex/simplified-render-plan
 ```
 
+If the four generated producer specs already contain `+binutils`, refresh only
+the generated controls to install the exact-hash verifier from Stack Content
+commit `3ed4318` or newer. This preserves Wheat's environment YAML, lockfiles,
+installed prefixes, and caches:
+
+```bash
+"$CSE_PYTHON" \
+  "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
+  --composer "$STACK_COMPOSER" \
+  --blueprint "$CONTENT/pilots/cse-pilot" \
+  --values "$BUILD_VALUES" \
+  --workspace "$BUILD_WORKSPACE"
+
+cd "$BUILD_WORKSPACE"
+./cse-build login verify
+```
+
+A passing result proves that every downstream GCC-surface root uses the exact
+same concrete hash as the single `gcc@12.5.0+binutils` producer. An older
+`gcc@12.5.0~binutils` prefix may remain in the restricted trial store, but it
+is unreachable from the approved locks and is not part of release promotion.
+
+If verification reports that downstream compiler hashes do not match the
+`+binutils` producer hash, the locks are mixed. The control-only refresh has
+done its job by detecting the problem, but cannot repair it because it
+deliberately preserves environment YAML and lockfiles.
+
 When no Wheat package installation has been accepted, follow the canonical
 runbook's **Pre-install control refresh** procedure. It deliberately replaces
 the initialized workspace and its unaccepted lockfiles with `init-workspace
 --overwrite`, then reconcretizes and verifies all eight environments. The
 static catalog does not need to be regenerated for this blueprint-only change.
-Do not use the control-only refresh script for this recovery: it preserves the
-existing environment YAML and lockfiles.
+Use that full procedure when the producer specs are absent or the exact-hash
+verifier reports mixed locks. Do not mistake the control-only refresh for the
+repair step.
 
 Do not select an arbitrary latest external GCC for that runtime dependency.
 The helper reuses the same newest verified compiler older than GCC 12.5.0 that
