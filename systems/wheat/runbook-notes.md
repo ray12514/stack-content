@@ -44,8 +44,10 @@ remain bound to the oneAPI compiler.
 ## Verify or recover the GCC `+binutils` producer
 
 The complete GCC 12.5.0 policy is owned by the CSE trial blueprint in Stack
-Content. It requires `+binutils` on the producer, every downstream GCC root,
-and the shared C/C++/Fortran provider requirements. It is not supplied by
+Content. It requires `+binutils` on the producer and every downstream GCC
+compiler constraint and prefers that provider for C/C++/Fortran. It does not
+apply a global compiler requirement to packages, so the older bootstrap GCC
+remains available to build the managed producer. This policy is not supplied by
 Cluster Inspector, `render-static`, or the static catalog. Updating only
 Cluster Inspector or Stack Composer therefore does not update this policy.
 
@@ -69,7 +71,7 @@ cd "$BUILD_WORKSPACE"
 The `grep` command must show managed downstream constraints in all four GCC
 environments. `verify` checks the producer, downstream constraints, language
 provider preferences, and concrete compiler hashes. A passing result proves
-that no current Wheat root can reuse an older `gcc@12.5.0~binutils` prefix.
+that no current Wheat root uses the older `gcc@12.5.0~binutils` compiler hash.
 
 If the managed constraints are absent or verification reports mixed compiler
 hashes, a controls-only refresh is insufficient because it preserves the old

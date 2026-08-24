@@ -623,9 +623,10 @@ class ToolchainTemplateTests(unittest.TestCase):
             )
             shared_config.write_text(
                 "packages:\n"
-                "  c:\n    require: gcc@12.5.0+binutils\n"
-                "  cxx:\n    require: gcc@12.5.0+binutils\n"
-                "  fortran:\n    require: gcc@12.5.0+binutils\n",
+                "  c:\n    prefer: [gcc@12.5.0+binutils]\n"
+                "  cxx:\n    prefer: [gcc@12.5.0+binutils]\n"
+                "  fortran:\n    prefer: [gcc@12.5.0+binutils]\n"
+                "  gcc:\n    buildable: true\n",
                 encoding="utf-8",
             )
             producer = "gcc@12.5.0+binutils languages='c,c++,fortran'"
@@ -710,9 +711,10 @@ class ToolchainTemplateTests(unittest.TestCase):
             )
             shared_config.write_text(
                 "packages:\n"
-                "  c:\n    require: gcc@12.5.0+binutils\n"
-                "  cxx:\n    require: gcc@12.5.0+binutils\n"
-                "  fortran:\n    require: gcc@12.5.0+binutils\n",
+                "  c:\n    prefer: [gcc@12.5.0+binutils]\n"
+                "  cxx:\n    prefer: [gcc@12.5.0+binutils]\n"
+                "  fortran:\n    prefer: [gcc@12.5.0+binutils]\n"
+                "  gcc:\n    buildable: true\n",
                 encoding="utf-8",
             )
 
@@ -801,9 +803,10 @@ class ToolchainTemplateTests(unittest.TestCase):
             )
             shared_config.write_text(
                 "packages:\n"
-                "  c:\n    require: gcc@12.5.0+binutils\n"
-                "  cxx:\n    require: gcc@12.5.0+binutils\n"
-                "  fortran:\n    require: gcc@12.5.0+binutils\n",
+                "  c:\n    prefer: [gcc@12.5.0+binutils]\n"
+                "  cxx:\n    prefer: [gcc@12.5.0+binutils]\n"
+                "  fortran:\n    prefer: [gcc@12.5.0+binutils]\n"
+                "  gcc:\n    buildable: true\n",
                 encoding="utf-8",
             )
 
@@ -865,7 +868,7 @@ class ToolchainTemplateTests(unittest.TestCase):
         self.assertNotEqual(stale_constraint.returncode, 0)
         self.assertIn("unmanaged GCC compiler constraint", stale_constraint.stderr)
         self.assertNotEqual(stale_preferences.returncode, 0)
-        self.assertIn("language-provider requirements", stale_preferences.stderr)
+        self.assertIn("language-provider policy", stale_preferences.stderr)
 
     def test_cse_build_checks_workspace_inputs_before_actions(self) -> None:
         template = (TEMPLATE_ROOT / "cse-build.j2").read_text(encoding="utf-8")
@@ -1076,8 +1079,8 @@ printf 'pe=%s\n' "${PE_ENV-<unset>}"
         test_values = values()
         cases = {
             "configs/surfaces/shared/compiler.yaml.j2": (
-                "require",
-                "gcc@12.5.0+binutils",
+                "prefer",
+                ["gcc@12.5.0+binutils"],
             ),
             "configs/surfaces/platform/compiler.yaml.j2": (
                 "prefer",
@@ -1091,6 +1094,12 @@ printf 'pe=%s\n' "${PE_ENV-<unset>}"
                 packages = rendered["packages"]
                 for language in ("c", "cxx", "fortran"):
                     self.assertEqual(packages[language][policy_key], expected)
+
+        shared = render(
+            "configs/surfaces/shared/compiler.yaml.j2", values=test_values
+        )["packages"]["gcc"]
+        self.assertTrue(shared["buildable"])
+        self.assertNotIn("require", shared)
 
     def test_oneapi_core_includes_registered_gcc_runtime_provider(self) -> None:
         test_values = values()

@@ -35,10 +35,10 @@ Matching hashes let the shared store reuse it across those environments. Cray
 MPICH, libfabric, and Cray PMI remain platform externals.
 
 Before Fran's first full concretization, synchronize Stack Content. The
-generated preflight requires the GCC producer, all downstream GCC root
-constraints, and the shared language-provider requirements to request
-`gcc@12.5.0+binutils`. The lock verifier then requires every downstream
-GCC-surface root to use that exact producer hash:
+generated preflight requires the GCC producer and all downstream GCC compiler
+constraints to request `gcc@12.5.0+binutils`. It does not impose that compiler
+on the older GCC used to build the managed producer. The lock verifier then
+requires every downstream GCC-surface root to use that exact producer hash:
 
 ```bash
 source "$CSE_OPERATOR_SESSION_FILE"
@@ -84,6 +84,29 @@ Replace either value when Fran's catalog uses a different exact key.
 - Do not manually preload `PrgEnv-gnu`, `PrgEnv-cray`, `gcc`, `cce`, or
   `cray-mpich` before `cse-build`. The workspace's external package records
   own the exact module chains.
+
+## Recover profile verification after an empty fabric-driver inventory
+
+Fran may directly expose a non-Ethernet CXI fabric while providing no separate
+queryable driver package, module version, or driver prefix. In that case
+Cluster Inspector records the observed fabric and retains `drivers: []`. That
+profile is valid; the inspector must not invent a driver or reject the direct
+device observation.
+
+If schema validation passes but an older inspector reports `non-ethernet fabric
+must include at least one fabric driver`, update and rebuild only Cluster
+Inspector, then verify the existing merged profile again. The system and node
+probes and the static catalog do not need to be regenerated for this validator
+correction:
+
+```bash
+git -C "$INSPECTOR" pull --ff-only origin codex/simplified-render-plan
+make -C "$INSPECTOR" build
+"$INSPECTOR/cluster-inspector" verify "$PROBE_DIR/profile.yaml"
+```
+
+Both `PASS schema` and `PASS semantic` are required before rendering the Fran
+static catalog.
 
 ## Restricted-network source transfer
 

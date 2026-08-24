@@ -181,21 +181,19 @@ def workspace_input_errors() -> List[str]:
         shared_policy = ""
     if shared_policy:
         managed_provider = GCC_PRODUCER_COORDINATE + "+binutils"
-        requirement_lines = [
+        provider_lines = [
             line.split("#", 1)[0]
             for line in shared_policy.splitlines()
             if GCC_PRODUCER_COORDINATE in line.split("#", 1)[0]
         ]
-        managed_requirements = [
-            line
-            for line in requirement_lines
-            if "require:" in line and managed_provider in line
+        managed_providers = [
+            line for line in provider_lines if managed_provider in line
         ]
-        if len(managed_requirements) != 3 or len(requirement_lines) != 3:
+        if len(managed_providers) != 3 or len(provider_lines) != 3:
             errors.append(
-                "shared GCC language-provider requirements must require "
+                "shared GCC language-provider policy must prefer "
                 f"{managed_provider} exactly three times for c, cxx, and fortran; "
-                f"found {requirement_lines}"
+                f"found {provider_lines}"
             )
     return errors
 
