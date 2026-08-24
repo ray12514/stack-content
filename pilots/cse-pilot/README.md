@@ -23,12 +23,16 @@ GCC still needs an already available compiler to build GCC itself. The values
 helper selects the newest verified older GCC scope from the static catalog and
 records it under `shared.compiler.build_with`. This is a direct compiler
 dependency in each GCC environment, not a separate preparatory environment.
-Every GCC 12.5.0 producer explicitly enables `+binutils`; leaving the variant
-unspecified permits reuse of a previously concrete `~binutils` compiler. The
-lock verifier rejects a GCC producer without the managed Binutils dependency.
+Every GCC 12.5.0 producer, downstream root constraint, and shared language
+provider requirement explicitly enables `+binutils`; leaving the variant
+unspecified anywhere permits reuse of a previously concrete `~binutils`
+compiler. The workspace-input verifier rejects a producer, downstream
+constraint, or language-provider requirement without the managed Binutils
+dependency before concretization or installation.
 An older `gcc@12.5.0~binutils` prefix may remain in the restricted trial store,
-but it is not part of an approved lock set. The verifier requires every
-downstream GCC-surface root to use the exact same concrete hash as the single
+but it is ineligible for every newly rendered GCC root and is not part of an
+approved lock set. The lock verifier also requires every downstream GCC-surface
+root to use the exact same concrete hash as the single
 `gcc@12.5.0+binutils` producer. Release publication follows the verified locks,
 views, modules, and build-cache entries; it does not publish an unreachable
 older compiler merely because that prefix still exists in the trial store.

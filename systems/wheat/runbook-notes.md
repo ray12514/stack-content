@@ -43,11 +43,11 @@ remain bound to the oneAPI compiler.
 
 ## Verify or recover the GCC `+binutils` producer
 
-The GCC 12.5.0 producer constraint is owned by the CSE trial blueprint in
-Stack Content. It is not supplied by Cluster Inspector, `render-static`, or
-the static catalog. Updating only Cluster Inspector or Stack Composer therefore
-does not update this constraint. Stack Content commit `9e4cb54` or newer must
-be present before initializing the Wheat workspace.
+The complete GCC 12.5.0 policy is owned by the CSE trial blueprint in Stack
+Content. It requires `+binutils` on the producer, every downstream GCC root,
+and the shared C/C++/Fortran provider requirements. It is not supplied by
+Cluster Inspector, `render-static`, or the static catalog. Updating only
+Cluster Inspector or Stack Composer therefore does not update this policy.
 
 After loading the Wheat operator session, verify the source, generated
 environment inputs, and concrete locks in that order:
@@ -55,67 +55,29 @@ environment inputs, and concrete locks in that order:
 ```bash
 source "$CSE_OPERATOR_SESSION_FILE"
 
+git -C "$CONTENT" pull --ff-only origin codex/simplified-render-plan
 git -C "$CONTENT" log -1 --oneline
-if git -C "$CONTENT" merge-base --is-ancestor 9e4cb54 HEAD; then
-  echo "Stack Content includes the GCC +binutils policy"
-else
-  echo "Stack Content is too old"
-fi
 
 grep -R -n --include=spack.yaml \
-  'gcc@12.5.0+binutils' \
+  '%gcc@12.5.0+binutils' \
   "$BUILD_WORKSPACE/environments/gcc"
 
 cd "$BUILD_WORKSPACE"
 ./cse-build login verify
 ```
 
-The `grep` command must return four producer specs: Core, Common, Serial, and
-MPI. If all four are present and lock verification passes, an earlier display
-command merely omitted variants. If the producer specs are absent, synchronize
-Stack Content before regenerating the workspace:
+The `grep` command must show managed downstream constraints in all four GCC
+environments. `verify` checks the producer, downstream constraints, language
+provider preferences, and concrete compiler hashes. A passing result proves
+that no current Wheat root can reuse an older `gcc@12.5.0~binutils` prefix.
 
-```bash
-git -C "$CONTENT" status --short --branch
-# Stop here if the checkout contains unreviewed work.
-git -C "$CONTENT" pull --ff-only origin codex/simplified-render-plan
-```
-
-If the four generated producer specs already contain `+binutils`, refresh only
-the generated controls to install the exact-hash verifier from Stack Content
-commit `3ed4318` or newer. This preserves Wheat's environment YAML, lockfiles,
-installed prefixes, and caches:
-
-```bash
-"$CSE_PYTHON" \
-  "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
-  --composer "$STACK_COMPOSER" \
-  --blueprint "$CONTENT/pilots/cse-pilot" \
-  --values "$BUILD_VALUES" \
-  --workspace "$BUILD_WORKSPACE"
-
-cd "$BUILD_WORKSPACE"
-./cse-build login verify
-```
-
-A passing result proves that every downstream GCC-surface root uses the exact
-same concrete hash as the single `gcc@12.5.0+binutils` producer. An older
-`gcc@12.5.0~binutils` prefix may remain in the restricted trial store, but it
-is unreachable from the approved locks and is not part of release promotion.
-
-If verification reports that downstream compiler hashes do not match the
-`+binutils` producer hash, the locks are mixed. The control-only refresh has
-done its job by detecting the problem, but cannot repair it because it
-deliberately preserves environment YAML and lockfiles.
-
-When no Wheat package installation has been accepted, follow the canonical
-runbook's **Pre-install control refresh** procedure. It deliberately replaces
-the initialized workspace and its unaccepted lockfiles with `init-workspace
---overwrite`, then reconcretizes and verifies all eight environments. The
-static catalog does not need to be regenerated for this blueprint-only change.
-Use that full procedure when the producer specs are absent or the exact-hash
-verifier reports mixed locks. Do not mistake the control-only refresh for the
-repair step.
+If the managed constraints are absent or verification reports mixed compiler
+hashes, a controls-only refresh is insufficient because it preserves the old
+environment YAML and lockfiles. When no Wheat package installation has been
+accepted, follow the canonical runbook's **Pre-install workspace refresh**
+procedure. It uses `init-workspace --overwrite`, then reconcretizes and verifies
+all eight environments. The static catalog does not need to be regenerated for
+this blueprint-only correction.
 
 Do not select an arbitrary latest external GCC for that runtime dependency.
 The helper reuses the same newest verified compiler older than GCC 12.5.0 that

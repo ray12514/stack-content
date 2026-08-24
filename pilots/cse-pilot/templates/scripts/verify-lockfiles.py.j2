@@ -139,12 +139,63 @@ def workspace_input_errors() -> List[str]:
             line.split("#", 1)[0]
             for line in rendered.splitlines()
             if GCC_PRODUCER_COORDINATE in line.split("#", 1)[0]
+            and f"%{GCC_PRODUCER_COORDINATE}" not in line.split("#", 1)[0]
         ]
         if not any("+binutils" in line for line in producer_lines):
             errors.append(
                 f"{environment}: GCC producer {GCC_PRODUCER_COORDINATE} "
                 "does not enable +binutils; regenerate the workspace from current "
                 "Stack Content before concretizing or building"
+            )
+        managed_constraint = f"%{GCC_PRODUCER_COORDINATE}+binutils"
+        bare_constraint = f"%{GCC_PRODUCER_COORDINATE}"
+        constraint_lines = [
+            line.split("#", 1)[0]
+            for line in rendered.splitlines()
+            if bare_constraint in line.split("#", 1)[0]
+        ]
+        if not any(managed_constraint in line for line in constraint_lines):
+            errors.append(
+                f"{environment}: generated spack.yaml has no managed GCC compiler "
+                f"constraint {managed_constraint}"
+            )
+        unmanaged_lines = [
+            line.strip()
+            for line in constraint_lines
+            if managed_constraint not in line
+        ]
+        if unmanaged_lines:
+            errors.append(
+                f"{environment}: generated spack.yaml contains an unmanaged GCC "
+                f"compiler constraint {bare_constraint}; expected "
+                f"{managed_constraint}: {unmanaged_lines}"
+            )
+
+    shared_compiler_config = (
+        WORKSPACE / "configs" / "surfaces" / "shared" / "compiler.yaml"
+    )
+    try:
+        shared_policy = shared_compiler_config.read_text(encoding="utf-8")
+    except OSError as error:
+        errors.append(f"shared GCC compiler policy is unavailable: {error}")
+        shared_policy = ""
+    if shared_policy:
+        managed_provider = GCC_PRODUCER_COORDINATE + "+binutils"
+        requirement_lines = [
+            line.split("#", 1)[0]
+            for line in shared_policy.splitlines()
+            if GCC_PRODUCER_COORDINATE in line.split("#", 1)[0]
+        ]
+        managed_requirements = [
+            line
+            for line in requirement_lines
+            if "require:" in line and managed_provider in line
+        ]
+        if len(managed_requirements) != 3 or len(requirement_lines) != 3:
+            errors.append(
+                "shared GCC language-provider requirements must require "
+                f"{managed_provider} exactly three times for c, cxx, and fortran; "
+                f"found {requirement_lines}"
             )
     return errors
 

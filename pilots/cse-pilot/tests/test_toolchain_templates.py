@@ -371,6 +371,20 @@ class ToolchainTemplateTests(unittest.TestCase):
             compiler_spec = groups["compiler"]["specs"][0]
             self.assertIn("+binutils", compiler_spec)
 
+        core_groups = {
+            entry["group"]: entry for entry in core["spack"]["specs"]
+        }
+        for group in ("foundation", "core"):
+            compiler_constraint = core_groups[group]["specs"][0]["matrix"][1][0]
+            self.assertIn("%gcc@12.5.0+binutils", compiler_constraint)
+
+        payload_groups = {
+            entry["group"]: entry for entry in payload["spack"]["specs"]
+        }
+        for group in ("foundation", "build-tools"):
+            compiler_constraint = payload_groups[group]["specs"][0]["matrix"][1][0]
+            self.assertIn("%gcc@12.5.0+binutils", compiler_constraint)
+
     def test_common_package_policy_uses_system_glibc_for_iconv(self) -> None:
         rendered = render(
             "configs/common/packages.yaml.j2",
@@ -464,12 +478,17 @@ class ToolchainTemplateTests(unittest.TestCase):
 
         self.assertEqual(shared["compiler_producer"]["tcl"]["exclude"], ["@:"])
         self.assertEqual(
-            shared["compiler_producer"]["tcl"]["include"], ["gcc@12.5.0"]
+            shared["compiler_producer"]["tcl"]["include"],
+            ["gcc@12.5.0+binutils"],
         )
         self.assertEqual(shared["default"]["tcl"]["exclude"], ["@:"])
-        self.assertIn("pkgconf %gcc@12.5.0", shared["default"]["tcl"]["include"])
         self.assertIn(
-            "python@3.12.13 %gcc@12.5.0", shared["default"]["tcl"]["include"]
+            "pkgconf %gcc@12.5.0+binutils",
+            shared["default"]["tcl"]["include"],
+        )
+        self.assertIn(
+            "python@3.12.13 %gcc@12.5.0+binutils",
+            shared["default"]["tcl"]["include"],
         )
 
         test_values["platform"]["compiler"].update(
@@ -591,20 +610,35 @@ class ToolchainTemplateTests(unittest.TestCase):
                 / "packages"
                 / "dakota"
             )
+            shared_config = (
+                workspace / "configs" / "surfaces" / "shared" / "compiler.yaml"
+            )
             script_path.parent.mkdir(parents=True)
             overlay.mkdir(parents=True)
+            shared_config.parent.mkdir(parents=True)
             script_path.write_text(script, encoding="utf-8")
             shutil.copyfile(dakota_source / "package.py", overlay / "package.py")
             (overlay / "boost-system-header-only.patch").write_text(
                 current_patch, encoding="utf-8"
             )
+            shared_config.write_text(
+                "packages:\n"
+                "  c:\n    require: gcc@12.5.0+binutils\n"
+                "  cxx:\n    require: gcc@12.5.0+binutils\n"
+                "  fortran:\n    require: gcc@12.5.0+binutils\n",
+                encoding="utf-8",
+            )
             producer = "gcc@12.5.0+binutils languages='c,c++,fortran'"
+            managed_constraint = "target=x86_64_v3 %gcc@12.5.0+binutils"
             for lane in ("core", "common", "serial", "mpi-openmpi"):
                 environment = workspace / "environments" / "gcc" / lane
                 environment.mkdir(parents=True)
                 (environment / "spack.yaml").write_text(
                     "spack:\n  specs:\n    - group: compiler\n"
-                    f"      specs:\n        - {producer}\n",
+                    f"      specs:\n        - {producer}\n"
+                    "    - group: foundation\n      specs:\n        - matrix:\n"
+                    "            - [$foundation]\n"
+                    f"            - [{managed_constraint}]\n",
                     encoding="utf-8",
                 )
 
@@ -662,22 +696,37 @@ class ToolchainTemplateTests(unittest.TestCase):
                 / "packages"
                 / "dakota"
             )
+            shared_config = (
+                workspace / "configs" / "surfaces" / "shared" / "compiler.yaml"
+            )
             script_path.parent.mkdir(parents=True)
             overlay.mkdir(parents=True)
+            shared_config.parent.mkdir(parents=True)
             script_path.write_text(script, encoding="utf-8")
             shutil.copyfile(dakota_source / "package.py", overlay / "package.py")
             shutil.copyfile(
                 dakota_source / "boost-system-header-only.patch",
                 overlay / "boost-system-header-only.patch",
             )
+            shared_config.write_text(
+                "packages:\n"
+                "  c:\n    require: gcc@12.5.0+binutils\n"
+                "  cxx:\n    require: gcc@12.5.0+binutils\n"
+                "  fortran:\n    require: gcc@12.5.0+binutils\n",
+                encoding="utf-8",
+            )
 
             producer = "gcc@12.5.0+binutils languages='c,c++,fortran'"
+            managed_constraint = "target=x86_64_v3 %gcc@12.5.0+binutils"
             for lane in ("core", "common", "serial", "mpi-openmpi"):
                 environment = workspace / "environments" / "gcc" / lane
                 environment.mkdir(parents=True)
                 (environment / "spack.yaml").write_text(
                     "spack:\n  specs:\n    - group: compiler\n"
-                    f"      specs:\n        - {producer}\n",
+                    f"      specs:\n        - {producer}\n"
+                    "    - group: foundation\n      specs:\n        - matrix:\n"
+                    "            - [$foundation]\n"
+                    f"            - [{managed_constraint}]\n",
                     encoding="utf-8",
                 )
 
@@ -689,7 +738,9 @@ class ToolchainTemplateTests(unittest.TestCase):
             )
             stale_path = workspace / "environments" / "gcc" / "common" / "spack.yaml"
             stale_path.write_text(
-                stale_path.read_text(encoding="utf-8").replace("+binutils", ""),
+                stale_path.read_text(encoding="utf-8").replace(
+                    producer, producer.replace("+binutils", "")
+                ),
                 encoding="utf-8",
             )
             stale = subprocess.run(
@@ -702,6 +753,119 @@ class ToolchainTemplateTests(unittest.TestCase):
         self.assertEqual(current.returncode, 0, current.stderr)
         self.assertNotEqual(stale.returncode, 0)
         self.assertIn("does not enable +binutils", stale.stderr)
+
+    def test_workspace_gate_rejects_bare_gcc_downstream_constraints(self) -> None:
+        script = render_text(
+            "scripts/verify-lockfiles.py.j2",
+            values=values(),
+            data={
+                "roster": {
+                    "cmake": {
+                        "build_default": "3.31.12",
+                        "current": "4.4.2",
+                    }
+                }
+            },
+        )
+        dakota_source = (
+            TEMPLATE_ROOT
+            / "package-repos"
+            / "spack_repo"
+            / "cse_trials"
+            / "packages"
+            / "dakota"
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary) / "workspace"
+            script_path = workspace / "scripts" / "verify-lockfiles.py"
+            overlay = (
+                workspace
+                / "package-repos"
+                / "spack_repo"
+                / "cse_trials"
+                / "packages"
+                / "dakota"
+            )
+            shared_config = (
+                workspace / "configs" / "surfaces" / "shared" / "compiler.yaml"
+            )
+            script_path.parent.mkdir(parents=True)
+            overlay.mkdir(parents=True)
+            shared_config.parent.mkdir(parents=True)
+            script_path.write_text(script, encoding="utf-8")
+            shutil.copyfile(dakota_source / "package.py", overlay / "package.py")
+            shutil.copyfile(
+                dakota_source / "boost-system-header-only.patch",
+                overlay / "boost-system-header-only.patch",
+            )
+            shared_config.write_text(
+                "packages:\n"
+                "  c:\n    require: gcc@12.5.0+binutils\n"
+                "  cxx:\n    require: gcc@12.5.0+binutils\n"
+                "  fortran:\n    require: gcc@12.5.0+binutils\n",
+                encoding="utf-8",
+            )
+
+            producer = "gcc@12.5.0+binutils languages='c,c++,fortran'"
+            managed_constraint = "target=x86_64_v3 %gcc@12.5.0+binutils"
+            for lane in ("core", "common", "serial", "mpi-openmpi"):
+                environment = workspace / "environments" / "gcc" / lane
+                environment.mkdir(parents=True)
+                (environment / "spack.yaml").write_text(
+                    "spack:\n  specs:\n    - group: compiler\n"
+                    f"      specs:\n        - {producer}\n"
+                    "    - group: foundation\n      specs:\n        - matrix:\n"
+                    "            - [$foundation]\n"
+                    f"            - [{managed_constraint}]\n",
+                    encoding="utf-8",
+                )
+
+            current = subprocess.run(
+                [sys.executable, str(script_path), "--workspace-only"],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+
+            stale_path = workspace / "environments" / "gcc" / "common" / "spack.yaml"
+            stale_path.write_text(
+                stale_path.read_text(encoding="utf-8").replace(
+                    managed_constraint, "target=x86_64_v3 %gcc@12.5.0"
+                ),
+                encoding="utf-8",
+            )
+            stale_constraint = subprocess.run(
+                [sys.executable, str(script_path), "--workspace-only"],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+
+            stale_path.write_text(
+                stale_path.read_text(encoding="utf-8").replace(
+                    "target=x86_64_v3 %gcc@12.5.0", managed_constraint
+                ),
+                encoding="utf-8",
+            )
+            shared_config.write_text(
+                shared_config.read_text(encoding="utf-8").replace(
+                    "gcc@12.5.0+binutils", "gcc@12.5.0"
+                ),
+                encoding="utf-8",
+            )
+            stale_preferences = subprocess.run(
+                [sys.executable, str(script_path), "--workspace-only"],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+
+        self.assertEqual(current.returncode, 0, current.stderr)
+        self.assertNotEqual(stale_constraint.returncode, 0)
+        self.assertIn("unmanaged GCC compiler constraint", stale_constraint.stderr)
+        self.assertNotEqual(stale_preferences.returncode, 0)
+        self.assertIn("language-provider requirements", stale_preferences.stderr)
 
     def test_cse_build_checks_workspace_inputs_before_actions(self) -> None:
         template = (TEMPLATE_ROOT / "cse-build.j2").read_text(encoding="utf-8")
@@ -908,19 +1072,25 @@ printf 'pe=%s\n' "${PE_ENV-<unset>}"
         self.assertIn("modules=cce/21.0.0:site/base", result.stdout)
         self.assertIn("pe=<unset>", result.stdout)
 
-    def test_language_provider_preferences_are_surface_specific(self) -> None:
+    def test_language_provider_policy_is_surface_specific(self) -> None:
         test_values = values()
         cases = {
-            "configs/surfaces/shared/compiler.yaml.j2": "gcc@12.5.0",
-            "configs/surfaces/platform/compiler.yaml.j2": "aocc@4.1.0",
+            "configs/surfaces/shared/compiler.yaml.j2": (
+                "require",
+                "gcc@12.5.0+binutils",
+            ),
+            "configs/surfaces/platform/compiler.yaml.j2": (
+                "prefer",
+                ["aocc@4.1.0"],
+            ),
         }
 
-        for template, expected in cases.items():
+        for template, (policy_key, expected) in cases.items():
             with self.subTest(template=template):
                 rendered = render(template, values=test_values)
                 packages = rendered["packages"]
                 for language in ("c", "cxx", "fortran"):
-                    self.assertEqual(packages[language]["prefer"], [expected])
+                    self.assertEqual(packages[language][policy_key], expected)
 
     def test_oneapi_core_includes_registered_gcc_runtime_provider(self) -> None:
         test_values = values()

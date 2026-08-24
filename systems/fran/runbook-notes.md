@@ -34,24 +34,20 @@ Build the GCC 12.5.0 compiler producer inside each GCC-surface environment.
 Matching hashes let the shared store reuse it across those environments. Cray
 MPICH, libfabric, and Cray PMI remain platform externals.
 
-Before Fran's first full concretization, synchronize Stack Content and require
-commit `3ed4318` or newer. The generated preflight then requires all four GCC
-environment inputs to request `gcc@12.5.0+binutils`, and the lock verifier
-requires every downstream GCC-surface root to use that exact producer hash:
+Before Fran's first full concretization, synchronize Stack Content. The
+generated preflight requires the GCC producer, all downstream GCC root
+constraints, and the shared language-provider requirements to request
+`gcc@12.5.0+binutils`. The lock verifier then requires every downstream
+GCC-surface root to use that exact producer hash:
 
 ```bash
 source "$CSE_OPERATOR_SESSION_FILE"
 git -C "$CONTENT" pull --ff-only origin codex/simplified-render-plan
-
-if git -C "$CONTENT" merge-base --is-ancestor 3ed4318 HEAD; then
-  echo "Stack Content includes the managed GCC hash verification"
-else
-  echo "Stack Content is too old"
-fi
+git -C "$CONTENT" log -1 --oneline
 ```
 
-After workspace initialization, the common runbook's input check must find
-four `gcc@12.5.0+binutils` producer specs. After concretization,
+After workspace initialization, the common runbook's input check must pass for
+all four GCC environments. After concretization,
 `./cse-build login verify` must pass before fetching or installing. An older
 GCC 12.5 prefix may coexist in the restricted trial store, but it is not
 accepted when any current Fran root reaches it.

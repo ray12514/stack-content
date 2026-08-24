@@ -2,7 +2,7 @@
   'intel-oneapi-compilers': 'oneapi',
   'intel-oneapi-compilers-classic': 'intel'
 }.get(surface.compiler.name, surface.compiler.name) %}
-{% set compiler_constraint = '%' ~ compiler_spec_name ~ '@' ~ surface.compiler.version %}
+{% set compiler_constraint = '%' ~ compiler_spec_name ~ '@' ~ surface.compiler.version ~ ('+binutils' if surface.compiler.source == 'build' else '') %}
 {% macro with_compiler(spec, compiler) -%}
 {%- if '^' in spec -%}
 {{ spec.split('^', 1)[0].rstrip() }} {{ compiler }} ^{{ spec.split('^', 1)[1].lstrip() }}
@@ -23,7 +23,7 @@ modules:
       exclude_implicits: true
       exclude: ['@:']
       include:
-        - {{ (surface.compiler.name ~ '@' ~ surface.compiler.version) | yaml_scalar }}
+        - {{ (surface.compiler.name ~ '@' ~ surface.compiler.version ~ '+binutils') | yaml_scalar }}
       projections:
         all: '{name}/{version}'
       all:

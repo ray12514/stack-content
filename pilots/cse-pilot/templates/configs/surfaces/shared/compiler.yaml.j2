@@ -1,12 +1,9 @@
 packages:
   c:
-    prefer:
-      - {{ (values.shared.compiler.name ~ '@' ~ values.shared.compiler.version) | yaml_scalar }}
+    require: {{ (values.shared.compiler.name ~ '@' ~ values.shared.compiler.version ~ '+binutils') | yaml_scalar }}
   cxx:
-    prefer:
-      - {{ (values.shared.compiler.name ~ '@' ~ values.shared.compiler.version) | yaml_scalar }}
+    require: {{ (values.shared.compiler.name ~ '@' ~ values.shared.compiler.version ~ '+binutils') | yaml_scalar }}
   fortran:
-    prefer:
-      - {{ (values.shared.compiler.name ~ '@' ~ values.shared.compiler.version) | yaml_scalar }}
+    require: {{ (values.shared.compiler.name ~ '@' ~ values.shared.compiler.version ~ '+binutils') | yaml_scalar }}
   {{ values.shared.compiler.name }}:
     buildable: true
