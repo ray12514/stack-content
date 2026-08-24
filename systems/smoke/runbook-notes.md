@@ -5,12 +5,16 @@ per-system notes template. For a new target system, copy
 `systems/_template/runbook-notes.md`, then use
 `stack-planning/docs/runbook.md` for the common procedure.
 
-The goal is to prove the common path on Cray, generic Linux/Penguin-style
-systems, and future vendor platforms:
+The goal is to prove the full-render path on Cray, generic
+Linux/Penguin-style systems, and future vendor platforms:
 
 ```text
 cluster-inspector -> profile.yaml -> stack-composer validate/render -> spack-build
 ```
+
+This fixture does not exercise the Initial Conversion Trials
+`render-static`/`init-workspace` path. Use the canonical trial runbook and the
+matching system notes for that workflow.
 
 Platform-specific facts should come from the generated profile and the
 stack/default policy. The runbook should not require a Blueback-style directory
@@ -89,13 +93,15 @@ for repo in cluster-inspector stack-composer stack-content stack-planning; do
 done
 ```
 
-Bootstrap the per-system notes directory from this smoke template. After this
-command, work from `$SYSTEM_DIR/runbook-notes.md` for the actual system.
+Create the per-system notes file from the system-notes template. Do not copy
+this smoke fixture directory into a live system directory.
 
 ```bash
 mkdir -p "$CONTENT/systems"
-if [ "$SYSTEM_NAME" != "smoke" ] && [ ! -d "$SYSTEM_DIR" ]; then
-  cp -R "$CONTENT/systems/smoke" "$SYSTEM_DIR"
+mkdir -p "$SYSTEM_DIR"
+if [ ! -f "$SYSTEM_DIR/runbook-notes.md" ]; then
+  cp "$CONTENT/systems/_template/runbook-notes.md" \
+    "$SYSTEM_DIR/runbook-notes.md"
 fi
 ```
 
@@ -107,13 +113,22 @@ make clean
 make build
 
 cd "$COMPOSER"
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e '.[dev]'
-bash scripts/build-pyz.sh
+export CSE_BOOTSTRAP_PYTHON="<absolute-path-to-reviewed-python-3.9-or-newer>"
+test -x "$CSE_BOOTSTRAP_PYTHON"
+"$CSE_BOOTSTRAP_PYTHON" -c \
+  'import sys; assert sys.version_info >= (3, 9), sys.version'
+"$CSE_BOOTSTRAP_PYTHON" -m venv .venv
+export CSE_PYTHON="$COMPOSER/.venv/bin/python"
+"$CSE_PYTHON" -m pip install --upgrade \
+  pip \
+  "setuptools>=77" \
+  "wheel>=0.44,<1" \
+  "build>=1.2,<2"
+"$CSE_PYTHON" -m pip install -e '.[dev]'
+PYTHON="$CSE_PYTHON" bash scripts/build-pyz.sh
 
 export STACK_COMPOSER="$COMPOSER/dist/stack-composer.pyz"
+"$CSE_PYTHON" "$STACK_COMPOSER" --help >/dev/null
 ```
 
 Source the Spack setup for the target test and verify the pinned version:
@@ -124,10 +139,11 @@ source /path/to/use-spack.sh
 spack --version
 ```
 
-Use Spack 1.1.1 or newer for the control run. Treat a new Spack minor release
-as an explicit adoption test until its smoke matrix passes.
+Use the approved Spack 1.2.2 tag and commit for the current control run. Treat
+any different Spack release as an explicit adoption test until its smoke matrix
+passes.
 
-## Stage 1 — Manual profile fragments
+## Stage 1 — Profile fragments
 
 Ensure the system directory exists:
 
@@ -213,8 +229,9 @@ Review `profile.yaml` before rendering:
 - system externals such as OpenSSL, curl, libfabric, UCX, CUDA/ROCm components;
 - node CPU target and build-stage candidates.
 
-If a profile fact is wrong, fix Cluster Inspector or the discovery policy. Do
-not hand-edit `profile.yaml` except to unblock a test while recording the bug.
+If a profile fact is wrong, fix Cluster Inspector or the reviewed system hint
+and regenerate the fragment and profile. Do not hand-edit `profile.yaml` or
+render from a diagnostic copy.
 
 ## Stage 2 — Deployment input
 
@@ -283,7 +300,7 @@ stack and record that decision.
 export PROFILE="$SYSTEM_DIR/profile.yaml"
 export STACK="$CONTENT/stacks/mpi-smoke/stack.yaml"
 
-python "$STACK_COMPOSER" validate \
+"$CSE_PYTHON" "$STACK_COMPOSER" validate \
   --profile "$PROFILE" \
   --deployment "$SYSTEM_DIR/deployment.yaml" \
   --stack "$STACK" \
@@ -298,7 +315,7 @@ Render only after validation passes:
 ```bash
 export RELEASE="$SYSTEM_NAME-smoke-001"
 
-python "$STACK_COMPOSER" render \
+"$CSE_PYTHON" "$STACK_COMPOSER" render \
   --profile "$PROFILE" \
   --deployment "$SYSTEM_DIR/deployment.yaml" \
   --stack "$STACK" \

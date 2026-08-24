@@ -12,9 +12,9 @@ stack-content repo (per team or per stack family); the pattern is the same.
 ![What the stack-content repo holds](docs/stack_content_contents.svg)
 
 For the full renderer's per-stack workspaces and shared install-tree lifecycle,
-see `stack-planning/docs/stack_workspace_lifecycle_v1.md`. The current static
-CSE pilot deliberately uses separate restricted and published install trees;
-its canonical procedure is `stack-planning/docs/runbook.md`.
+see `stack-planning/docs/stack_workspace_lifecycle_v1.md`. The CSE Initial
+Conversion Trials deliberately use separate restricted and published install
+trees; their canonical procedure is `stack-planning/docs/runbook.md`.
 
 ## Layout
 
@@ -27,9 +27,9 @@ templates/<set>/                 # the reusable placeholder tree (the INPUT)
 package-sets/*.yaml              # curated Spack spec sets a stack can reference
 package-repos/<name>/            # optional Spack package repositories
 stacks/<stack>/stack.yaml        # package intent (spec-native: name + specs [+ kind])
-systems/<system>/profile.yaml    # observed facts from cluster-inspector (tracked per system)
+systems/<system>/profile.yaml    # reviewed input; live trial copies may remain untracked
 systems/<system>/deployment.yaml # installer-chosen roots and shared access policy
-pilots/<pilot>/                  # temporary, named starter blueprints for a specific rollout
+pilots/<trial>/                  # temporary, named starter blueprints for a specific rollout
 ```
 
 `deployment.yaml` is required for render. It owns install tree, build-stage,
@@ -63,14 +63,38 @@ template is shared.
   starter blueprint. `pilots/cse-pilot/` uses this seam to produce the current
   CPU-only Foundation/Core/Common/Serial/MPI trial environments, module policy,
   and a generated `cse-build` resume entry point for the receiving builder. The
-  pilot blueprint applies its declared group access modes to the new workspace.
+  trial blueprint applies its declared group access modes to the new workspace.
 - `render` remains the full curated-stack path. It owns the complete automated
   workspace, deployment inputs, lanes, views, modules, and release manifest.
 
 The CSE Initial Conversion Trials starter kit is intentionally named and
 isolated. Its package roster can change without turning trial policy into
-generic static-catalog behavior. See `pilots/cse-pilot/README.md` and copy
-`pilots/cse-pilot/site-values.example.yaml` for each target system.
+generic static-catalog behavior. See `pilots/cse-pilot/README.md`. Operators
+generate each target's values from the reviewed static catalog with
+`pilots/cse-pilot/scripts/create-build-values.py`; the tracked
+`site-values.example.yaml` documents the input contract and supports tests. It
+is not copied and filled in by hand.
+
+During the Initial Conversion Trials, the operator retains the raw fragments
+and merged profile in the probe area, then copies the verified profile into the
+local `systems/<system>/profile.yaml` input. That live-system copy may remain
+untracked. The generated static catalog and initialized workspace each retain
+their own reviewed profile snapshot.
+
+## Documentation routing
+
+- Use `stack-planning/docs/runbook.md` for the common procedure and recovery
+  rules that apply across systems.
+- Use `pilots/cse-pilot/README.md` for the authored Initial Conversion Trials
+  blueprint, package, and workspace behavior.
+- Use `systems/<system>/runbook-notes.md` only for that system's reviewed
+  selections, exact recovery commands, and acceptance evidence.
+- Use the generated workspace `README.md` and `BUILDER-HANDOFF.md` for the
+  receiving builder's resume and install commands.
+
+Do not preserve a generated-file edit as operating policy. Correct the owning
+profile, catalog logic, blueprint, template, roster, or procedure and regenerate
+the affected artifact.
 
 Use `stack-planning/docs/runbook.md` as the single procedure for Blueback,
 Raider, Wheat, and Fran. It keeps the restricted source build separate from the

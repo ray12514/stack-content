@@ -145,6 +145,13 @@ stage is namespaced by the current Spack user, system, trial release, and
 context. The generated setup requires an absolute writable `WORKDIR` and fails
 if no executable stage is available.
 
+On a builder's first concretization, Spack may install Clingo support and helper
+packages such as re2c, gmake, CMake, Python venv, and GCC runtime below that
+builder's bootstrap store. That is Spack preparing its concretizer. It is not
+the CSE Core or `core-independent` group, does not install the trial package
+roster, and is not a separate CSE bootstrap environment. The same builder and
+approved Spack identity normally reuse it for the remaining environments.
+
 Before this workspace exists, the operator resumes work through a separate
 operator-local session entry point. Run `scripts/create-operator-session.py`
 once for an exact system/catalog/trial tuple, then source the generated

@@ -105,6 +105,74 @@ Replace either value when Fran's catalog uses a different exact key.
   `cray-mpich` before `cse-build`. The workspace's external package records
   own the exact module chains.
 
+## Diagnose an AOCC module omitted from the profile
+
+Use this gate only when the live Fran module inventory exposes an AOCC module
+but the merged profile does not contain the matching compiler provider. A Cray
+MPICH or cray-libsci path ending in an AOCC flavor is compatibility evidence;
+it is not proof that the compiler itself is installed or loadable. Do not add a
+compiler provider from that product-tree suffix alone.
+
+First update and rebuild Cluster Inspector, record the exact live AOCC module
+inventory, and rerun only the system probe with a transcript:
+
+```bash
+source "$CSE_OPERATOR_SESSION_FILE"
+
+git -C "$INSPECTOR" pull --ff-only origin codex/simplified-render-plan
+make -C "$INSPECTOR" build
+
+module -t avail aocc 2>&1 | tee "$PROBE_DIR/fran-aocc-module-inventory.txt"
+
+HINTS_OPTION=()
+if [ -f "$SYSTEM_DIR/inspector-hints.yaml" ]; then
+  HINTS_OPTION=(--hints "$SYSTEM_DIR/inspector-hints.yaml")
+fi
+
+"$INSPECTOR/cluster-inspector" probe-system \
+  --system "$SYSTEM_NAME" \
+  "${HINTS_OPTION[@]}" \
+  --record "$PROBE_DIR/system-probe-transcript.yaml" \
+  --output "$PROBE_DIR/system.frag.yaml"
+
+grep -nEi 'aocc|compiler_providers|verify_failed|candidate' \
+  "$PROBE_DIR/system.frag.yaml" \
+  "$PROBE_DIR/system-probe-transcript.yaml"
+```
+
+Review the exact module name, activation result, reported compiler version, and
+prefix. If the current inspector emits the compiler provider, merge the new
+system fragment with Fran's existing login and compute fragments and verify the
+profile:
+
+```bash
+"$INSPECTOR/cluster-inspector" merge \
+  --system-fragment "$PROBE_DIR/system.frag.yaml" \
+  --node "$PROBE_DIR/login.frag.yaml" \
+  --node "$PROBE_DIR/compute.frag.yaml" \
+  --output "$PROBE_DIR/profile.yaml"
+
+"$INSPECTOR/cluster-inspector" verify "$PROBE_DIR/profile.yaml"
+```
+
+If the exact reviewed AOCC module is loadable but was not enumerated, merge
+that exact module name into `systems/fran/inspector-hints.yaml` rather than
+guessing a compiler record. The relevant shape is:
+
+```yaml
+schema_version: 1
+compilers:
+  include:
+    - <exact-reviewed-aocc-module-name>
+```
+
+Preserve any existing hint sections. Then rerun the system probe, merge, and
+verification commands above. Both `PASS schema` and `PASS semantic` are
+required. Regenerate the static catalog and workspace only after the reviewed
+profile actually changes. If the transcript records a verification failure,
+retain that evidence and fix the inspector or live module issue; do not force
+the failed candidate into the profile.
+
 ## Recover profile verification after an empty fabric-driver inventory
 
 Fran may directly expose a non-Ethernet CXI fabric while providing no separate

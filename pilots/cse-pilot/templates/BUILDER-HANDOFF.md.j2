@@ -158,6 +158,12 @@ same surface. `BUILD_JOBS` is a per-process budget, so two processes on one node
 would add their budgets together. `concretize` and `verify` remain
 whole-workspace gates and do not accept `--surface`.
 
+The first login concretization for a builder may install Clingo support and
+helper packages below the per-builder Spack bootstrap store. This is Spack
+preparing its solver, not a CSE Core build or a separate trial environment. It
+normally occurs once for the approved Spack identity and is then reused by all
+eight environments and by the compute context.
+
 The operator may instead launch any distinct environment directly, on one node
 or across several nodes. Open a prepared shell for each process:
 

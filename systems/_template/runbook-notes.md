@@ -26,7 +26,7 @@ from `stack-planning/docs/`.
   - reviewed build node type and job count:
   - generated temp/scratch/`${WORKDIR}` stage order:
 - Publication values: `systems/<system>/cse-trials-publish-values.yaml`
-- Active pilot roster: `pilots/cse-pilot/roster.yaml`
+- Active trial roster: `pilots/cse-pilot/roster.yaml`
 - Spack release:
 - `spack-packages` release:
 - Cluster Inspector commit:

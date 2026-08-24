@@ -17,6 +17,9 @@ A node remains in this CPU compatibility check when it also has a GPU.
 Switching between login and compute changes operational stage/command-cache
 state, not the target or concrete DAG. The per-builder Spack bootstrap store is
 shared, so login-node concretization prepares Clingo for later compute-node use.
+The first concretization may install Clingo support and helper packages in that
+store. Those artifacts belong to Spack's solver bootstrap; they are not the CSE
+Core package group or a separate CSE environment.
 
 Login build-stage candidates:
 
