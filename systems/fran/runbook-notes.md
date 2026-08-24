@@ -47,8 +47,36 @@ git -C "$CONTENT" pull --ff-only origin codex/simplified-render-plan
 git -C "$CONTENT" log -1 --oneline
 ```
 
-If Fran is already concretizing a workspace rendered before this correction,
-stop it with `Ctrl-C`, then replace the unaccepted workspace and locks directly:
+If Fran already has eight lockfiles, do not infer compliance from an older
+`Lockfile verification passed` message. The earlier verifier checked shared
+hashes but did not prove that the shared compiler producer had `+binutils` or
+that every downstream GCC root reached that producer. Refresh only the
+workspace controls first; this preserves every environment YAML file, lockfile,
+cache, view, and installed prefix while installing the current verifier:
+
+```bash
+"$CSE_PYTHON" \
+  "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
+  --composer "$STACK_COMPOSER" \
+  --blueprint "$CONTENT/pilots/cse-pilot" \
+  --values "$BUILD_VALUES" \
+  --workspace "$BUILD_WORKSPACE"
+
+cd "$BUILD_WORKSPACE"
+./cse-build login verify
+```
+
+If both workspace-input and lockfile verification pass, keep all eight locks;
+neither the GCC nor CCE surface needs another solve. If workspace-input
+verification fails, the generated GCC environment YAML predates the corrected
+producer/`needs` inputs. If workspace-input verification passes but lockfile
+verification reports the wrong GCC producer or downstream compiler hash, only
+the four GCC locks are stale; preserve the output and use the affected-lock
+recovery procedure in the main runbook. Do not reconcretize the four CCE locks.
+
+If Fran is still concretizing a workspace rendered before this correction and
+does not yet have an accepted lock set, stop it with `Ctrl-C`, then replace the
+unaccepted workspace and locks directly:
 
 ```bash
 "$CSE_PYTHON" "$STACK_COMPOSER" init-workspace \
