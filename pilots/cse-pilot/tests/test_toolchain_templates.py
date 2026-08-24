@@ -523,6 +523,35 @@ class ToolchainTemplateTests(unittest.TestCase):
         self.assertEqual(builtin_generics, [])
         compile(script, "verify-lockfiles.py", "exec")
 
+    def test_lock_verifier_rejects_downstream_use_of_a_different_gcc_hash(self) -> None:
+        script = render_text(
+            "scripts/verify-lockfiles.py.j2",
+            values=values(),
+            data={
+                "roster": {
+                    "cmake": {
+                        "build_default": "3.31.12",
+                        "current": "4.4.2",
+                    }
+                }
+            },
+        )
+        namespace = {
+            "__file__": "/workspace/scripts/verify-lockfiles.py",
+            "__name__": "verifier_test",
+        }
+        exec(compile(script, "verify-lockfiles.py", "exec"), namespace)
+        errors = []
+
+        namespace["verify_shared_gcc_provider_hashes"](
+            {"gcc-plus-binutils-hash"},
+            {("gcc", "gcc", "12.5.0"): {"gcc-without-binutils-hash"}},
+            errors,
+        )
+
+        self.assertEqual(len(errors), 1)
+        self.assertIn("do not match the +binutils producer hash", errors[0])
+
     def test_workspace_gate_rejects_an_incomplete_dakota_overlay(self) -> None:
         script = render_text(
             "scripts/verify-lockfiles.py.j2",

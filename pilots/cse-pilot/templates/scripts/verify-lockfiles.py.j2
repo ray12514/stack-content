@@ -65,6 +65,11 @@ GCC_PRODUCER_COORDINATE = (
     + "@"
     + {{ values.shared.compiler.version | tojson }}
 )
+SHARED_COMPILER_KEY = (
+    {{ values.shared.compiler.name | tojson }},
+    {{ values.shared.compiler.name | tojson }},
+    {{ values.shared.compiler.version | tojson }},
+)
 GCC_ENVIRONMENTS = {
     environment
     for environment in EXPECTED_ENVIRONMENTS
@@ -212,6 +217,27 @@ def direct_language_provider_hashes(node: Dict) -> Set[str]:
             {"c", "cxx", "fortran"}
         )
     }
+
+
+def verify_shared_gcc_provider_hashes(
+    gcc_producer_hashes: Set[str],
+    language_provider_hashes: Dict[Tuple[str, str, str], Set[str]],
+    errors: List[str],
+) -> None:
+    shared_compiler_hashes = language_provider_hashes.get(
+        SHARED_COMPILER_KEY, set()
+    )
+    if len(shared_compiler_hashes) != 1:
+        errors.append(
+            f"{SHARED_COMPILER_KEY[0]}@{SHARED_COMPILER_KEY[2]}: downstream roots "
+            f"use compiler hashes {sorted(shared_compiler_hashes)}; expected one"
+        )
+    if len(gcc_producer_hashes) == 1 and shared_compiler_hashes != gcc_producer_hashes:
+        errors.append(
+            f"{SHARED_COMPILER_KEY[0]}@{SHARED_COMPILER_KEY[2]}: downstream compiler "
+            f"hashes {sorted(shared_compiler_hashes)} do not match the +binutils "
+            f"producer hash {sorted(gcc_producer_hashes)}"
+        )
 
 
 def main(workspace_only: bool = False) -> int:
@@ -510,17 +536,9 @@ def main(workspace_only: bool = False) -> int:
                 f"across environments: {', '.join(sorted(hashes))}"
             )
 
-    shared_compiler_key = (
-        {{ values.shared.compiler.name | tojson }},
-        {{ values.shared.compiler.name | tojson }},
-        {{ values.shared.compiler.version | tojson }},
+    verify_shared_gcc_provider_hashes(
+        gcc_producer_hashes, language_provider_hashes, errors
     )
-    shared_compiler_hashes = language_provider_hashes.get(shared_compiler_key, set())
-    if len(shared_compiler_hashes) != 1:
-        errors.append(
-            f"{shared_compiler_key[0]}@{shared_compiler_key[1]}: downstream roots "
-            f"use compiler hashes {sorted(shared_compiler_hashes)}; expected one"
-        )
 
     if errors:
         for error in errors:
