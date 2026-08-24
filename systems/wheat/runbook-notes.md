@@ -41,6 +41,54 @@ includes the verified GCC seed scope. That GCC is present only to provide the
 `gcc-runtime` dependency required by `intel-oneapi-runtime`; Wheat payload roots
 remain bound to the oneAPI compiler.
 
+## Verify or recover the GCC `+binutils` producer
+
+The GCC 12.5.0 producer constraint is owned by the CSE trial blueprint in
+Stack Content. It is not supplied by Cluster Inspector, `render-static`, or
+the static catalog. Updating only Cluster Inspector or Stack Composer therefore
+does not update this constraint. Stack Content commit `9e4cb54` or newer must
+be present before initializing the Wheat workspace.
+
+After loading the Wheat operator session, verify the source, generated
+environment inputs, and concrete locks in that order:
+
+```bash
+source "$CSE_OPERATOR_SESSION_FILE"
+
+git -C "$CONTENT" log -1 --oneline
+if git -C "$CONTENT" merge-base --is-ancestor 9e4cb54 HEAD; then
+  echo "Stack Content includes the GCC +binutils policy"
+else
+  echo "Stack Content is too old"
+fi
+
+grep -R -n --include=spack.yaml \
+  'gcc@12.5.0+binutils' \
+  "$BUILD_WORKSPACE/environments/gcc"
+
+cd "$BUILD_WORKSPACE"
+./cse-build login verify
+```
+
+The `grep` command must return four producer specs: Core, Common, Serial, and
+MPI. If all four are present and lock verification passes, an earlier display
+command merely omitted variants. If the producer specs are absent, synchronize
+Stack Content before regenerating the workspace:
+
+```bash
+git -C "$CONTENT" status --short --branch
+# Stop here if the checkout contains unreviewed work.
+git -C "$CONTENT" pull --ff-only origin codex/simplified-render-plan
+```
+
+When no Wheat package installation has been accepted, follow the canonical
+runbook's **Pre-install control refresh** procedure. It deliberately replaces
+the initialized workspace and its unaccepted lockfiles with `init-workspace
+--overwrite`, then reconcretizes and verifies all eight environments. The
+static catalog does not need to be regenerated for this blueprint-only change.
+Do not use the control-only refresh script for this recovery: it preserves the
+existing environment YAML and lockfiles.
+
 Do not select an arbitrary latest external GCC for that runtime dependency.
 The helper reuses the same newest verified compiler older than GCC 12.5.0 that
 the reviewed catalog selects to build the GCC 12.5.0 producer. Use

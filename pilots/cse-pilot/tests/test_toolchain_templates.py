@@ -569,6 +569,15 @@ class ToolchainTemplateTests(unittest.TestCase):
             (overlay / "boost-system-header-only.patch").write_text(
                 current_patch, encoding="utf-8"
             )
+            producer = "gcc@12.5.0+binutils languages='c,c++,fortran'"
+            for lane in ("core", "common", "serial", "mpi-openmpi"):
+                environment = workspace / "environments" / "gcc" / lane
+                environment.mkdir(parents=True)
+                (environment / "spack.yaml").write_text(
+                    "spack:\n  specs:\n    - group: compiler\n"
+                    f"      specs:\n        - {producer}\n",
+                    encoding="utf-8",
+                )
 
             current = subprocess.run(
                 [sys.executable, str(script_path), "--workspace-only"],
@@ -590,6 +599,80 @@ class ToolchainTemplateTests(unittest.TestCase):
         self.assertIn("Workspace input verification passed", current.stdout)
         self.assertNotEqual(stale.returncode, 0)
         self.assertIn("Dakota overlay is incomplete", stale.stderr)
+
+    def test_workspace_gate_rejects_a_stale_gcc_producer_spec(self) -> None:
+        script = render_text(
+            "scripts/verify-lockfiles.py.j2",
+            values=values(),
+            data={
+                "roster": {
+                    "cmake": {
+                        "build_default": "3.31.12",
+                        "current": "4.4.2",
+                    }
+                }
+            },
+        )
+        dakota_source = (
+            TEMPLATE_ROOT
+            / "package-repos"
+            / "spack_repo"
+            / "cse_trials"
+            / "packages"
+            / "dakota"
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary) / "workspace"
+            script_path = workspace / "scripts" / "verify-lockfiles.py"
+            overlay = (
+                workspace
+                / "package-repos"
+                / "spack_repo"
+                / "cse_trials"
+                / "packages"
+                / "dakota"
+            )
+            script_path.parent.mkdir(parents=True)
+            overlay.mkdir(parents=True)
+            script_path.write_text(script, encoding="utf-8")
+            shutil.copyfile(dakota_source / "package.py", overlay / "package.py")
+            shutil.copyfile(
+                dakota_source / "boost-system-header-only.patch",
+                overlay / "boost-system-header-only.patch",
+            )
+
+            producer = "gcc@12.5.0+binutils languages='c,c++,fortran'"
+            for lane in ("core", "common", "serial", "mpi-openmpi"):
+                environment = workspace / "environments" / "gcc" / lane
+                environment.mkdir(parents=True)
+                (environment / "spack.yaml").write_text(
+                    "spack:\n  specs:\n    - group: compiler\n"
+                    f"      specs:\n        - {producer}\n",
+                    encoding="utf-8",
+                )
+
+            current = subprocess.run(
+                [sys.executable, str(script_path), "--workspace-only"],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+            stale_path = workspace / "environments" / "gcc" / "common" / "spack.yaml"
+            stale_path.write_text(
+                stale_path.read_text(encoding="utf-8").replace("+binutils", ""),
+                encoding="utf-8",
+            )
+            stale = subprocess.run(
+                [sys.executable, str(script_path), "--workspace-only"],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+
+        self.assertEqual(current.returncode, 0, current.stderr)
+        self.assertNotEqual(stale.returncode, 0)
+        self.assertIn("does not enable +binutils", stale.stderr)
 
     def test_cse_build_checks_workspace_inputs_before_actions(self) -> None:
         template = (TEMPLATE_ROOT / "cse-build.j2").read_text(encoding="utf-8")
