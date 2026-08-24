@@ -23,13 +23,15 @@ GCC still needs an already available compiler to build GCC itself. The values
 helper selects the newest verified older GCC scope from the static catalog and
 records it under `shared.compiler.build_with`. This is a direct compiler
 dependency in each GCC environment, not a separate preparatory environment.
-Every GCC 12.5.0 producer and downstream compiler constraint explicitly enables
-`+binutils`. Shared language-provider preferences select that same spec, but do
-not impose a global compiler requirement on packages or on the older GCC used
-to build the producer. Leaving the variant unspecified on a compiler constraint
-permits reuse of a previously concrete `~binutils` compiler. The workspace-input
-verifier rejects an incomplete producer, downstream constraint, or preference
-before concretization or installation.
+Every GCC 12.5.0 producer explicitly enables `+binutils`. Downstream groups do
+not repeat `%gcc@12.5.0` as a second compiler constraint. They inherit the exact
+concrete producer through `needs: [compiler]`, while shared C/C++/Fortran
+preferences select `gcc@12.5.0+binutils`. A separate downstream `%gcc`
+constraint creates another compiler solve and can split the producer hash even
+when it also spells `+binutils`. The workspace-input verifier rejects an
+incomplete producer, a repeated downstream compiler constraint, a missing
+`needs` relationship, or an incomplete language-provider preference before
+concretization or installation.
 An older `gcc@12.5.0~binutils` prefix may remain in the restricted trial store,
 but it is ineligible for every newly rendered GCC root and is not part of an
 approved lock set. The lock verifier also requires every downstream GCC-surface

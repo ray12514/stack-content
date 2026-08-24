@@ -55,7 +55,11 @@ spack:
       specs:
         - matrix:
             - [$foundation]
+{% if surface.compiler.source == 'build' %}
+            - [{{ ('target=' ~ values.architecture.target) | yaml_scalar }}]
+{% else %}
             - [{{ ('target=' ~ values.architecture.target ~ ' %' ~ surface.compiler.name ~ '@' ~ surface.compiler.version ~ ('+binutils' if surface.compiler.source == 'build' else '')) | yaml_scalar }}]
+{% endif %}
     - group: build-tools
 {% if surface.compiler.source == 'build' %}
       needs: [compiler, foundation]
@@ -65,7 +69,11 @@ spack:
       specs:
         - matrix:
             - [$build_tools]
+{% if surface.compiler.source == 'build' %}
+            - [{{ ('target=' ~ values.architecture.target) | yaml_scalar }}]
+{% else %}
             - [{{ ('target=' ~ values.architecture.target ~ ' %' ~ surface.compiler.name ~ '@' ~ surface.compiler.version ~ ('+binutils' if surface.compiler.source == 'build' else '')) | yaml_scalar }}]
+{% endif %}
 {% if environment_kind == 'mpi' and surface.mpi.source == 'build' %}
     - group: mpi
 {% if surface.compiler.source == 'build' %}

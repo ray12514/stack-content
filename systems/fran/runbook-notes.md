@@ -35,16 +35,36 @@ Matching hashes let the shared store reuse it across those environments. Cray
 MPICH, libfabric, and Cray PMI remain platform externals.
 
 Before Fran's first full concretization, synchronize Stack Content. The
-generated preflight requires the GCC producer and all downstream GCC compiler
-constraints to request `gcc@12.5.0+binutils`. It does not impose that compiler
-on the older GCC used to build the managed producer. The lock verifier then
-requires every downstream GCC-surface root to use that exact producer hash:
+generated preflight requires the GCC producer to request
+`gcc@12.5.0+binutils`, forbids a second downstream `%gcc@12.5.0` constraint,
+and requires downstream GCC groups to inherit the exact producer through
+`needs: [compiler]`. The lock verifier then requires every downstream
+GCC-surface root to use that exact producer hash:
 
 ```bash
 source "$CSE_OPERATOR_SESSION_FILE"
 git -C "$CONTENT" pull --ff-only origin codex/simplified-render-plan
 git -C "$CONTENT" log -1 --oneline
 ```
+
+If Fran is already concretizing a workspace rendered before this correction,
+stop it with `Ctrl-C`, then replace the unaccepted workspace and locks directly:
+
+```bash
+"$CSE_PYTHON" "$STACK_COMPOSER" init-workspace \
+  --blueprint "$CONTENT/pilots/cse-pilot" \
+  --catalog "$CATALOG" \
+  --values "$BUILD_VALUES" \
+  --output "$BUILD_WORKSPACE" \
+  --overwrite
+
+cd "$BUILD_WORKSPACE"
+./cse-build login concretize
+./cse-build login verify
+```
+
+This does not regenerate Fran's profile or static catalog. Use it only before
+installation from the replaced locks has been accepted.
 
 After workspace initialization, the common runbook's input check must pass for
 all four GCC environments. After concretization,

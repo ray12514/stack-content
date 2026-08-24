@@ -44,12 +44,14 @@ remain bound to the oneAPI compiler.
 ## Verify or recover the GCC `+binutils` producer
 
 The complete GCC 12.5.0 policy is owned by the CSE trial blueprint in Stack
-Content. It requires `+binutils` on the producer and every downstream GCC
-compiler constraint and prefers that provider for C/C++/Fortran. It does not
-apply a global compiler requirement to packages, so the older bootstrap GCC
-remains available to build the managed producer. This policy is not supplied by
-Cluster Inspector, `render-static`, or the static catalog. Updating only
-Cluster Inspector or Stack Composer therefore does not update this policy.
+Content. It requires `+binutils` on the producer and prefers that provider for
+C/C++/Fortran. Foundation, Core, build-tool, MPI, and payload groups inherit the
+exact concrete producer through `needs: [compiler]`; they must not repeat
+`%gcc@12.5.0` as a second compiler constraint. That duplicate constraint caused
+Wheat to solve two GCC 12.5.0 hashes even though both requested `+binutils`.
+The older bootstrap GCC remains available only to build the managed producer.
+This policy is not supplied by Cluster Inspector, `render-static`, or the
+static catalog.
 
 After loading the Wheat operator session, verify the source, generated
 environment inputs, and concrete locks in that order:
@@ -61,28 +63,42 @@ git -C "$CONTENT" pull --ff-only origin codex/simplified-render-plan
 git -C "$CONTENT" log -1 --oneline
 
 grep -R -n --include=spack.yaml \
-  '%gcc@12.5.0+binutils' \
+  "gcc@12.5.0+binutils languages='c,c++,fortran'" \
   "$BUILD_WORKSPACE/environments/gcc"
+
+if grep -R -n --include=spack.yaml \
+  '%gcc@12.5.0' \
+  "$BUILD_WORKSPACE/environments/gcc"; then
+  echo "ERROR: duplicate downstream GCC constraint remains" >&2
+  false
+fi
+
+"$CSE_PYTHON" \
+  "$BUILD_WORKSPACE/scripts/verify-lockfiles.py" \
+  --workspace-only
 
 cd "$BUILD_WORKSPACE"
 ./cse-build login verify
 ```
 
-The `grep` command must show managed downstream constraints in all four GCC
-environments. `verify` checks the producer, downstream constraints, language
-provider preferences, and concrete compiler hashes. A passing result proves
-that no current Wheat root uses the older `gcc@12.5.0~binutils` compiler hash.
+The first `grep` must show one managed producer in each GCC environment. The
+second must produce no output. The workspace-only gate checks the producer,
+all required `needs` relationships, and the language-provider preferences.
+After concretization, `verify` also checks that every GCC-surface root uses the
+one producer hash.
 
-If the managed constraints are absent or verification reports mixed compiler
-hashes, a controls-only refresh is insufficient because it preserves the old
+If the managed producer or `needs` relationships are absent, a downstream
+`%gcc@12.5.0` line is present, or verification reports mixed compiler hashes,
+a controls-only refresh is insufficient because it preserves the old
 environment YAML and lockfiles.
 
 ### Current Wheat pre-install reset
 
-Use this exact quick fix when the old `gcc@12.5.0~binutils` hash appears in
-Wheat locks and no package installation from those locks has been accepted.
-Stop any running concretization with `Ctrl-C`, then replace the generated
-workspace inputs and locks from the current Stack Content blueprint:
+Use this exact quick fix when Wheat reports two GCC 12.5.0 hashes, a producer
+hash mismatch, or an old `gcc@12.5.0~binutils` hash and no package installation
+from those locks has been accepted. Stop any running concretization with
+`Ctrl-C`, then replace the generated workspace inputs and locks from the current
+Stack Content blueprint:
 
 ```bash
 source "$CSE_OPERATOR_SESSION_FILE"
@@ -103,11 +119,11 @@ cd "$BUILD_WORKSPACE"
 ```
 
 This reset does not regenerate the Wheat profile or static catalog and does not
-remove the older GCC prefix from the shared Spack store. The new producer and
-downstream compiler constraints make that old hash ineligible for the new
-locks. If installation from the old locks was already attempted or accepted,
-preserve its lock evidence and use the main runbook's release recovery policy
-instead of this pre-install reset.
+remove an older GCC prefix from the shared Spack store. `concretize --fresh`
+does not reuse installed dependencies; the producer plus `needs` selects one
+new GCC hash for the four GCC environments. If installation from the old locks
+was already attempted or accepted, preserve its lock evidence and use the main
+runbook's release recovery policy instead of this pre-install reset.
 
 Do not select an arbitrary latest external GCC for that runtime dependency.
 The helper reuses the same newest verified compiler older than GCC 12.5.0 that

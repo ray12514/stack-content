@@ -147,29 +147,45 @@ def workspace_input_errors() -> List[str]:
                 "does not enable +binutils; regenerate the workspace from current "
                 "Stack Content before concretizing or building"
             )
-        managed_constraint = f"%{GCC_PRODUCER_COORDINATE}+binutils"
-        bare_constraint = f"%{GCC_PRODUCER_COORDINATE}"
-        constraint_lines = [
-            line.split("#", 1)[0]
+        duplicate_constraint = f"%{GCC_PRODUCER_COORDINATE}"
+        duplicate_lines = [
+            line.split("#", 1)[0].strip()
             for line in rendered.splitlines()
-            if bare_constraint in line.split("#", 1)[0]
+            if duplicate_constraint in line.split("#", 1)[0]
         ]
-        if not any(managed_constraint in line for line in constraint_lines):
+        if duplicate_lines:
             errors.append(
-                f"{environment}: generated spack.yaml has no managed GCC compiler "
-                f"constraint {managed_constraint}"
+                f"{environment}: generated spack.yaml repeats the managed GCC "
+                f"producer as a downstream compiler constraint "
+                f"{duplicate_constraint}; downstream groups must inherit the exact "
+                f"producer through needs: {duplicate_lines}"
             )
-        unmanaged_lines = [
-            line.strip()
-            for line in constraint_lines
-            if managed_constraint not in line
-        ]
-        if unmanaged_lines:
-            errors.append(
-                f"{environment}: generated spack.yaml contains an unmanaged GCC "
-                f"compiler constraint {bare_constraint}; expected "
-                f"{managed_constraint}: {unmanaged_lines}"
-            )
+
+        group_lines = rendered.splitlines()
+        for index, line in enumerate(group_lines):
+            stripped = line.strip()
+            if not stripped.startswith("- group: "):
+                continue
+            group_indent = len(line) - len(line.lstrip())
+            group_name = stripped.split(":", 1)[1].strip()
+            if group_name not in {"foundation", "core", "build-tools", "mpi", "payload"}:
+                continue
+            block: List[str] = []
+            for candidate in group_lines[index + 1 :]:
+                candidate_stripped = candidate.strip()
+                candidate_indent = len(candidate) - len(candidate.lstrip())
+                if (
+                    candidate_stripped.startswith("- group: ")
+                    and candidate_indent == group_indent
+                ):
+                    break
+                block.append(candidate_stripped)
+            needs_lines = [entry for entry in block if entry.startswith("needs:")]
+            if not any("compiler" in entry for entry in needs_lines):
+                errors.append(
+                    f"{environment}: group {group_name!r} does not inherit the "
+                    "managed GCC producer through needs"
+                )
 
     shared_compiler_config = (
         WORKSPACE / "configs" / "surfaces" / "shared" / "compiler.yaml"
@@ -298,7 +314,7 @@ def main(workspace_only: bool = False) -> int:
             return 1
         print(
             "Workspace input verification passed: current CSE Dakota overlay and "
-            "GCC producer inputs."
+            "GCC producer/needs inputs."
         )
         return 0
 

@@ -29,13 +29,13 @@ spack:
       specs:
         - matrix:
             - [$foundation]
-            - [{{ ('target=' ~ values.architecture.target ~ ' %' ~ values.shared.compiler.name ~ '@' ~ values.shared.compiler.version ~ '+binutils') | yaml_scalar }}]
+            - [{{ ('target=' ~ values.architecture.target) | yaml_scalar }}]
     - group: core
       needs: [compiler, foundation]
       specs:
         - matrix:
             - [$core]
-            - [{{ ('target=' ~ values.architecture.target ~ ' %' ~ values.shared.compiler.name ~ '@' ~ values.shared.compiler.version ~ '+binutils') | yaml_scalar }}]
+            - [{{ ('target=' ~ values.architecture.target) | yaml_scalar }}]
     - group: core-independent
       specs:
         - matrix:

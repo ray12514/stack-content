@@ -336,7 +336,9 @@ class ToolchainTemplateTests(unittest.TestCase):
         self.assertIn("Concrete locks: 0/8", result.stdout)
         self.assertEqual(home_entries, [])
 
-    def test_gcc_producer_explicitly_enables_binutils(self) -> None:
+    def test_gcc_groups_inherit_the_managed_producer_without_a_second_constraint(
+        self,
+    ) -> None:
         test_values = values()
         roster = {
             "specs": {
@@ -376,14 +378,17 @@ class ToolchainTemplateTests(unittest.TestCase):
         }
         for group in ("foundation", "core"):
             compiler_constraint = core_groups[group]["specs"][0]["matrix"][1][0]
-            self.assertIn("%gcc@12.5.0+binutils", compiler_constraint)
+            self.assertEqual(compiler_constraint, "target=x86_64_v3")
+            self.assertIn("compiler", core_groups[group]["needs"])
 
         payload_groups = {
             entry["group"]: entry for entry in payload["spack"]["specs"]
         }
         for group in ("foundation", "build-tools"):
             compiler_constraint = payload_groups[group]["specs"][0]["matrix"][1][0]
-            self.assertIn("%gcc@12.5.0+binutils", compiler_constraint)
+            self.assertEqual(compiler_constraint, "target=x86_64_v3")
+            self.assertIn("compiler", payload_groups[group]["needs"])
+        self.assertIn("compiler", payload_groups["payload"]["needs"])
 
     def test_common_package_policy_uses_system_glibc_for_iconv(self) -> None:
         rendered = render(
@@ -630,16 +635,17 @@ class ToolchainTemplateTests(unittest.TestCase):
                 encoding="utf-8",
             )
             producer = "gcc@12.5.0+binutils languages='c,c++,fortran'"
-            managed_constraint = "target=x86_64_v3 %gcc@12.5.0+binutils"
+            downstream_constraint = "target=x86_64_v3"
             for lane in ("core", "common", "serial", "mpi-openmpi"):
                 environment = workspace / "environments" / "gcc" / lane
                 environment.mkdir(parents=True)
                 (environment / "spack.yaml").write_text(
                     "spack:\n  specs:\n    - group: compiler\n"
                     f"      specs:\n        - {producer}\n"
-                    "    - group: foundation\n      specs:\n        - matrix:\n"
+                    "    - group: foundation\n      needs: [compiler]\n"
+                    "      specs:\n        - matrix:\n"
                     "            - [$foundation]\n"
-                    f"            - [{managed_constraint}]\n",
+                    f"            - [{downstream_constraint}]\n",
                     encoding="utf-8",
                 )
 
@@ -719,16 +725,17 @@ class ToolchainTemplateTests(unittest.TestCase):
             )
 
             producer = "gcc@12.5.0+binutils languages='c,c++,fortran'"
-            managed_constraint = "target=x86_64_v3 %gcc@12.5.0+binutils"
+            downstream_constraint = "target=x86_64_v3"
             for lane in ("core", "common", "serial", "mpi-openmpi"):
                 environment = workspace / "environments" / "gcc" / lane
                 environment.mkdir(parents=True)
                 (environment / "spack.yaml").write_text(
                     "spack:\n  specs:\n    - group: compiler\n"
                     f"      specs:\n        - {producer}\n"
-                    "    - group: foundation\n      specs:\n        - matrix:\n"
+                    "    - group: foundation\n      needs: [compiler]\n"
+                    "      specs:\n        - matrix:\n"
                     "            - [$foundation]\n"
-                    f"            - [{managed_constraint}]\n",
+                    f"            - [{downstream_constraint}]\n",
                     encoding="utf-8",
                 )
 
@@ -756,7 +763,7 @@ class ToolchainTemplateTests(unittest.TestCase):
         self.assertNotEqual(stale.returncode, 0)
         self.assertIn("does not enable +binutils", stale.stderr)
 
-    def test_workspace_gate_rejects_bare_gcc_downstream_constraints(self) -> None:
+    def test_workspace_gate_rejects_a_second_gcc_downstream_constraint(self) -> None:
         script = render_text(
             "scripts/verify-lockfiles.py.j2",
             values=values(),
@@ -811,16 +818,17 @@ class ToolchainTemplateTests(unittest.TestCase):
             )
 
             producer = "gcc@12.5.0+binutils languages='c,c++,fortran'"
-            managed_constraint = "target=x86_64_v3 %gcc@12.5.0+binutils"
+            downstream_constraint = "target=x86_64_v3"
             for lane in ("core", "common", "serial", "mpi-openmpi"):
                 environment = workspace / "environments" / "gcc" / lane
                 environment.mkdir(parents=True)
                 (environment / "spack.yaml").write_text(
                     "spack:\n  specs:\n    - group: compiler\n"
                     f"      specs:\n        - {producer}\n"
-                    "    - group: foundation\n      specs:\n        - matrix:\n"
+                    "    - group: foundation\n      needs: [compiler]\n"
+                    "      specs:\n        - matrix:\n"
                     "            - [$foundation]\n"
-                    f"            - [{managed_constraint}]\n",
+                    f"            - [{downstream_constraint}]\n",
                     encoding="utf-8",
                 )
 
@@ -834,7 +842,8 @@ class ToolchainTemplateTests(unittest.TestCase):
             stale_path = workspace / "environments" / "gcc" / "common" / "spack.yaml"
             stale_path.write_text(
                 stale_path.read_text(encoding="utf-8").replace(
-                    managed_constraint, "target=x86_64_v3 %gcc@12.5.0"
+                    downstream_constraint,
+                    "target=x86_64_v3 %gcc@12.5.0+binutils",
                 ),
                 encoding="utf-8",
             )
@@ -847,7 +856,28 @@ class ToolchainTemplateTests(unittest.TestCase):
 
             stale_path.write_text(
                 stale_path.read_text(encoding="utf-8").replace(
-                    "target=x86_64_v3 %gcc@12.5.0", managed_constraint
+                    "target=x86_64_v3 %gcc@12.5.0+binutils",
+                    downstream_constraint,
+                ),
+                encoding="utf-8",
+            )
+            stale_path.write_text(
+                stale_path.read_text(encoding="utf-8").replace(
+                    "      needs: [compiler]\n", ""
+                ),
+                encoding="utf-8",
+            )
+            missing_needs = subprocess.run(
+                [sys.executable, str(script_path), "--workspace-only"],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+            stale_path.write_text(
+                stale_path.read_text(encoding="utf-8").replace(
+                    "    - group: foundation\n      specs:\n",
+                    "    - group: foundation\n      needs: [compiler]\n"
+                    "      specs:\n",
                 ),
                 encoding="utf-8",
             )
@@ -866,7 +896,9 @@ class ToolchainTemplateTests(unittest.TestCase):
 
         self.assertEqual(current.returncode, 0, current.stderr)
         self.assertNotEqual(stale_constraint.returncode, 0)
-        self.assertIn("unmanaged GCC compiler constraint", stale_constraint.stderr)
+        self.assertIn("repeats the managed GCC producer", stale_constraint.stderr)
+        self.assertNotEqual(missing_needs.returncode, 0)
+        self.assertIn("does not inherit the managed GCC producer", missing_needs.stderr)
         self.assertNotEqual(stale_preferences.returncode, 0)
         self.assertIn("language-provider policy", stale_preferences.stderr)
 
@@ -1157,6 +1189,12 @@ printf 'pe=%s\n' "${PE_ENV-<unset>}"
             "../../../catalog/scopes/compilers/gcc/12.2.1",
             payload["spack"]["include:"],
         )
+        groups = {entry["group"]: entry for entry in payload["spack"]["specs"]}
+        for group in ("foundation", "build-tools"):
+            compiler_constraint = groups[group]["specs"][0]["matrix"][1][0]
+            self.assertEqual(
+                compiler_constraint, "target=x86_64_v3 %oneapi@2024.1"
+            )
 
     def test_mpi_boundary_does_not_propagate_lane_constraints_to_externals(self) -> None:
         test_values = values()
