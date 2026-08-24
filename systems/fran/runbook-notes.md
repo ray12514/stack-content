@@ -100,6 +100,8 @@ probes and the static catalog do not need to be regenerated for this validator
 correction:
 
 ```bash
+source "$CSE_OPERATOR_SESSION_FILE"
+
 git -C "$INSPECTOR" pull --ff-only origin codex/simplified-render-plan
 make -C "$INSPECTOR" build
 "$INSPECTOR/cluster-inspector" verify "$PROBE_DIR/profile.yaml"

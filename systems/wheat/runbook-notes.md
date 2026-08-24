@@ -75,11 +75,39 @@ that no current Wheat root uses the older `gcc@12.5.0~binutils` compiler hash.
 
 If the managed constraints are absent or verification reports mixed compiler
 hashes, a controls-only refresh is insufficient because it preserves the old
-environment YAML and lockfiles. When no Wheat package installation has been
-accepted, follow the canonical runbook's **Pre-install workspace refresh**
-procedure. It uses `init-workspace --overwrite`, then reconcretizes and verifies
-all eight environments. The static catalog does not need to be regenerated for
-this blueprint-only correction.
+environment YAML and lockfiles.
+
+### Current Wheat pre-install reset
+
+Use this exact quick fix when the old `gcc@12.5.0~binutils` hash appears in
+Wheat locks and no package installation from those locks has been accepted.
+Stop any running concretization with `Ctrl-C`, then replace the generated
+workspace inputs and locks from the current Stack Content blueprint:
+
+```bash
+source "$CSE_OPERATOR_SESSION_FILE"
+
+git -C "$CONTENT" pull --ff-only origin codex/simplified-render-plan
+git -C "$CONTENT" log -1 --oneline
+
+"$CSE_PYTHON" "$STACK_COMPOSER" init-workspace \
+  --blueprint "$CONTENT/pilots/cse-pilot" \
+  --catalog "$CATALOG" \
+  --values "$BUILD_VALUES" \
+  --output "$BUILD_WORKSPACE" \
+  --overwrite
+
+cd "$BUILD_WORKSPACE"
+./cse-build login concretize
+./cse-build login verify
+```
+
+This reset does not regenerate the Wheat profile or static catalog and does not
+remove the older GCC prefix from the shared Spack store. The new producer and
+downstream compiler constraints make that old hash ineligible for the new
+locks. If installation from the old locks was already attempted or accepted,
+preserve its lock evidence and use the main runbook's release recovery policy
+instead of this pre-install reset.
 
 Do not select an arbitrary latest external GCC for that runtime dependency.
 The helper reuses the same newest verified compiler older than GCC 12.5.0 that
