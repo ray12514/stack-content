@@ -123,6 +123,13 @@ handoff note. A mismatch stops without changing the existing controls. If
 environment inputs or package overlays changed, use the common runbook's
 appropriate workspace or release recovery instead of this shortcut.
 
+That common control set also enforces the restricted owner/group contract on
+Raider's generated workspace and locks, source/misc caches, views, modules, and
+file-backed build cache at launcher/prepared-shell entry and exit. The package
+install tree remains governed by Spack package permissions. Use the common
+runbook's exact-root recovery if an accidental `chmod 660` removed directory
+search bits; do not recursively chmod the install tree.
+
 ## Missing operator-session recovery
 
 The generated operator activation script is stored in the operator's home

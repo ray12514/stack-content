@@ -52,6 +52,14 @@ from `stack-planning/docs/`.
 - CSE Unix group: `cse`
 - Package/publication read audience:
 
+## Shared-builder permission contract
+
+- Restricted collaboration group:
+- Workspace/source-cache/misc-cache/view/module/buildcache handoff check:
+- Install-tree Spack permission and cross-node lock/access check:
+- Last owner-to-group resume test:
+- Exact affected root and owner/admin recovery, if needed:
+
 ## Run state and recovery
 
 - Current release state (`working`, `locked`, `validated`, `cached`,

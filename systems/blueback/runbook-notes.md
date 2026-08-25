@@ -193,9 +193,11 @@ appropriate workspace or release recovery instead of this shortcut.
 
 The same shared control set is used on every trial system. For Blueback it
 places the builder's misc/provider and concretization indexes below
-`$CSE_RESTRICTED_ROOT/cache/misc/$USER` and recursively restores the CSE group,
-group read/write access, and directory search/setgid access before and after
-Spack. The source cache remains shared without a builder suffix.
+`$CSE_RESTRICTED_ROOT/cache/misc/$USER`. Before and after Spack it restores and
+verifies the CSE group, group read/write access, directory search/setgid access,
+and no-world-access policy across the workspace, source/misc caches, views,
+modules, and file-backed build cache. The source cache remains shared without a
+builder suffix; installed prefixes remain governed by Spack package permissions.
 
 Use this reviewed Step 7 selection:
 

@@ -71,8 +71,15 @@ def values() -> dict:
         },
         "catalog_scopes": {"common": "scopes/common", "platform": None},
         "paths": {
+            "install_tree": "/shared/cse/spack/opt",
+            "source_cache": "/shared/cse/cache/source",
             "misc_cache": "/shared/cse/cache/misc",
             "views_root": "/views",
+            "modules_root": "/modules",
+        },
+        "buildcache": {
+            "name": "cse-test",
+            "url": "file:///shared/cse/buildcache",
         },
         "shared": {
             "compiler": {
@@ -158,7 +165,7 @@ class ToolchainTemplateTests(unittest.TestCase):
         site_values = yaml.safe_load(SITE_VALUES_PATH.read_text(encoding="utf-8"))
         for template in (
             "cse-build.j2",
-            "env/share-cache-permissions.sh.j2",
+            "env/share-generated-permissions.sh.j2",
             "env/workspace-shell.rc.j2",
         ):
             with self.subTest(template=template):
@@ -175,7 +182,9 @@ class ToolchainTemplateTests(unittest.TestCase):
         blueprint = yaml.safe_load(BLUEPRINT_PATH.read_text(encoding="utf-8"))
         self.assertTrue(blueprint["apply_workspace_permissions"])
         self.assertIn("configs/common/config.yaml", blueprint["control_files"])
-        self.assertIn("env/share-cache-permissions.sh", blueprint["control_files"])
+        self.assertIn(
+            "env/share-generated-permissions.sh", blueprint["control_files"]
+        )
         self.assertIn("paths.misc_cache", blueprint["required_values"])
         self.assertEqual(
             blueprint["allowed_values"]["permissions.read"],
@@ -190,6 +199,23 @@ class ToolchainTemplateTests(unittest.TestCase):
         )
         self.assertIn("default `tcsh` login", handoff)
         self.assertIn("`catalog/profile.yaml`", handoff)
+
+    def test_publication_workspace_does_not_apply_restricted_build_modes(self) -> None:
+        publication_values = yaml.safe_load(
+            SITE_VALUES_PATH.read_text(encoding="utf-8")
+        )
+        publication_values["workspace"]["role"] = "publish"
+        publication_values["permissions"] = {
+            "group": "cse",
+            "read": "world",
+            "write": "user",
+        }
+
+        launcher = render_text("cse-build.j2", values=publication_values)
+        shell_rc = render_text("env/workspace-shell.rc.j2", values=publication_values)
+
+        self.assertNotIn("cse_normalize_shared_generated_content", launcher)
+        self.assertNotIn("cse_normalize_shared_generated_content", shell_rc)
 
     @unittest.skipUnless(shutil.which("tcsh"), "tcsh is not installed")
     def test_cse_build_runs_directly_from_tcsh(self) -> None:
@@ -225,6 +251,11 @@ class ToolchainTemplateTests(unittest.TestCase):
             builder_home = root / "builder-home"
             workdir = root / "work"
             misc_cache = root / "shared-misc"
+            source_cache = root / "shared-source"
+            views_root = root / "shared-views"
+            modules_root = root / "shared-modules"
+            buildcache_root = root / "shared-buildcache"
+            install_tree = root / "shared-install"
             builder_user = pwd.getpwuid(os.getuid()).pw_name
             workspace.mkdir()
             builder_home.mkdir()
@@ -321,7 +352,15 @@ class ToolchainTemplateTests(unittest.TestCase):
                 **values(),
                 "paths": {
                     **values()["paths"],
+                    "install_tree": str(install_tree),
+                    "source_cache": str(source_cache),
                     "misc_cache": str(misc_cache),
+                    "views_root": str(views_root),
+                    "modules_root": str(modules_root),
+                },
+                "buildcache": {
+                    "name": "cse-test",
+                    "url": buildcache_root.as_uri(),
                 },
                 "build_jobs": 16,
                 "system": {"name": "raider"},
@@ -364,8 +403,10 @@ class ToolchainTemplateTests(unittest.TestCase):
             )
             env_dir = workspace / "env"
             env_dir.mkdir()
-            (env_dir / "share-cache-permissions.sh").write_text(
-                render_text("env/share-cache-permissions.sh.j2", values=test_values),
+            (env_dir / "share-generated-permissions.sh").write_text(
+                render_text(
+                    "env/share-generated-permissions.sh.j2", values=test_values
+                ),
                 encoding="utf-8",
             )
             (env_dir / "select-build-context.sh").write_text(
@@ -380,6 +421,28 @@ class ToolchainTemplateTests(unittest.TestCase):
                 render_text("env/setup-build-env.sh.j2", values=test_values),
                 encoding="utf-8",
             )
+
+            generated_artifacts = []
+            for generated_root in (
+                workspace / "reports",
+                source_cache,
+                views_root,
+                modules_root,
+                buildcache_root,
+            ):
+                generated_root.mkdir(parents=True)
+                generated_file = generated_root / "generated.json"
+                generated_file.write_text("{}\n", encoding="utf-8")
+                generated_file.chmod(0o600)
+                # Reproduce the reported recursive chmod 660: directories lose
+                # search permission even for their owner.
+                generated_root.chmod(0o660)
+                generated_artifacts.append((generated_root, generated_file))
+            generated_executable = workspace / "reports" / "generated.sh"
+            generated_executable.parent.chmod(0o700)
+            generated_executable.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+            generated_executable.chmod(0o700)
+            generated_executable.parent.chmod(0o660)
 
             for path in sorted(spack_root.rglob("*"), reverse=True):
                 path.chmod(0o550 if path.is_dir() or os.access(path, os.X_OK) else 0o440)
@@ -415,6 +478,16 @@ class ToolchainTemplateTests(unittest.TestCase):
             concretization_index_mode = stat.S_IMODE(
                 concretization_index.stat().st_mode
             )
+            generated_modes = [
+                (
+                    stat.S_IMODE(directory.stat().st_mode),
+                    stat.S_IMODE(generated_file.stat().st_mode),
+                )
+                for directory, generated_file in generated_artifacts
+            ]
+            generated_executable_mode = stat.S_IMODE(
+                generated_executable.stat().st_mode
+            )
 
         expected_directory_mode = 0o770 if sys.platform == "darwin" else 0o2770
         self.assertIn("Node context: login (login)", result.stdout)
@@ -424,6 +497,11 @@ class ToolchainTemplateTests(unittest.TestCase):
         self.assertEqual(provider_index_mode, 0o660)
         self.assertEqual(concretization_cache_mode, expected_directory_mode)
         self.assertEqual(concretization_index_mode, 0o660)
+        self.assertEqual(
+            generated_modes,
+            [(expected_directory_mode, 0o660)] * len(generated_modes),
+        )
+        self.assertEqual(generated_executable_mode, 0o770)
 
     def test_gcc_groups_bind_the_managed_producer_with_a_conditional_toolchain(
         self,
@@ -1207,7 +1285,11 @@ class ToolchainTemplateTests(unittest.TestCase):
                 "system": {"name": "raider"},
                 "release": "trial-001",
                 "workspace": {"role": "build"},
-                "permissions": {"group": "cse"},
+                "permissions": {
+                    "group": "cse",
+                    "read": "group",
+                    "write": "group",
+                },
                 "spack": {
                     "source": "https://github.com/spack/spack.git",
                     "version": "1.2.2",
@@ -1247,7 +1329,7 @@ class ToolchainTemplateTests(unittest.TestCase):
             script,
         )
         self.assertIn(
-            "could not normalize the shared builder cache",
+            "could not normalize shared generated content",
             script,
         )
 
@@ -1270,7 +1352,11 @@ class ToolchainTemplateTests(unittest.TestCase):
                 "system": {"name": "raider"},
                 "release": "trial-001",
                 "workspace": {"role": "build"},
-                "permissions": {"group": "cse"},
+                "permissions": {
+                    "group": "cse",
+                    "read": "group",
+                    "write": "group",
+                },
                 "spack": {
                     "source": "https://github.com/spack/spack.git",
                     "version": "1.2.2",

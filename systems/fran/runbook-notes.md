@@ -69,13 +69,14 @@ cd "$BUILD_WORKSPACE"
 ./cse-build login verify
 ```
 
-The same controls refresh also replaces `configs/common/config.yaml`. That
-file now directs Spack's mutable misc/provider and concretization indexes to a
+The same controls refresh also installs the common shared-generated-content
+permission hook. The mutable misc/provider and concretization indexes use a
 persistent builder-named partition below the shared restricted misc-cache root,
-while the source cache remains shared. The refreshed launcher recursively
-restores CSE-group access to existing and newly written files in that partition
-before and after Spack. This is the required recovery if a second Fran builder
-reports a permission error below `cache/misc`.
+while the source cache remains shared. Before and after Spack, the launcher
+restores and verifies the owner/group contract across Fran's workspace,
+source/misc caches, views, modules, and file-backed build cache. This is the
+required recovery if a second Fran builder reports a permission error on any
+of those surfaces.
 
 If both workspace-input and lockfile verification pass, keep all eight locks;
 neither the GCC nor CCE surface needs another solve. If workspace-input

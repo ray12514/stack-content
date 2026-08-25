@@ -142,11 +142,13 @@ The two contexts use the same environments, lockfiles, install tree, shared
 source cache, builder-partitioned misc/concretization cache and bootstrap
 store, views, modules, and portable CPU target. Only the build stage and
 per-context mutable command cache differ. Each misc-cache partition lives
-under the shared restricted cache root, is assigned to the CSE group, and is
-recursively normalized before and after Spack runs because Spack can create
-cache artifacts with user-only modes. Separate builder partitions prevent two
-users from concurrently replacing one mutable index. The bootstrap store
-remains private. This lets a login-node concretization prepare Clingo once for
+under the shared restricted cache root. The generated entry/exit hook restores
+and verifies the owner/group permission contract across the workspace,
+source/misc caches, views, modules, and file-backed build cache because tools
+can create artifacts with user-only modes. Separate builder partitions prevent
+two users from concurrently replacing one mutable index. Installed prefixes
+remain governed by Spack package permissions; the bootstrap store remains
+private. This lets a login-node concretization prepare Clingo once for
 later compute-node use. Each stage is namespaced by the current Spack user,
 system, trial release, and context. The generated setup requires an absolute
 writable `WORKDIR` and fails if no executable stage is available.

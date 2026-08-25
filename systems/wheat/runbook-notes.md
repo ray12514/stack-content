@@ -93,15 +93,15 @@ relationships are absent, or verification reports mixed compiler hashes, a
 controls-only refresh is insufficient because it preserves the old environment
 YAML and lockfiles.
 
-If the failure is instead a second builder's permission error below the former
-shared `cache/misc/providers`, `cache/misc/concretization`, `cache/misc/patches`,
-or `cache/misc/indices` tree, use the common runbook's shared-builder
-misc-cache permission recovery. That controls-only refresh is sufficient for
-this distinct issue: it replaces the common config and launcher so the mutable
-misc cache uses a builder-named partition below Wheat's shared restricted cache
-root and recursively retains CSE-group access, while preserving Wheat's
-environment YAML, existing locks, and installed packages. Do not run the full
-reset below for a cache-ownership error alone.
+If the failure is instead a second builder's permission error in the workspace,
+source or misc cache, views, modules, or file-backed build cache, use the common
+runbook's shared generated-content permission recovery. That controls-only
+refresh is sufficient for this distinct issue: it installs the shared
+entry/exit permission hook and keeps the mutable misc cache in a builder-named
+partition, while preserving Wheat's environment YAML, existing locks, and
+installed packages. If a recursive `chmod 660` removed directory search bits,
+the owning builder must first use the runbook's exact-root repair. Do not run
+the full reset below for a permission error alone.
 
 ### Current Wheat pre-install reset
 

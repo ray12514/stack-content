@@ -153,13 +153,29 @@ Spack's prefix/database locks coordinate identical concrete hashes; the
 surface split keeps view, module refresh, and mutable per-user cache roots
 disjoint. The source cache and package store remain shared. Spack's mutable
 misc/concretization cache is partitioned by builder below the shared restricted
-cache root; every partition is recursively kept accessible to the CSE group.
-The bootstrap store remains private to its builder. Run login concretization
+cache root. On entry and exit, `cse-build` enforces the restricted handoff
+contract on owner-created workspace files, source and misc cache content,
+views, modules, and file-backed build-cache content: directories are `2770`,
+ordinary files are `0660`, executable files are `0770`, the recorded CSE group
+is assigned, and no access is granted to others. `status`, `concretize`, and
+`verify` additionally verify all completed shared entries; other actions avoid
+full-tree checks that would misclassify a different builder's still-running
+parallel write as a finished handoff. The package install tree uses
+the matching native Spack `packages:all:permissions` policy; the wrapper checks
+its root but does not recursively rewrite installed prefixes. The bootstrap
+store, user cache, and GPG home remain private to their builder. Run login concretization
 before moving to a network-restricted compute node so Clingo is already
 available. Do not run two commands for the same surface. `BUILD_JOBS` is a
 per-process budget, so two processes on one node would add their budgets
 together. `concretize` and `verify` remain
 whole-workspace gates and do not accept `--surface`.
+
+Every builder must launch through `cse-build` or a prepared shell created by
+it. Before handing work to another builder, exit the originating builder's
+prepared shell and run `./cse-build login status`; the exit/entry hooks then
+normalize and verify the shared generated content. A process killed with
+`SIGKILL` cannot run an exit hook, so the originating owner or a filesystem
+administrator must repair any reported path before another builder resumes.
 
 The first login concretization for a builder may install Clingo support and
 helper packages below the per-builder Spack bootstrap store. This is Spack

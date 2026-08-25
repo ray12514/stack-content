@@ -1,0 +1,295 @@
+# shellcheck shell=bash
+
+cse_shared_permissions_error() {
+  printf 'cse-build: %s\n' "$*" >&2
+  return 1
+}
+
+cse_set_shared_directory_mode() {
+  chmod 2770 "$1" 2>/dev/null || chmod 0770 "$1"
+}
+
+cse_verify_shared_root() {
+  local shared_root="$1"
+  local cse_group="$2"
+  local label="$3"
+  local bad_path
+
+  [ -e "$shared_root" ] || return 0
+  bad_path="$(find "$shared_root" -maxdepth 0 \
+    \( ! -group "$cse_group" -o ! -perm -0770 -o -perm -0007 \) \
+    -print -quit)" || {
+      cse_shared_permissions_error "could not inspect $label: $shared_root"
+      return 1
+    }
+  [ -z "$bad_path" ] || {
+    cse_shared_permissions_error \
+      "$label does not satisfy the restricted group contract: $bad_path"
+    return 1
+  }
+}
+
+cse_normalize_shared_root() {
+  local shared_root="$1"
+  local cse_group="$2"
+  local label="$3"
+
+  case "$shared_root" in
+    /*) ;;
+    *) cse_shared_permissions_error \
+      "$label must be absolute: $shared_root"; return 1 ;;
+  esac
+  [ -e "$shared_root" ] || return 0
+  [ ! -L "$shared_root" ] || {
+    cse_shared_permissions_error "$label is a symlink: $shared_root"
+    return 1
+  }
+  [ -d "$shared_root" ] || {
+    cse_shared_permissions_error "$label is not a directory: $shared_root"
+    return 1
+  }
+  if [ -O "$shared_root" ]; then
+    if ! chgrp "$cse_group" "$shared_root" || \
+      ! cse_set_shared_directory_mode "$shared_root"; then
+      cse_shared_permissions_error \
+        "could not normalize $label: $shared_root"
+      return 1
+    fi
+  fi
+  cse_verify_shared_root "$shared_root" "$cse_group" "$label"
+}
+
+cse_normalize_shared_tree() {
+  local shared_tree="$1"
+  local cse_group="$2"
+  local label="$3"
+  local current_uid bad_path
+
+  case "$shared_tree" in
+    /*) ;;
+    *) cse_shared_permissions_error \
+      "$label must be absolute: $shared_tree"; return 1 ;;
+  esac
+  [ -n "$cse_group" ] || {
+    cse_shared_permissions_error "$label group is empty"
+    return 1
+  }
+  [ -e "$shared_tree" ] || return 0
+  [ ! -L "$shared_tree" ] || {
+    cse_shared_permissions_error "$label is a symlink: $shared_tree"
+    return 1
+  }
+  [ -d "$shared_tree" ] || {
+    cse_shared_permissions_error "$label is not a directory: $shared_tree"
+    return 1
+  }
+
+  # Restore traversal before descending. This also lets the owning builder
+  # recover a tree after an accidental recursive chmod 660.
+  current_uid="$(id -u)"
+  if [ -O "$shared_tree" ] && ! chmod 0770 "$shared_tree"; then
+    cse_shared_permissions_error \
+      "could not restore traversal for $label root: $shared_tree"
+    return 1
+  fi
+  find "$shared_tree" -xdev -uid "$current_uid" -type d \
+    -exec chmod 0770 {} \; || {
+      cse_shared_permissions_error "could not restore traversal for $label: $shared_tree"
+      return 1
+    }
+  find "$shared_tree" -xdev -uid "$current_uid" -type d \
+    -exec chgrp "$cse_group" {} + || {
+      cse_shared_permissions_error \
+        "could not assign $label directories to $cse_group: $shared_tree"
+      return 1
+    }
+  find "$shared_tree" -xdev -uid "$current_uid" -type d \
+    -exec bash -c '
+      for directory do
+        chmod 2770 "$directory" 2>/dev/null || chmod 0770 "$directory" || exit
+      done
+    ' _ {} + || {
+      cse_shared_permissions_error \
+        "could not normalize $label directories: $shared_tree"
+      return 1
+    }
+  find "$shared_tree" -xdev -uid "$current_uid" -type f \
+    -exec chgrp "$cse_group" {} + || {
+      cse_shared_permissions_error \
+        "could not assign $label files to $cse_group: $shared_tree"
+      return 1
+    }
+  find "$shared_tree" -xdev -uid "$current_uid" -type f -perm -0100 \
+    -exec chmod 0770 {} + || {
+      cse_shared_permissions_error \
+        "could not normalize executable $label files: $shared_tree"
+      return 1
+    }
+  find "$shared_tree" -xdev -uid "$current_uid" -type f ! -perm -0100 \
+    -exec chmod 0660 {} + || {
+      cse_shared_permissions_error \
+        "could not normalize ordinary $label files: $shared_tree"
+      return 1
+    }
+
+  bad_path="$(find "$shared_tree" -xdev -uid "$current_uid" \
+    \( -type d -o -type f \) ! -group "$cse_group" -print -quit)" || {
+      cse_shared_permissions_error "could not inspect $label: $shared_tree"
+      return 1
+    }
+  [ -z "$bad_path" ] || {
+    cse_shared_permissions_error \
+      "$label entry is not assigned to group $cse_group: $bad_path"
+    return 1
+  }
+
+  bad_path="$(find "$shared_tree" -xdev -uid "$current_uid" -type d \
+    \( ! -perm -0770 -o -perm -0007 \) -print -quit)" || {
+      cse_shared_permissions_error "could not inspect $label directory modes: $shared_tree"
+      return 1
+    }
+  [ -z "$bad_path" ] || {
+    cse_shared_permissions_error \
+      "$label directory does not satisfy the 2770/0770 contract: $bad_path"
+    return 1
+  }
+
+  bad_path="$(find "$shared_tree" -xdev -uid "$current_uid" \
+    -type f ! -perm -0100 \
+    \( ! -perm -0660 -o -perm -0007 \) -print -quit)" || {
+      cse_shared_permissions_error "could not inspect ordinary $label file modes: $shared_tree"
+      return 1
+    }
+  [ -z "$bad_path" ] || {
+    cse_shared_permissions_error \
+      "ordinary $label file does not satisfy the 0660 contract: $bad_path"
+    return 1
+  }
+
+  bad_path="$(find "$shared_tree" -xdev -uid "$current_uid" \
+    -type f -perm -0100 \
+    \( ! -perm -0770 -o -perm -0007 \) -print -quit)" || {
+      cse_shared_permissions_error "could not inspect executable $label file modes: $shared_tree"
+      return 1
+    }
+  [ -z "$bad_path" ] || {
+    cse_shared_permissions_error \
+      "executable $label file does not satisfy the 0770 contract: $bad_path"
+    return 1
+  }
+}
+
+cse_verify_shared_tree() {
+  local shared_tree="$1"
+  local cse_group="$2"
+  local label="$3"
+  local bad_path
+
+  [ -e "$shared_tree" ] || return 0
+  bad_path="$(find "$shared_tree" -xdev \
+    \( -type d -o -type f \) ! -group "$cse_group" -print -quit)" || {
+      cse_shared_permissions_error "could not inspect $label: $shared_tree"
+      return 1
+    }
+  [ -z "$bad_path" ] || {
+    cse_shared_permissions_error \
+      "$label entry is not assigned to group $cse_group: $bad_path"
+    return 1
+  }
+  bad_path="$(find "$shared_tree" -xdev -type d \
+    \( ! -perm -0770 -o -perm -0007 \) -print -quit)" || {
+      cse_shared_permissions_error "could not inspect $label directory modes: $shared_tree"
+      return 1
+    }
+  [ -z "$bad_path" ] || {
+    cse_shared_permissions_error \
+      "$label directory does not satisfy the 2770/0770 contract: $bad_path"
+    return 1
+  }
+  bad_path="$(find "$shared_tree" -xdev -type f ! -perm -0100 \
+    \( ! -perm -0660 -o -perm -0007 \) -print -quit)" || {
+      cse_shared_permissions_error "could not inspect ordinary $label file modes: $shared_tree"
+      return 1
+    }
+  [ -z "$bad_path" ] || {
+    cse_shared_permissions_error \
+      "ordinary $label file does not satisfy the 0660 contract: $bad_path"
+    return 1
+  }
+  bad_path="$(find "$shared_tree" -xdev -type f -perm -0100 \
+    \( ! -perm -0770 -o -perm -0007 \) -print -quit)" || {
+      cse_shared_permissions_error "could not inspect executable $label file modes: $shared_tree"
+      return 1
+    }
+  [ -z "$bad_path" ] || {
+    cse_shared_permissions_error \
+      "executable $label file does not satisfy the 0770 contract: $bad_path"
+    return 1
+  }
+}
+
+cse_normalize_shared_misc_cache() {
+  local builder_cache="$1"
+  local cse_group="$2"
+  local shared_root path
+
+  shared_root="$(dirname "$builder_cache")"
+  for path in "$shared_root" "$builder_cache"; do
+    [ ! -L "$path" ] || {
+      cse_shared_permissions_error "shared builder cache path is a symlink: $path"
+      return 1
+    }
+    if [ ! -e "$path" ]; then
+      install -d -m 2770 -g "$cse_group" "$path" || {
+        cse_shared_permissions_error "could not create shared builder cache path: $path"
+        return 1
+      }
+    fi
+  done
+  cse_normalize_shared_root "$shared_root" "$cse_group" \
+    "shared misc-cache root" || return 1
+  cse_normalize_shared_tree "$builder_cache" "$cse_group" \
+    "shared builder cache"
+}
+
+cse_normalize_shared_generated_content() {
+  local cse_group="$1"
+
+  cse_normalize_shared_tree "$CSE_BUILD_WORKSPACE" "$cse_group" \
+    "generated workspace" || return 1
+  cse_normalize_shared_root "$CSE_INSTALL_TREE_ROOT" "$cse_group" \
+    "shared install-tree root" || return 1
+  cse_normalize_shared_misc_cache "$SPACK_MISC_CACHE_PATH" "$cse_group" || \
+    return 1
+  cse_normalize_shared_tree "$CSE_SHARED_SOURCE_CACHE_ROOT" "$cse_group" \
+    "shared source cache" || return 1
+  cse_normalize_shared_tree "$CSE_VIEWS_ROOT" "$cse_group" \
+    "generated views" || return 1
+  cse_normalize_shared_tree "$CSE_MODULES_ROOT" "$cse_group" \
+    "generated modules" || return 1
+  if [ -n "$CSE_BUILDCACHE_ROOT" ]; then
+    cse_normalize_shared_tree "$CSE_BUILDCACHE_ROOT" "$cse_group" \
+      "generated build cache" || return 1
+  fi
+}
+
+cse_verify_shared_generated_content() {
+  local cse_group="$1"
+
+  cse_verify_shared_tree "$CSE_BUILD_WORKSPACE" "$cse_group" \
+    "generated workspace" || return 1
+  cse_verify_shared_root "$CSE_INSTALL_TREE_ROOT" "$cse_group" \
+    "shared install-tree root" || return 1
+  cse_verify_shared_tree "$SPACK_MISC_CACHE_PATH" "$cse_group" \
+    "shared builder cache" || return 1
+  cse_verify_shared_tree "$CSE_SHARED_SOURCE_CACHE_ROOT" "$cse_group" \
+    "shared source cache" || return 1
+  cse_verify_shared_tree "$CSE_VIEWS_ROOT" "$cse_group" \
+    "generated views" || return 1
+  cse_verify_shared_tree "$CSE_MODULES_ROOT" "$cse_group" \
+    "generated modules" || return 1
+  if [ -n "$CSE_BUILDCACHE_ROOT" ]; then
+    cse_verify_shared_tree "$CSE_BUILDCACHE_ROOT" "$cse_group" \
+      "generated build cache" || return 1
+  fi
+}

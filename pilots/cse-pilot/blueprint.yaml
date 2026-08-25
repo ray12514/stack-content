@@ -11,7 +11,7 @@ control_files:
   - cse-build
   - configs/common/config.yaml
   - env/prepare-module-state.sh
-  - env/share-cache-permissions.sh
+  - env/share-generated-permissions.sh
   - env/select-build-context.sh
   - env/setup-build-env.sh
   - env/workspace-shell.rc
