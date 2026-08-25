@@ -180,6 +180,7 @@ an existing session must be reviewed instead of silently replaced:
 export STACK_BRANCH="codex/simplified-render-plan"
 export RAIDER_TOOLS_ROOT="/p/app/CSE/tools"
 export RAIDER_BOOTSTRAP_PYTHON="$WORK_ROOT/stack-composer/.venv/bin/python"
+export CSE_GROUP="cse"
 
 test -x "$RAIDER_BOOTSTRAP_PYTHON"
 test -d "$RAIDER_TOOLS_ROOT/spack/1.2.2/.git"
@@ -195,7 +196,7 @@ test -d "$RAIDER_TOOLS_ROOT/spack/1.2.2/.git"
   --catalog-release "$RAIDER_CATALOG_RELEASE" \
   --trial-release "$RAIDER_TRIAL_RELEASE" \
   --branch "$STACK_BRANCH" \
-  --group cse
+  --group "$CSE_GROUP"
 ```
 
 Source and verify the recovered session before entering the existing build
@@ -336,7 +337,7 @@ continuing.
      --catalog-release "$RAIDER_NEW_CATALOG_RELEASE" \
      --trial-release "$RAIDER_NEW_TRIAL_RELEASE" \
      --branch "$STACK_BRANCH" \
-     --group cse
+     --group "$CSE_GROUP"
 
    source "$WORK_ROOT/operator-sessions/raider/$RAIDER_NEW_TRIAL_RELEASE/activate.sh"
    test "$CSE_TRIAL_ROOT" = "$RAIDER_TRIAL_ROOT"

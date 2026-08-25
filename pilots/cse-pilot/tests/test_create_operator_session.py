@@ -29,6 +29,8 @@ class ProviderSelectionTemplateTests(unittest.TestCase):
                     str(root / "tools"),
                     "--bootstrap-python",
                     sys.executable,
+                    "--group",
+                    "test-builders",
                     "--work-root",
                     str(root / "work"),
                     "--output",
@@ -56,6 +58,33 @@ class ProviderSelectionTemplateTests(unittest.TestCase):
                 selections,
             )
             self.assertNotIn('CSE_SHARED_MPI_REF="openmpi@4.1.8"', selections)
+
+            activation = output.read_text(encoding="utf-8")
+            self.assertIn("export CSE_GROUP=test-builders", activation)
+
+    def test_collaboration_group_is_required(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--system",
+                    "test-system",
+                    "--trial-root",
+                    str(root / "trial"),
+                    "--tools-root",
+                    str(root / "tools"),
+                    "--bootstrap-python",
+                    sys.executable,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("--group", result.stderr)
 
 
 if __name__ == "__main__":

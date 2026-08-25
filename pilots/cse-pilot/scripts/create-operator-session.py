@@ -61,7 +61,11 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--catalog-release")
     result.add_argument("--trial-release")
     result.add_argument("--branch", default=STACK_BRANCH)
-    result.add_argument("--group", default="cse")
+    result.add_argument(
+        "--group",
+        required=True,
+        help="Unix collaboration group that owns this trial's shared artifacts",
+    )
     result.add_argument("--spack-source", default=SPACK_SOURCE)
     result.add_argument("--spack-version", default=SPACK_VERSION)
     result.add_argument("--spack-commit", default=SPACK_COMMIT)

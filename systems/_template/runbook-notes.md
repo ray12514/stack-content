@@ -49,7 +49,7 @@ from `stack-planning/docs/`.
 - Published workspace and install tree:
 - Published views/modules:
 - Build and publication scratch stages:
-- CSE Unix group: `cse`
+- Shared-build Unix group: `<recorded collaboration group>`
 - Package/publication read audience:
 
 ## Shared-builder permission contract

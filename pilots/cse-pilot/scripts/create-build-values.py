@@ -781,7 +781,7 @@ def main() -> int:
                 "url": required("BUILDCACHE_URL"),
             },
             "permissions": {
-                "group": os.environ.get("CSE_GROUP", "cse"),
+                "group": required("CSE_GROUP"),
                 "read": "group",
                 "write": "group",
             },

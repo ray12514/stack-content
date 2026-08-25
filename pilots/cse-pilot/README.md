@@ -106,13 +106,15 @@ approved Python 3.12.13, netlib-lapack 3.12.1, Boost 1.90 MPI, CMake 3.31.12,
 and lane MPI producers so it cannot silently create parallel producer DAGs.
 
 The restricted trial workspace is collaborative. Generated package policy uses
-group `cse` with group read and write access. The surrounding workspace,
-caches, build cache, views, modules, evidence, and release roots must use
-setgid group-writable directories or an equivalent default ACL. Publication
-values use `read: world` and `write: user`; after promotion, consumer-facing
-directories and executables are readable/searchable/executable by users and
-ordinary files are readable, while group and other write access is disabled.
-The private build cache remains below the restricted root.
+the installer-recorded CSE collaboration group (`cse` for the current trials)
+with group read and write access. The setup requires this group explicitly; it
+does not infer a default. The surrounding workspace, caches, build cache, views,
+modules, evidence, and release roots must use setgid group-writable directories
+or an equivalent default ACL. Publication values use `read: world` and
+`write: user`; after promotion, consumer-facing directories and executables are
+readable/searchable/executable by users and ordinary files are readable, while
+group and other write access is disabled. The private build cache remains below
+the restricted root.
 
 For external Cray MPICH, the compiler scope and MPI scope intentionally carry
 different version semantics. The compiler scope names the exact selected
@@ -162,7 +164,8 @@ approved Spack identity normally reuse it for the remaining environments.
 
 Before this workspace exists, the operator resumes work through a separate
 operator-local session entry point. Run `scripts/create-operator-session.py`
-once for an exact system/catalog/trial tuple, then source the generated
+once for an exact system/catalog/trial tuple and pass the installer-confirmed
+Unix collaboration group with `--group`; then source the generated
 `$HOME/STACK_TESTING/operator-sessions/<system>/<trial>/activate.sh` after each
 login. It restores repository, profile, catalog, workspace, release, cache,
 Spack, and Python paths and loads the reviewed provider selections saved beside
@@ -182,7 +185,8 @@ stack-composer init-workspace \
 environment uses relative includes. The exact reviewed facts are available at
 `catalog/profile.yaml`. Restricted build workspaces are created with group
 read/write/search access: directories `2770`, ordinary files `0660`, and
-executable entry points `0770`. The setgid parent supplies CSE group ownership.
+executable entry points `0770`. The setgid parent supplies the recorded
+collaboration-group ownership.
 Hand the entire initialized workspace and its reviewed lockfiles to the builder.
 
 The `cse-build` entry point first appears inside that initialized workspace.
