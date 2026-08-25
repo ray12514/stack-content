@@ -1,0 +1,10 @@
+toolchains:
+  cse_shared:
+    - spec: {{ ('%c=' ~ values.shared.compiler.name ~ '@' ~ values.shared.compiler.version ~ '+binutils') | yaml_scalar }}
+      when: '%c'
+    - spec: {{ ('%cxx=' ~ values.shared.compiler.name ~ '@' ~ values.shared.compiler.version ~ '+binutils') | yaml_scalar }}
+      when: '%cxx'
+    - spec: {{ ('%fortran=' ~ values.shared.compiler.name ~ '@' ~ values.shared.compiler.version ~ '+binutils') | yaml_scalar }}
+      when: '%fortran'
+    - spec: {{ ('%mpi=' ~ values.shared.mpi.name ~ '@' ~ values.shared.mpi.version) | yaml_scalar }}
+      when: '%mpi'

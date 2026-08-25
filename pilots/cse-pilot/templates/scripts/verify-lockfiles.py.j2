@@ -65,6 +65,7 @@ GCC_PRODUCER_COORDINATE = (
     + "@"
     + {{ values.shared.compiler.version | tojson }}
 )
+SHARED_TOOLCHAIN = "cse_shared"
 SHARED_COMPILER_KEY = (
     {{ values.shared.compiler.name | tojson }},
     {{ values.shared.compiler.name | tojson }},
@@ -157,8 +158,19 @@ def workspace_input_errors() -> List[str]:
             errors.append(
                 f"{environment}: generated spack.yaml repeats the managed GCC "
                 f"producer as a downstream compiler constraint "
-                f"{duplicate_constraint}; downstream groups must inherit the exact "
-                f"producer through needs: {duplicate_lines}"
+                f"{duplicate_constraint}; downstream groups must order the producer "
+                f"through needs and select %{SHARED_TOOLCHAIN}: {duplicate_lines}"
+            )
+        toolchain_include = "../../../configs/surfaces/shared/toolchains.yaml"
+        if toolchain_include not in rendered:
+            errors.append(
+                f"{environment}: generated spack.yaml does not include the "
+                "shared compiler toolchain"
+            )
+        if "reuse: false" not in rendered:
+            errors.append(
+                f"{environment}: managed-GCC concretizer must disable concrete-spec "
+                "reuse when resolving a new lock"
             )
 
         group_lines = rendered.splitlines()
@@ -183,8 +195,13 @@ def workspace_input_errors() -> List[str]:
             needs_lines = [entry for entry in block if entry.startswith("needs:")]
             if not any("compiler" in entry for entry in needs_lines):
                 errors.append(
-                    f"{environment}: group {group_name!r} does not inherit the "
-                    "managed GCC producer through needs"
+                    f"{environment}: group {group_name!r} does not order and expose "
+                    "the managed GCC producer through needs"
+                )
+            if not any(f"%{SHARED_TOOLCHAIN}" in entry for entry in block):
+                errors.append(
+                    f"{environment}: group {group_name!r} does not select the "
+                    f"managed GCC surface through %{SHARED_TOOLCHAIN}"
                 )
 
     shared_compiler_config = (
@@ -210,6 +227,41 @@ def workspace_input_errors() -> List[str]:
                 "shared GCC language-provider policy must prefer "
                 f"{managed_provider} exactly three times for c, cxx, and fortran; "
                 f"found {provider_lines}"
+            )
+
+    shared_toolchain_config = (
+        WORKSPACE / "configs" / "surfaces" / "shared" / "toolchains.yaml"
+    )
+    try:
+        shared_toolchain_policy = shared_toolchain_config.read_text(encoding="utf-8")
+    except OSError as error:
+        errors.append(f"shared GCC toolchain policy is unavailable: {error}")
+        shared_toolchain_policy = ""
+    if shared_toolchain_policy:
+        managed_provider = GCC_PRODUCER_COORDINATE + "+binutils"
+        expected_bindings = (
+            (f"%c={managed_provider}", "%c"),
+            (f"%cxx={managed_provider}", "%cxx"),
+            (f"%fortran={managed_provider}", "%fortran"),
+            (
+                "%mpi="
+                + {{ values.shared.mpi.name | tojson }}
+                + "@"
+                + {{ values.shared.mpi.version | tojson }},
+                "%mpi",
+            ),
+        )
+        invalid_bindings = [
+            (spec, condition)
+            for spec, condition in expected_bindings
+            if shared_toolchain_policy.count(spec) != 1
+            or shared_toolchain_policy.count(f"when: '{condition}'") != 1
+        ]
+        if invalid_bindings or f"{SHARED_TOOLCHAIN}:" not in shared_toolchain_policy:
+            errors.append(
+                "shared GCC toolchain must conditionally bind c, cxx, fortran, "
+                "and mpi exactly once; invalid bindings: "
+                f"{invalid_bindings}"
             )
     return errors
 
@@ -314,7 +366,7 @@ def main(workspace_only: bool = False) -> int:
             return 1
         print(
             "Workspace input verification passed: current CSE Dakota overlay and "
-            "GCC producer/needs inputs."
+            "GCC producer/needs/toolchain inputs."
         )
         return 0
 

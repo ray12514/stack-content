@@ -125,6 +125,30 @@ def values() -> dict:
     }
 
 
+def write_shared_surface_controls(workspace: Path) -> Path:
+    shared_root = workspace / "configs" / "surfaces" / "shared"
+    shared_root.mkdir(parents=True)
+    compiler_config = shared_root / "compiler.yaml"
+    compiler_config.write_text(
+        "packages:\n"
+        "  c:\n    prefer: [gcc@12.5.0+binutils]\n"
+        "  cxx:\n    prefer: [gcc@12.5.0+binutils]\n"
+        "  fortran:\n    prefer: [gcc@12.5.0+binutils]\n"
+        "  gcc:\n    buildable: true\n",
+        encoding="utf-8",
+    )
+    (shared_root / "toolchains.yaml").write_text(
+        "toolchains:\n"
+        "  cse_shared:\n"
+        "    - {spec: '%c=gcc@12.5.0+binutils', when: '%c'}\n"
+        "    - {spec: '%cxx=gcc@12.5.0+binutils', when: '%cxx'}\n"
+        "    - {spec: '%fortran=gcc@12.5.0+binutils', when: '%fortran'}\n"
+        "    - {spec: '%mpi=openmpi@4.1.8', when: '%mpi'}\n",
+        encoding="utf-8",
+    )
+    return compiler_config
+
+
 class ToolchainTemplateTests(unittest.TestCase):
     def test_blueprint_declares_shared_workspace_access_contract(self) -> None:
         blueprint = yaml.safe_load(BLUEPRINT_PATH.read_text(encoding="utf-8"))
@@ -336,7 +360,7 @@ class ToolchainTemplateTests(unittest.TestCase):
         self.assertIn("Concrete locks: 0/8", result.stdout)
         self.assertEqual(home_entries, [])
 
-    def test_gcc_groups_inherit_the_managed_producer_without_a_second_constraint(
+    def test_gcc_groups_bind_the_managed_producer_with_a_conditional_toolchain(
         self,
     ) -> None:
         test_values = values()
@@ -378,7 +402,9 @@ class ToolchainTemplateTests(unittest.TestCase):
         }
         for group in ("foundation", "core"):
             compiler_constraint = core_groups[group]["specs"][0]["matrix"][1][0]
-            self.assertEqual(compiler_constraint, "target=x86_64_v3")
+            self.assertEqual(
+                compiler_constraint, "target=x86_64_v3 %cse_shared"
+            )
             self.assertIn("compiler", core_groups[group]["needs"])
 
         payload_groups = {
@@ -386,9 +412,126 @@ class ToolchainTemplateTests(unittest.TestCase):
         }
         for group in ("foundation", "build-tools"):
             compiler_constraint = payload_groups[group]["specs"][0]["matrix"][1][0]
-            self.assertEqual(compiler_constraint, "target=x86_64_v3")
+            self.assertEqual(
+                compiler_constraint, "target=x86_64_v3 %cse_shared"
+            )
             self.assertIn("compiler", payload_groups[group]["needs"])
+        self.assertEqual(
+            payload_groups["payload"]["specs"][0]["matrix"][1],
+            ["%cse_shared"],
+        )
         self.assertIn("compiler", payload_groups["payload"]["needs"])
+
+    def test_shared_toolchain_binds_languages_and_mpi_conditionally(self) -> None:
+        rendered = render(
+            "configs/surfaces/shared/toolchains.yaml.j2", values=values()
+        )
+
+        self.assertEqual(
+            rendered["toolchains"]["cse_shared"],
+            [
+                {"spec": "%c=gcc@12.5.0+binutils", "when": "%c"},
+                {"spec": "%cxx=gcc@12.5.0+binutils", "when": "%cxx"},
+                {
+                    "spec": "%fortran=gcc@12.5.0+binutils",
+                    "when": "%fortran",
+                },
+                {"spec": "%mpi=openmpi@4.1.8", "when": "%mpi"},
+            ],
+        )
+
+    def test_shared_toolchain_binds_an_external_cray_mpi_surface(self) -> None:
+        test_values = values()
+        test_values["shared"]["mpi"].update(
+            {
+                "name": "cray-mpich",
+                "version": "9.0.1",
+                "source": "external",
+                "modules": ["cray-mpich/9.0.1"],
+                "spec": "cray-mpich@9.0.1",
+                "provider_constraint": "cray-mpich@9.0.1",
+            }
+        )
+        test_values["shared"]["catalog_scopes"]["mpi"] = (
+            "scopes/mpi/cray-mpich/9.0.1/gcc/12.5.0"
+        )
+
+        toolchain = render(
+            "configs/surfaces/shared/toolchains.yaml.j2", values=test_values
+        )
+        payload = render(
+            "_partials/payload-spack.yaml.j2",
+            values=test_values,
+            data={
+                "roster": {
+                    "specs": {
+                        "foundation": ["zlib@1.3.1"],
+                        "build_tools": ["cmake@3.31.12"],
+                    }
+                }
+            },
+            surface_key="shared",
+            surface=test_values["shared"],
+            environment_kind="mpi",
+            environment_name="mpi-cray-mpich",
+            payload_specs=["hdf5@2.1.0+mpi"],
+        )
+
+        self.assertIn(
+            {"spec": "%mpi=cray-mpich@9.0.1", "when": "%mpi"},
+            toolchain["toolchains"]["cse_shared"],
+        )
+        groups = {entry["group"]: entry for entry in payload["spack"]["specs"]}
+        self.assertNotIn("mpi", groups)
+        self.assertEqual(
+            groups["payload"]["specs"][0]["matrix"][1], ["%cse_shared"]
+        )
+        self.assertIn(
+            "../../../catalog/scopes/mpi/cray-mpich/9.0.1/gcc/12.5.0",
+            payload["spack"]["include:"],
+        )
+
+    def test_only_shared_surface_resolves_new_locks_without_reusing_old_dags(
+        self,
+    ) -> None:
+        test_values = values()
+        common = render("configs/common/concretizer.yaml.j2", values=test_values)
+        shared = render(
+            "environments/{{ values.shared.compiler.name }}/core/spack.yaml.j2",
+            values=test_values,
+            data={
+                "roster": {
+                    "specs": {
+                        "foundation": ["zlib@1.3.1"],
+                        "core": ["cmake@3.31.12"],
+                        "core_independent": [],
+                    }
+                }
+            },
+        )
+        platform = render(
+            "_partials/payload-spack.yaml.j2",
+            values=test_values,
+            data={
+                "roster": {
+                    "specs": {
+                        "foundation": ["zlib@1.3.1"],
+                        "build_tools": ["cmake@3.31.12"],
+                    }
+                }
+            },
+            surface_key="platform",
+            surface=test_values["platform"],
+            environment_kind="serial",
+            environment_name="serial",
+            payload_specs=["hdf5@2.1.0~mpi"],
+        )
+
+        self.assertEqual(common["concretizer"], {"unify": False, "reuse": True})
+        self.assertEqual(
+            shared["spack"]["concretizer"], {"unify": False, "reuse": False}
+        )
+        self.assertNotIn("concretizer", platform["spack"])
 
     def test_common_package_policy_uses_system_glibc_for_iconv(self) -> None:
         rendered = render(
@@ -615,32 +758,24 @@ class ToolchainTemplateTests(unittest.TestCase):
                 / "packages"
                 / "dakota"
             )
-            shared_config = (
-                workspace / "configs" / "surfaces" / "shared" / "compiler.yaml"
-            )
             script_path.parent.mkdir(parents=True)
             overlay.mkdir(parents=True)
-            shared_config.parent.mkdir(parents=True)
+            write_shared_surface_controls(workspace)
             script_path.write_text(script, encoding="utf-8")
             shutil.copyfile(dakota_source / "package.py", overlay / "package.py")
             (overlay / "boost-system-header-only.patch").write_text(
                 current_patch, encoding="utf-8"
             )
-            shared_config.write_text(
-                "packages:\n"
-                "  c:\n    prefer: [gcc@12.5.0+binutils]\n"
-                "  cxx:\n    prefer: [gcc@12.5.0+binutils]\n"
-                "  fortran:\n    prefer: [gcc@12.5.0+binutils]\n"
-                "  gcc:\n    buildable: true\n",
-                encoding="utf-8",
-            )
             producer = "gcc@12.5.0+binutils languages='c,c++,fortran'"
-            downstream_constraint = "target=x86_64_v3"
+            downstream_constraint = "target=x86_64_v3 %cse_shared"
             for lane in ("core", "common", "serial", "mpi-openmpi"):
                 environment = workspace / "environments" / "gcc" / lane
                 environment.mkdir(parents=True)
                 (environment / "spack.yaml").write_text(
-                    "spack:\n  specs:\n    - group: compiler\n"
+                    "spack:\n  include::\n"
+                    "    - ../../../configs/surfaces/shared/toolchains.yaml\n"
+                    "  concretizer:\n    unify: false\n    reuse: false\n"
+                    "  specs:\n    - group: compiler\n"
                     f"      specs:\n        - {producer}\n"
                     "    - group: foundation\n      needs: [compiler]\n"
                     "      specs:\n        - matrix:\n"
@@ -703,34 +838,26 @@ class ToolchainTemplateTests(unittest.TestCase):
                 / "packages"
                 / "dakota"
             )
-            shared_config = (
-                workspace / "configs" / "surfaces" / "shared" / "compiler.yaml"
-            )
             script_path.parent.mkdir(parents=True)
             overlay.mkdir(parents=True)
-            shared_config.parent.mkdir(parents=True)
+            write_shared_surface_controls(workspace)
             script_path.write_text(script, encoding="utf-8")
             shutil.copyfile(dakota_source / "package.py", overlay / "package.py")
             shutil.copyfile(
                 dakota_source / "boost-system-header-only.patch",
                 overlay / "boost-system-header-only.patch",
             )
-            shared_config.write_text(
-                "packages:\n"
-                "  c:\n    prefer: [gcc@12.5.0+binutils]\n"
-                "  cxx:\n    prefer: [gcc@12.5.0+binutils]\n"
-                "  fortran:\n    prefer: [gcc@12.5.0+binutils]\n"
-                "  gcc:\n    buildable: true\n",
-                encoding="utf-8",
-            )
 
             producer = "gcc@12.5.0+binutils languages='c,c++,fortran'"
-            downstream_constraint = "target=x86_64_v3"
+            downstream_constraint = "target=x86_64_v3 %cse_shared"
             for lane in ("core", "common", "serial", "mpi-openmpi"):
                 environment = workspace / "environments" / "gcc" / lane
                 environment.mkdir(parents=True)
                 (environment / "spack.yaml").write_text(
-                    "spack:\n  specs:\n    - group: compiler\n"
+                    "spack:\n  include::\n"
+                    "    - ../../../configs/surfaces/shared/toolchains.yaml\n"
+                    "  concretizer:\n    unify: false\n    reuse: false\n"
+                    "  specs:\n    - group: compiler\n"
                     f"      specs:\n        - {producer}\n"
                     "    - group: foundation\n      needs: [compiler]\n"
                     "      specs:\n        - matrix:\n"
@@ -796,34 +923,26 @@ class ToolchainTemplateTests(unittest.TestCase):
                 / "packages"
                 / "dakota"
             )
-            shared_config = (
-                workspace / "configs" / "surfaces" / "shared" / "compiler.yaml"
-            )
             script_path.parent.mkdir(parents=True)
             overlay.mkdir(parents=True)
-            shared_config.parent.mkdir(parents=True)
+            shared_config = write_shared_surface_controls(workspace)
             script_path.write_text(script, encoding="utf-8")
             shutil.copyfile(dakota_source / "package.py", overlay / "package.py")
             shutil.copyfile(
                 dakota_source / "boost-system-header-only.patch",
                 overlay / "boost-system-header-only.patch",
             )
-            shared_config.write_text(
-                "packages:\n"
-                "  c:\n    prefer: [gcc@12.5.0+binutils]\n"
-                "  cxx:\n    prefer: [gcc@12.5.0+binutils]\n"
-                "  fortran:\n    prefer: [gcc@12.5.0+binutils]\n"
-                "  gcc:\n    buildable: true\n",
-                encoding="utf-8",
-            )
 
             producer = "gcc@12.5.0+binutils languages='c,c++,fortran'"
-            downstream_constraint = "target=x86_64_v3"
+            downstream_constraint = "target=x86_64_v3 %cse_shared"
             for lane in ("core", "common", "serial", "mpi-openmpi"):
                 environment = workspace / "environments" / "gcc" / lane
                 environment.mkdir(parents=True)
                 (environment / "spack.yaml").write_text(
-                    "spack:\n  specs:\n    - group: compiler\n"
+                    "spack:\n  include::\n"
+                    "    - ../../../configs/surfaces/shared/toolchains.yaml\n"
+                    "  concretizer:\n    unify: false\n    reuse: false\n"
+                    "  specs:\n    - group: compiler\n"
                     f"      specs:\n        - {producer}\n"
                     "    - group: foundation\n      needs: [compiler]\n"
                     "      specs:\n        - matrix:\n"
@@ -842,6 +961,24 @@ class ToolchainTemplateTests(unittest.TestCase):
             stale_path = workspace / "environments" / "gcc" / "common" / "spack.yaml"
             stale_path.write_text(
                 stale_path.read_text(encoding="utf-8").replace(
+                    "    reuse: false", "    reuse: true"
+                ),
+                encoding="utf-8",
+            )
+            stale_reuse = subprocess.run(
+                [sys.executable, str(script_path), "--workspace-only"],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+            stale_path.write_text(
+                stale_path.read_text(encoding="utf-8").replace(
+                    "    reuse: true", "    reuse: false"
+                ),
+                encoding="utf-8",
+            )
+            stale_path.write_text(
+                stale_path.read_text(encoding="utf-8").replace(
                     downstream_constraint,
                     "target=x86_64_v3 %gcc@12.5.0+binutils",
                 ),
@@ -857,6 +994,26 @@ class ToolchainTemplateTests(unittest.TestCase):
             stale_path.write_text(
                 stale_path.read_text(encoding="utf-8").replace(
                     "target=x86_64_v3 %gcc@12.5.0+binutils",
+                    downstream_constraint,
+                ),
+                encoding="utf-8",
+            )
+            stale_path.write_text(
+                stale_path.read_text(encoding="utf-8").replace(
+                    downstream_constraint,
+                    "target=x86_64_v3",
+                ),
+                encoding="utf-8",
+            )
+            missing_selector = subprocess.run(
+                [sys.executable, str(script_path), "--workspace-only"],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+            stale_path.write_text(
+                stale_path.read_text(encoding="utf-8").replace(
+                    "target=x86_64_v3",
                     downstream_constraint,
                 ),
                 encoding="utf-8",
@@ -893,14 +1050,44 @@ class ToolchainTemplateTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
             )
+            shared_config.write_text(
+                shared_config.read_text(encoding="utf-8").replace(
+                    "gcc@12.5.0", "gcc@12.5.0+binutils"
+                ),
+                encoding="utf-8",
+            )
+            toolchain_config = shared_config.with_name("toolchains.yaml")
+            toolchain_config.write_text(
+                toolchain_config.read_text(encoding="utf-8").replace(
+                    "%c=gcc@12.5.0+binutils", "%c=gcc@11.5.0+binutils"
+                ),
+                encoding="utf-8",
+            )
+            stale_toolchain = subprocess.run(
+                [sys.executable, str(script_path), "--workspace-only"],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
 
         self.assertEqual(current.returncode, 0, current.stderr)
+        self.assertNotEqual(stale_reuse.returncode, 0)
+        self.assertIn("must disable concrete-spec reuse", stale_reuse.stderr)
         self.assertNotEqual(stale_constraint.returncode, 0)
         self.assertIn("repeats the managed GCC producer", stale_constraint.stderr)
+        self.assertNotEqual(missing_selector.returncode, 0)
+        self.assertIn(
+            "does not select the managed GCC surface", missing_selector.stderr
+        )
         self.assertNotEqual(missing_needs.returncode, 0)
-        self.assertIn("does not inherit the managed GCC producer", missing_needs.stderr)
+        self.assertIn(
+            "does not order and expose the managed GCC producer",
+            missing_needs.stderr,
+        )
         self.assertNotEqual(stale_preferences.returncode, 0)
         self.assertIn("language-provider policy", stale_preferences.stderr)
+        self.assertNotEqual(stale_toolchain.returncode, 0)
+        self.assertIn("shared GCC toolchain must conditionally bind", stale_toolchain.stderr)
 
     def test_cse_build_checks_workspace_inputs_before_actions(self) -> None:
         template = (TEMPLATE_ROOT / "cse-build.j2").read_text(encoding="utf-8")
@@ -1225,11 +1412,12 @@ printf 'pe=%s\n' "${PE_ENV-<unset>}"
             self.assertEqual(len(matrix), 2, f"{group} lost its compiler binding")
 
         payload_matrix = groups["payload"]["specs"][0]["matrix"]
-        self.assertEqual(len(payload_matrix), 1, "payload constrains MPI externals")
+        self.assertEqual(payload_matrix[1], ["%cse_shared"])
 
         mpi_spec = groups["mpi"]["specs"][0]
         self.assertNotIn("target=", mpi_spec)
-        self.assertNotIn("%", mpi_spec)
+        self.assertIn("%cse_shared", mpi_spec)
+        self.assertNotIn("%gcc@", mpi_spec)
 
     def test_mpi_provider_requirement_does_not_constrain_external_architecture(self) -> None:
         test_values = values()

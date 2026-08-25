@@ -24,14 +24,15 @@ helper selects the newest verified older GCC scope from the static catalog and
 records it under `shared.compiler.build_with`. This is a direct compiler
 dependency in each GCC environment, not a separate preparatory environment.
 Every GCC 12.5.0 producer explicitly enables `+binutils`. Downstream groups do
-not repeat `%gcc@12.5.0` as a second compiler constraint. They inherit the exact
-concrete producer through `needs: [compiler]`, while shared C/C++/Fortran
-preferences select `gcc@12.5.0+binutils`. A separate downstream `%gcc`
-constraint creates another compiler solve and can split the producer hash even
-when it also spells `+binutils`. The workspace-input verifier rejects an
-incomplete producer, a repeated downstream compiler constraint, a missing
-`needs` relationship, or an incomplete language-provider preference before
-concretization or installation.
+not repeat `%gcc@12.5.0` as a legacy compiler constraint. They order and expose
+the producer through `needs: [compiler]` and select the managed compiler through
+the conditional `%cse_shared` toolchain. Shared C/C++/Fortran preferences remain
+defaults, not enforcement. The workspace-input verifier rejects an incomplete
+producer, a missing toolchain selector, a missing `needs` relationship, or an
+incomplete language-provider preference before concretization or installation.
+New managed-GCC locks are resolved with concrete-spec reuse disabled; platform
+lanes retain their existing reuse policy. Identical resulting hashes are still
+reused by the shared store and build cache during installation.
 An older `gcc@12.5.0~binutils` prefix may remain in the restricted trial store,
 but it is ineligible for every newly rendered GCC root and is not part of an
 approved lock set. The lock verifier also requires every downstream GCC-surface

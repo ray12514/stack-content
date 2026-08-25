@@ -36,10 +36,10 @@ MPICH, libfabric, and Cray PMI remain platform externals.
 
 Before Fran's first full concretization, synchronize Stack Content. The
 generated preflight requires the GCC producer to request
-`gcc@12.5.0+binutils`, forbids a second downstream `%gcc@12.5.0` constraint,
-and requires downstream GCC groups to inherit the exact producer through
-`needs: [compiler]`. The lock verifier then requires every downstream
-GCC-surface root to use that exact producer hash:
+`gcc@12.5.0+binutils`, requires downstream GCC groups to order and expose that
+producer through `needs: [compiler]`, and binds their language/MPI virtuals
+through the conditional `%cse_shared` toolchain. The lock verifier then
+requires every downstream GCC-surface root to use that exact producer hash:
 
 ```bash
 source "$CSE_OPERATOR_SESSION_FILE"
@@ -69,10 +69,11 @@ cd "$BUILD_WORKSPACE"
 If both workspace-input and lockfile verification pass, keep all eight locks;
 neither the GCC nor CCE surface needs another solve. If workspace-input
 verification fails, the generated GCC environment YAML predates the corrected
-producer/`needs` inputs. If workspace-input verification passes but lockfile
-verification reports the wrong GCC producer or downstream compiler hash, only
-the four GCC locks are stale; preserve the output and use the affected-lock
-recovery procedure in the main runbook. Do not reconcretize the four CCE locks.
+producer/`needs`/toolchain inputs. If workspace-input verification passes but
+lockfile verification reports the wrong GCC producer or downstream compiler
+hash, only the four GCC locks are stale; preserve the output and use the
+affected-lock recovery procedure in the main runbook. Do not reconcretize the
+four CCE locks.
 
 If Fran is still concretizing a workspace rendered before this correction and
 does not yet have an accepted lock set, stop it with `Ctrl-C`, then replace the

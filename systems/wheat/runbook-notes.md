@@ -45,13 +45,13 @@ remain bound to the oneAPI compiler.
 
 The complete GCC 12.5.0 policy is owned by the CSE trial blueprint in Stack
 Content. It requires `+binutils` on the producer and prefers that provider for
-C/C++/Fortran. Foundation, Core, build-tool, MPI, and payload groups inherit the
-exact concrete producer through `needs: [compiler]`; they must not repeat
-`%gcc@12.5.0` as a second compiler constraint. That duplicate constraint caused
-Wheat to solve two GCC 12.5.0 hashes even though both requested `+binutils`.
-The older bootstrap GCC remains available only to build the managed producer.
-This policy is not supplied by Cluster Inspector, `render-static`, or the
-static catalog.
+C/C++/Fortran. Foundation, Core, build-tool, MPI, and payload groups order and
+expose the producer through `needs: [compiler]` and select it through the
+conditional `%cse_shared` toolchain. `needs` and soft preferences alone do not
+select the producer; they can leave Wheat's older external GCC eligible for
+downstream roots. The older bootstrap GCC remains available only to build the
+managed producer. This policy is not supplied by Cluster Inspector,
+`render-static`, or the static catalog.
 
 After loading the Wheat operator session, verify the source, generated
 environment inputs, and concrete locks in that order:
@@ -66,12 +66,12 @@ grep -R -n --include=spack.yaml \
   "gcc@12.5.0+binutils languages='c,c++,fortran'" \
   "$BUILD_WORKSPACE/environments/gcc"
 
-if grep -R -n --include=spack.yaml \
-  '%gcc@12.5.0' \
-  "$BUILD_WORKSPACE/environments/gcc"; then
-  echo "ERROR: duplicate downstream GCC constraint remains" >&2
-  false
-fi
+grep -R -n --include=spack.yaml \
+  '%cse_shared' \
+  "$BUILD_WORKSPACE/environments/gcc"
+
+grep -n '%c=gcc@12.5.0+binutils' \
+  "$BUILD_WORKSPACE/configs/surfaces/shared/toolchains.yaml"
 
 "$CSE_PYTHON" \
   "$BUILD_WORKSPACE/scripts/verify-lockfiles.py" \
@@ -82,15 +82,16 @@ cd "$BUILD_WORKSPACE"
 ```
 
 The first `grep` must show one managed producer in each GCC environment. The
-second must produce no output. The workspace-only gate checks the producer,
-all required `needs` relationships, and the language-provider preferences.
-After concretization, `verify` also checks that every GCC-surface root uses the
-one producer hash.
+second must show the toolchain selector on every downstream root group, and the
+third must show the generated C-language binding. The workspace-only gate
+checks the producer, all required `needs` relationships, and the conditional
+toolchain. After concretization, `verify` also checks that every GCC-surface
+root uses the one producer hash.
 
-If the managed producer or `needs` relationships are absent, a downstream
-`%gcc@12.5.0` line is present, or verification reports mixed compiler hashes,
-a controls-only refresh is insufficient because it preserves the old
-environment YAML and lockfiles.
+If the managed producer, toolchain include, `%cse_shared` selectors, or `needs`
+relationships are absent, or verification reports mixed compiler hashes, a
+controls-only refresh is insufficient because it preserves the old environment
+YAML and lockfiles.
 
 ### Current Wheat pre-install reset
 
@@ -120,10 +121,11 @@ cd "$BUILD_WORKSPACE"
 
 This reset does not regenerate the Wheat profile or static catalog and does not
 remove an older GCC prefix from the shared Spack store. `concretize --fresh`
-does not reuse installed dependencies; the producer plus `needs` selects one
-new GCC hash for the four GCC environments. If installation from the old locks
-was already attempted or accepted, preserve its lock evidence and use the main
-runbook's release recovery policy instead of this pre-install reset.
+does not reuse installed dependencies; the conditional toolchain selects the
+managed `+binutils` producer in all four GCC environments. If installation from
+the old locks was already attempted or accepted, preserve its lock evidence and
+use the main runbook's release recovery policy instead of this pre-install
+reset.
 
 Do not select an arbitrary latest external GCC for that runtime dependency.
 The helper reuses the same newest verified compiler older than GCC 12.5.0 that

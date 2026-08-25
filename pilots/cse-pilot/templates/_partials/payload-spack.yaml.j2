@@ -2,6 +2,7 @@ spack:
   include::
 {% if surface_key == 'shared' %}
     - ../../../configs/surfaces/shared/compiler.yaml
+    - ../../../configs/surfaces/shared/toolchains.yaml
 {% else %}
     - ../../../configs/surfaces/platform/compiler.yaml
 {% endif %}
@@ -28,6 +29,12 @@ spack:
 {% endif %}
     - {{ ('../../../configs/environments/' ~ surface.compiler.name ~ '/' ~ environment_name) | yaml_scalar }}
 
+{% if surface.compiler.source == 'build' %}
+  concretizer:
+    unify: false
+    reuse: false
+
+{% endif %}
   definitions:
     - foundation:
 {% for spec in data.roster.specs.foundation %}
@@ -56,7 +63,7 @@ spack:
         - matrix:
             - [$foundation]
 {% if surface.compiler.source == 'build' %}
-            - [{{ ('target=' ~ values.architecture.target) | yaml_scalar }}]
+            - [{{ ('target=' ~ values.architecture.target ~ ' %cse_shared') | yaml_scalar }}]
 {% else %}
             - [{{ ('target=' ~ values.architecture.target ~ ' %' ~ surface.compiler.name ~ '@' ~ surface.compiler.version ~ ('+binutils' if surface.compiler.source == 'build' else '')) | yaml_scalar }}]
 {% endif %}
@@ -70,7 +77,7 @@ spack:
         - matrix:
             - [$build_tools]
 {% if surface.compiler.source == 'build' %}
-            - [{{ ('target=' ~ values.architecture.target) | yaml_scalar }}]
+            - [{{ ('target=' ~ values.architecture.target ~ ' %cse_shared') | yaml_scalar }}]
 {% else %}
             - [{{ ('target=' ~ values.architecture.target ~ ' %' ~ surface.compiler.name ~ '@' ~ surface.compiler.version ~ ('+binutils' if surface.compiler.source == 'build' else '')) | yaml_scalar }}]
 {% endif %}
@@ -82,7 +89,11 @@ spack:
       needs: [foundation, build-tools]
 {% endif %}
       specs:
+{% if surface.compiler.source == 'build' %}
+        - {{ (surface.mpi.spec ~ ' %cse_shared') | yaml_scalar }}
+{% else %}
         - {{ surface.mpi.spec | yaml_scalar }}
+{% endif %}
 {% endif %}
     - group: payload
 {% if environment_kind == 'mpi' and surface.mpi.source == 'build' %}
@@ -99,6 +110,9 @@ spack:
       specs:
         - matrix:
             - [$payload]
+{% if surface.compiler.source == 'build' %}
+            - ['%cse_shared']
+{% endif %}
 
   view:
 {% if environment_kind == 'mpi' and surface.mpi.source == 'build' %}

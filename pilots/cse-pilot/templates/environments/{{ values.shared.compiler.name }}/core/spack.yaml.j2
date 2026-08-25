@@ -1,10 +1,15 @@
 spack:
   include::
     - ../../../configs/surfaces/shared/compiler.yaml
+    - ../../../configs/surfaces/shared/toolchains.yaml
     - {{ ('../../../catalog/' ~ values.catalog_scopes.common) | yaml_scalar }}
     - {{ ('../../../catalog/' ~ values.shared.catalog_scopes.compiler) | yaml_scalar }}
     - ../../../configs/common
     - {{ ('../../../configs/environments/' ~ values.shared.compiler.name ~ '/core') | yaml_scalar }}
+
+  concretizer:
+    unify: false
+    reuse: false
 
   definitions:
     - foundation:
@@ -29,13 +34,13 @@ spack:
       specs:
         - matrix:
             - [$foundation]
-            - [{{ ('target=' ~ values.architecture.target) | yaml_scalar }}]
+            - [{{ ('target=' ~ values.architecture.target ~ ' %cse_shared') | yaml_scalar }}]
     - group: core
       needs: [compiler, foundation]
       specs:
         - matrix:
             - [$core]
-            - [{{ ('target=' ~ values.architecture.target) | yaml_scalar }}]
+            - [{{ ('target=' ~ values.architecture.target ~ ' %cse_shared') | yaml_scalar }}]
     - group: core-independent
       specs:
         - matrix:
