@@ -153,6 +153,8 @@ class ToolchainTemplateTests(unittest.TestCase):
     def test_blueprint_declares_shared_workspace_access_contract(self) -> None:
         blueprint = yaml.safe_load(BLUEPRINT_PATH.read_text(encoding="utf-8"))
         self.assertTrue(blueprint["apply_workspace_permissions"])
+        self.assertIn("configs/common/config.yaml", blueprint["control_files"])
+        self.assertNotIn("paths.misc_cache", blueprint["required_values"])
         self.assertEqual(
             blueprint["allowed_values"]["permissions.read"],
             ["group", "world"],
@@ -311,6 +313,10 @@ class ToolchainTemplateTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (workspace / "configs" / "common").mkdir(parents=True)
+            (workspace / "configs" / "common" / "config.yaml").write_text(
+                "config:\n  misc_cache: ${SPACK_MISC_CACHE_PATH}\n",
+                encoding="utf-8",
+            )
             (workspace / "scripts").mkdir()
             (workspace / "scripts" / "verify-lockfiles.py").write_text(
                 "# fake verifier\n",
@@ -551,6 +557,28 @@ class ToolchainTemplateTests(unittest.TestCase):
         )
 
         self.assertEqual(rendered["packages"]["iconv"]["require"], ["glibc"])
+
+    def test_mutable_spack_misc_cache_is_per_builder(self) -> None:
+        rendered = render(
+            "configs/common/config.yaml.j2",
+            values={
+                "paths": {
+                    "install_tree": "/shared/cse/spack/opt",
+                    "source_cache": "/shared/cse/cache/source",
+                    "misc_cache": "/shared/cse/cache/misc",
+                },
+                "build_jobs": 16,
+            },
+        )
+
+        self.assertEqual(
+            rendered["config"]["source_cache"],
+            "/shared/cse/cache/source",
+        )
+        self.assertEqual(
+            rendered["config"]["misc_cache"],
+            "${SPACK_MISC_CACHE_PATH}",
+        )
 
     def test_common_package_policy_enables_standard_boost_libraries(self) -> None:
         rendered = render(
@@ -1146,6 +1174,14 @@ class ToolchainTemplateTests(unittest.TestCase):
         )
         self.assertIn(
             'SPACK_BOOTSTRAP_ROOT="$SPACK_USER_STATE_ROOT/bootstrap"',
+            script,
+        )
+        self.assertIn(
+            'SPACK_MISC_CACHE_PATH="$SPACK_USER_STATE_ROOT/misc"',
+            script,
+        )
+        self.assertIn(
+            "workspace still selects a shared Spack misc cache",
             script,
         )
 

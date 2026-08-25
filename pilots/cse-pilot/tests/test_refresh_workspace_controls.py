@@ -39,6 +39,7 @@ def test_refreshes_declared_controls_and_preserves_build_inputs(tmp_path: Path) 
         {
             "control_files": [
                 "cse-build",
+                "configs/common/config.yaml",
                 "env/setup-build-env.sh",
                 "scripts/verify-lockfiles.py",
             ]
@@ -49,9 +50,11 @@ def test_refreshes_declared_controls_and_preserves_build_inputs(tmp_path: Path) 
     for root in (workspace, staged):
         write_yaml(root / "workspace-manifest.yaml", manifest())
         (root / "env").mkdir()
+        (root / "configs" / "common").mkdir(parents=True)
         (root / "scripts").mkdir()
     for relative in (
         Path("cse-build"),
+        Path("configs/common/config.yaml"),
         Path("env/setup-build-env.sh"),
         Path("scripts/verify-lockfiles.py"),
     ):
@@ -73,10 +76,14 @@ def test_refreshes_declared_controls_and_preserves_build_inputs(tmp_path: Path) 
 
     assert refreshed == [
         Path("cse-build"),
+        Path("configs/common/config.yaml"),
         Path("env/setup-build-env.sh"),
         Path("scripts/verify-lockfiles.py"),
     ]
     assert (workspace / "cse-build").read_text(encoding="utf-8") == "new\n"
+    assert (workspace / "configs/common/config.yaml").read_text(
+        encoding="utf-8"
+    ) == "new\n"
     assert stat.S_IMODE((workspace / "cse-build").stat().st_mode) == 0o770
     assert lock.read_text(encoding="utf-8") == "locked\n"
     assert environment.read_text(encoding="utf-8") == "spack: {}\n"

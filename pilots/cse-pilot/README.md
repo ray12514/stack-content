@@ -138,13 +138,15 @@ as well: `./cse-build login concretize`, `./cse-build login fetch`, and
 `./cse-build compute install`. Commands launched inside a prepared session
 inherit its context.
 
-The two contexts use the same environments, lockfiles, install tree, source and
-misc caches, Spack bootstrap store, views, modules, and portable CPU target.
-Only the build stage and per-context mutable command cache differ. This lets a
-login-node concretization prepare Clingo once for later compute-node use. Each
-stage is namespaced by the current Spack user, system, trial release, and
-context. The generated setup requires an absolute writable `WORKDIR` and fails
-if no executable stage is available.
+The two contexts use the same environments, lockfiles, install tree, shared
+source cache, per-builder misc/concretization cache and bootstrap store, views,
+modules, and portable CPU target. Only the build stage and per-context mutable
+command cache differ. The misc and bootstrap caches remain private to the
+builder because Spack creates some cache artifacts with user-only modes. This
+lets a login-node concretization prepare Clingo once for later compute-node
+use. Each stage is namespaced by the current Spack user, system, trial release,
+and context. The generated setup requires an absolute writable `WORKDIR` and
+fails if no executable stage is available.
 
 On a builder's first concretization, Spack may install Clingo support and helper
 packages such as re2c, gmake, CMake, Python venv, and GCC runtime below that
@@ -217,7 +219,8 @@ two nodes with `install --surface shared` for GCC and
 both commands for the same surface, and do not let the per-process job budgets
 oversubscribe one node. The two processes receive separate
 node-context/surface-scoped `SPACK_USER_CACHE_PATH` directories while retaining
-the same locked package store and generated source/misc caches.
+the same locked package store, shared source cache, and builder-private
+`SPACK_MISC_CACHE_PATH`.
 
 The selected package-build CMake is 3.31.12. CMake 4.4.2 is the second public
 version. The workspace overlay recipe adds those two versions to the pinned

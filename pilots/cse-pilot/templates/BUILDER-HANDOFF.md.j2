@@ -151,11 +151,12 @@ split the two compiler surfaces across two build nodes:
 Both commands use the same locked workspace and restricted install tree.
 Spack's prefix/database locks coordinate identical concrete hashes; the
 surface split keeps view, module refresh, and mutable per-user cache roots
-disjoint. The source/misc caches, per-builder bootstrap store, and package store
-remain shared. Run login concretization before moving to a network-restricted
+disjoint. The source cache and package store remain shared. Spack's mutable
+misc/concretization cache and bootstrap store are persistent but private to
+each builder. Run login concretization before moving to a network-restricted
 compute node so Clingo is already available. Do not run two commands for the
-same surface. `BUILD_JOBS` is a per-process budget, so two processes on one node
-would add their budgets together. `concretize` and `verify` remain
+same surface. `BUILD_JOBS` is a per-process budget, so two processes on one
+node would add their budgets together. `concretize` and `verify` remain
 whole-workspace gates and do not accept `--surface`.
 
 The first login concretization for a builder may install Clingo support and

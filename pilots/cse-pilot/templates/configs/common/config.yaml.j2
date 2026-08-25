@@ -5,7 +5,7 @@ config:
   build_stage::
     - ${CSE_BUILD_STAGE}
   source_cache: {{ values.paths.source_cache | yaml_scalar }}
-  misc_cache: {{ values.paths.misc_cache | yaml_scalar }}
+  misc_cache: ${SPACK_MISC_CACHE_PATH}
   build_jobs: {{ values.build_jobs }}
   locks: true
   # Python 3.8.20 is an intentional EOL trial root in the pinned recipe set.

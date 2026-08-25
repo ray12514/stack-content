@@ -311,10 +311,15 @@ verify_spack
 
 export SPACK_USER_STATE_ROOT="$WORKDIR/$USER/cse-spack/$CSE_RECORDED_SYSTEM/$CSE_RECORDED_SPACK_VERSION"
 export SPACK_USER_CACHE_PATH="$SPACK_USER_STATE_ROOT/cache/$CSE_NODE_CONTEXT/$REQUESTED_SURFACE"
+export SPACK_MISC_CACHE_PATH="$SPACK_USER_STATE_ROOT/misc"
 export SPACK_BOOTSTRAP_ROOT="$SPACK_USER_STATE_ROOT/bootstrap"
 export SPACK_GNUPGHOME="$SPACK_USER_STATE_ROOT/gpg"
 install -d -m 0700 \
-  "$SPACK_USER_CACHE_PATH" "$SPACK_BOOTSTRAP_ROOT" "$SPACK_GNUPGHOME"
+  "$SPACK_USER_CACHE_PATH" "$SPACK_MISC_CACHE_PATH" \
+  "$SPACK_BOOTSTRAP_ROOT" "$SPACK_GNUPGHOME"
+grep -Fxq '  misc_cache: ${SPACK_MISC_CACHE_PATH}' \
+  "$CSE_WORKSPACE_ROOT/configs/common/config.yaml" || fail \
+  "workspace still selects a shared Spack misc cache; refresh workspace controls"
 
 source "$CSE_WORKSPACE_ROOT/env/prepare-module-state.sh"
 cse_prepare_module_state || fail \
@@ -365,6 +370,7 @@ checkpoint_summary() {
   printf 'Node context: %s (%s)\n' \
     "$CSE_NODE_CONTEXT" "$CSE_BUILD_NODE_TYPE"
   printf 'Build stage: %s\n' "$CSE_BUILD_STAGE"
+  printf 'Builder misc cache: %s\n' "$SPACK_MISC_CACHE_PATH"
   printf 'Concrete locks: %s/%s\n' "$lock_count" "$CSE_ENVIRONMENT_COUNT"
   if [ "$lock_count" -eq 0 ]; then
     printf 'Next action: ./cse-build %s concretize\n' "$CSE_NODE_CONTEXT"

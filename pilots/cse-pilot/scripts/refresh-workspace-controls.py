@@ -143,8 +143,9 @@ def refresh_control_files(
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Refresh cse-build and its matching generated helpers while preserving "
-            "environment YAML, lockfiles, caches, views, and installed packages."
+            "Refresh generated workspace controls and common configuration while "
+            "preserving environment YAML, lockfiles, caches, views, and installed "
+            "packages."
         )
     )
     parser.add_argument("--composer", required=True)

@@ -115,10 +115,10 @@ cd "$BUILD_WORKSPACE"
 
 The refresh renders a disposable workspace, confirms the blueprint, Raider
 system, and catalog release match, and atomically replaces only `cse-build`,
-its environment helpers, the lock verifier, and the builder handoff note. A
-mismatch stops without changing the existing controls. If environment inputs
-or package overlays changed, use the common runbook's appropriate workspace or
-release recovery instead of this shortcut.
+the common config, its environment helpers, the lock verifier, and the builder
+handoff note. A mismatch stops without changing the existing controls. If
+environment inputs or package overlays changed, use the common runbook's
+appropriate workspace or release recovery instead of this shortcut.
 
 ## Missing operator-session recovery
 
@@ -432,9 +432,10 @@ continuing.
    and recorded. Then obtain the release owner's approval to remove only the
    confirmed Raider-owned old catalog, workspace, release, build-cache, and
    evidence paths. Do not delete or move `/p/app/CSE/restricted` as a unit, and
-   do not remove shared source or miscellaneous caches merely because Raider
-   used them. The corrected workspace and cache must not retain an upstream,
-   mirror, include, or install-tree reference to the wrong root.
+   do not remove the shared source cache merely because Raider used it. Do not
+   remove another builder's private misc cache. The corrected workspace and
+   caches must not retain an upstream, mirror, include, or install-tree
+   reference to the wrong root.
 
 ## Readline 8.3 patch fetch recovery (2026-08-20)
 

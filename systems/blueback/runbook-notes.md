@@ -183,10 +183,10 @@ cd "$BUILD_WORKSPACE"
 
 The refresh renders a disposable workspace, confirms the blueprint, Blueback
 system, and catalog release match, and atomically replaces only `cse-build`,
-its environment helpers, the lock verifier, and the builder handoff note. A
-mismatch stops without changing the existing controls. If environment inputs
-or package overlays changed, use the common runbook's appropriate workspace or
-release recovery instead of this shortcut.
+the common config, its environment helpers, the lock verifier, and the builder
+handoff note. A mismatch stops without changing the existing controls. If
+environment inputs or package overlays changed, use the common runbook's
+appropriate workspace or release recovery instead of this shortcut.
 
 Use this reviewed Step 7 selection:
 

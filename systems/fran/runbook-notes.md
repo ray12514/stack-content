@@ -66,6 +66,13 @@ cd "$BUILD_WORKSPACE"
 ./cse-build login verify
 ```
 
+The same controls refresh also replaces `configs/common/config.yaml`. That
+file now directs Spack's mutable misc/provider and concretization indexes to a
+persistent cache owned by the current builder, while the source cache remains
+shared. This is the required recovery if a second Fran builder reports a
+permission error below the former shared `cache/misc` tree; do not recursively
+change permissions on that old tree.
+
 If both workspace-input and lockfile verification pass, keep all eight locks;
 neither the GCC nor CCE surface needs another solve. If workspace-input
 verification fails, the generated GCC environment YAML predates the corrected

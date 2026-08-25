@@ -93,6 +93,15 @@ relationships are absent, or verification reports mixed compiler hashes, a
 controls-only refresh is insufficient because it preserves the old environment
 YAML and lockfiles.
 
+If the failure is instead a second builder's permission error below the former
+shared `cache/misc/providers`, `cache/misc/concretization`, `cache/misc/patches`,
+or `cache/misc/indices` tree, use the common runbook's shared-builder
+misc-cache permission recovery. That controls-only refresh is sufficient for
+this distinct issue: it replaces the common config and launcher so the mutable
+misc cache is private to each builder, while preserving Wheat's environment
+YAML, existing locks, and installed packages. Do not run the full reset below
+for a cache-ownership error alone.
+
 ### Current Wheat pre-install reset
 
 Use this exact quick fix when Wheat reports two GCC 12.5.0 hashes, a producer
