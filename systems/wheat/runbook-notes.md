@@ -167,6 +167,33 @@ Wheat's catalog uses a different exact key.
 - Confirm the platform compiler scope contains exact driver paths.
 - Confirm no site MPI is selected merely because it is loaded by default.
 
+For the LLVM-based oneAPI 2024.2.1 surface, the reviewed profile and generated
+catalog deliberately use two related prefixes. The profile retains the
+verified driver component:
+
+```text
+/p/app/intel/2024.2.1/compiler/2024.2
+```
+
+The generated `intel-oneapi-compilers` external must use the suite root:
+
+```text
+/p/app/intel/2024.2.1
+```
+
+Its `extra_attributes.compilers` entries must point to `icx`, `icpx`, and
+`ifx` below the verified component directory exactly once. Reject the catalog
+if any compiler scope contains
+`compiler/2024.2/compiler/2024.2`. Spack's oneAPI package appends the component
+directory to its external prefix; using the component directory as that prefix
+causes the repetition.
+
+This correction does not require a new Cluster Inspector profile: the observed
+profile fact is valid. After updating and rebuilding Stack Composer, rerun the
+common runbook's Step 6 `render-static` command with `--overwrite`, inspect the
+oneAPI compiler scope, and rerun `init-workspace --overwrite` before creating
+new lockfiles. Do not edit the generated catalog or workspace YAML by hand.
+
 ## Current run record
 
 - Profile release/date:
