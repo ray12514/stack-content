@@ -3,6 +3,20 @@
 
 source "$SPACK_ROOT/share/spack/setup-env.sh"
 source "$CSE_BUILD_WORKSPACE/env/setup-build-env.sh"
+source "$CSE_BUILD_WORKSPACE/env/share-cache-permissions.sh"
+
+cse_workspace_cache_on_exit() {
+  local status=$?
+  trap - EXIT
+  if ! cse_normalize_shared_misc_cache "$SPACK_MISC_CACHE_PATH" "$CSE_GROUP"; then
+    printf 'cse-build: could not normalize the shared builder cache\n' >&2
+    [ "$status" -ne 0 ] || status=2
+  fi
+  exit "$status"
+}
+cse_normalize_shared_misc_cache "$SPACK_MISC_CACHE_PATH" "$CSE_GROUP" || exit 2
+trap cse_workspace_cache_on_exit EXIT
+
 cd "$CSE_BUILD_WORKSPACE" || exit 2
 
 printf '\nCSE build workspace is active.\n'

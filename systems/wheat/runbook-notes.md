@@ -98,9 +98,10 @@ shared `cache/misc/providers`, `cache/misc/concretization`, `cache/misc/patches`
 or `cache/misc/indices` tree, use the common runbook's shared-builder
 misc-cache permission recovery. That controls-only refresh is sufficient for
 this distinct issue: it replaces the common config and launcher so the mutable
-misc cache is private to each builder, while preserving Wheat's environment
-YAML, existing locks, and installed packages. Do not run the full reset below
-for a cache-ownership error alone.
+misc cache uses a builder-named partition below Wheat's shared restricted cache
+root and recursively retains CSE-group access, while preserving Wheat's
+environment YAML, existing locks, and installed packages. Do not run the full
+reset below for a cache-ownership error alone.
 
 ### Current Wheat pre-install reset
 

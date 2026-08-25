@@ -102,6 +102,9 @@ lock verification checks:
 
 ```bash
 "$CSE_PYTHON" \
+  "$CONTENT/pilots/cse-pilot/scripts/create-build-values.py"
+
+"$CSE_PYTHON" \
   "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
   --composer "$STACK_COMPOSER" \
   --blueprint "$CONTENT/pilots/cse-pilot" \
@@ -433,9 +436,9 @@ continuing.
    confirmed Raider-owned old catalog, workspace, release, build-cache, and
    evidence paths. Do not delete or move `/p/app/CSE/restricted` as a unit, and
    do not remove the shared source cache merely because Raider used it. Do not
-   remove another builder's private misc cache. The corrected workspace and
-   caches must not retain an upstream, mirror, include, or install-tree
-   reference to the wrong root.
+   remove another builder's CSE-group-accessible misc-cache partition. The
+   corrected workspace and caches must not retain an upstream, mirror, include,
+   or install-tree reference to the wrong root.
 
 ## Readline 8.3 patch fetch recovery (2026-08-20)
 

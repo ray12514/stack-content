@@ -56,6 +56,9 @@ cache, view, and installed prefix while installing the current verifier:
 
 ```bash
 "$CSE_PYTHON" \
+  "$CONTENT/pilots/cse-pilot/scripts/create-build-values.py"
+
+"$CSE_PYTHON" \
   "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
   --composer "$STACK_COMPOSER" \
   --blueprint "$CONTENT/pilots/cse-pilot" \
@@ -68,10 +71,11 @@ cd "$BUILD_WORKSPACE"
 
 The same controls refresh also replaces `configs/common/config.yaml`. That
 file now directs Spack's mutable misc/provider and concretization indexes to a
-persistent cache owned by the current builder, while the source cache remains
-shared. This is the required recovery if a second Fran builder reports a
-permission error below the former shared `cache/misc` tree; do not recursively
-change permissions on that old tree.
+persistent builder-named partition below the shared restricted misc-cache root,
+while the source cache remains shared. The refreshed launcher recursively
+restores CSE-group access to existing and newly written files in that partition
+before and after Spack. This is the required recovery if a second Fran builder
+reports a permission error below `cache/misc`.
 
 If both workspace-input and lockfile verification pass, keep all eight locks;
 neither the GCC nor CCE surface needs another solve. If workspace-input

@@ -16,6 +16,7 @@ if [[ ! -d "$WORKDIR" || ! -w "$WORKDIR" || ! -x "$WORKDIR" ]]; then
 fi
 
 export CSE_GROUP={{ values.permissions.group | yaml_scalar }}
+export CSE_SHARED_MISC_CACHE_ROOT={{ values.paths.misc_cache | yaml_scalar }}
 case " $(id -Gn) " in
   *" $CSE_GROUP "*) ;;
   *)

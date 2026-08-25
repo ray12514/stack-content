@@ -11,6 +11,7 @@ control_files:
   - cse-build
   - configs/common/config.yaml
   - env/prepare-module-state.sh
+  - env/share-cache-permissions.sh
   - env/select-build-context.sh
   - env/setup-build-env.sh
   - env/workspace-shell.rc
@@ -58,6 +59,7 @@ required_values:
   - catalog_scopes.common
   - paths.install_tree
   - paths.source_cache
+  - paths.misc_cache
   - paths.views_root
   - paths.modules_root
   - buildcache.name

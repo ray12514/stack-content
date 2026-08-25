@@ -772,6 +772,7 @@ def main() -> int:
             "paths": {
                 "install_tree": f"{release_root}/spack/opt",
                 "source_cache": f"{restricted_root}/cache/source",
+                "misc_cache": f"{restricted_root}/cache/misc",
                 "views_root": f"{release_root}/views",
                 "modules_root": f"{release_root}/modules",
             },

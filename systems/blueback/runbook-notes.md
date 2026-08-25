@@ -170,6 +170,9 @@ lock verification checks:
 
 ```bash
 "$CSE_PYTHON" \
+  "$CONTENT/pilots/cse-pilot/scripts/create-build-values.py"
+
+"$CSE_PYTHON" \
   "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
   --composer "$STACK_COMPOSER" \
   --blueprint "$CONTENT/pilots/cse-pilot" \
@@ -187,6 +190,12 @@ the common config, its environment helpers, the lock verifier, and the builder
 handoff note. A mismatch stops without changing the existing controls. If
 environment inputs or package overlays changed, use the common runbook's
 appropriate workspace or release recovery instead of this shortcut.
+
+The same shared control set is used on every trial system. For Blueback it
+places the builder's misc/provider and concretization indexes below
+`$CSE_RESTRICTED_ROOT/cache/misc/$USER` and recursively restores the CSE group,
+group read/write access, and directory search/setgid access before and after
+Spack. The source cache remains shared without a builder suffix.
 
 Use this reviewed Step 7 selection:
 

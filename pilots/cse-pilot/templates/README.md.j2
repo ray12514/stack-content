@@ -73,8 +73,10 @@ is `spack -e <environment> install --only-concrete`. Exact shared hashes wait
 on Spack's prefix/database locks and are reused after the first successful
 install. Never launch the same environment twice, and give each direct Spack
 process its own mutable `SPACK_USER_CACHE_PATH`. The prepared shell keeps
-`SPACK_MISC_CACHE_PATH` private to the builder while reusing it across that
-builder's contexts and processes.
+`SPACK_MISC_CACHE_PATH` in a builder-named partition below the shared
+restricted misc-cache root. It recursively restores CSE-group access before
+and after Spack while keeping concurrent builders out of the same mutable
+index partition.
 {% else %}
 This publication workspace must receive the eight approved lockfiles from the
 matching restricted build workspace. Do not concretize it. Install from the

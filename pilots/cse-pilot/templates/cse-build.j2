@@ -311,15 +311,31 @@ verify_spack
 
 export SPACK_USER_STATE_ROOT="$WORKDIR/$USER/cse-spack/$CSE_RECORDED_SYSTEM/$CSE_RECORDED_SPACK_VERSION"
 export SPACK_USER_CACHE_PATH="$SPACK_USER_STATE_ROOT/cache/$CSE_NODE_CONTEXT/$REQUESTED_SURFACE"
-export SPACK_MISC_CACHE_PATH="$SPACK_USER_STATE_ROOT/misc"
+export CSE_SHARED_MISC_CACHE_ROOT={{ values.paths.misc_cache | yaml_scalar }}
+export SPACK_MISC_CACHE_PATH="$CSE_SHARED_MISC_CACHE_ROOT/$USER"
 export SPACK_BOOTSTRAP_ROOT="$SPACK_USER_STATE_ROOT/bootstrap"
 export SPACK_GNUPGHOME="$SPACK_USER_STATE_ROOT/gpg"
 install -d -m 0700 \
-  "$SPACK_USER_CACHE_PATH" "$SPACK_MISC_CACHE_PATH" \
-  "$SPACK_BOOTSTRAP_ROOT" "$SPACK_GNUPGHOME"
+  "$SPACK_USER_CACHE_PATH" "$SPACK_BOOTSTRAP_ROOT" "$SPACK_GNUPGHOME"
 grep -Fxq '  misc_cache: ${SPACK_MISC_CACHE_PATH}' \
   "$CSE_WORKSPACE_ROOT/configs/common/config.yaml" || fail \
-  "workspace still selects a shared Spack misc cache; refresh workspace controls"
+  "workspace does not select the prepared shared misc cache; refresh workspace controls"
+
+source "$CSE_WORKSPACE_ROOT/env/share-cache-permissions.sh"
+cse_normalize_misc_cache_on_exit() {
+  local status=$?
+  trap - EXIT
+  if ! cse_normalize_shared_misc_cache \
+    "$SPACK_MISC_CACHE_PATH" "$CSE_RECORDED_GROUP"; then
+    printf 'cse-build: could not normalize the shared builder cache\n' >&2
+    [ "$status" -ne 0 ] || status=2
+  fi
+  exit "$status"
+}
+cse_normalize_shared_misc_cache \
+  "$SPACK_MISC_CACHE_PATH" "$CSE_RECORDED_GROUP" || fail \
+  "could not normalize the shared builder cache"
+trap cse_normalize_misc_cache_on_exit EXIT
 
 source "$CSE_WORKSPACE_ROOT/env/prepare-module-state.sh"
 cse_prepare_module_state || fail \

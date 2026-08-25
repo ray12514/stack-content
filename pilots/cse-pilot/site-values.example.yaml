@@ -91,6 +91,7 @@ catalog_scopes:
 paths:
   install_tree: /shared/cse/initial-conversion-trials/restricted/releases/example-system/trial-001/spack/opt
   source_cache: /shared/cse/initial-conversion-trials/restricted/cache/source
+  misc_cache: /shared/cse/initial-conversion-trials/restricted/cache/misc
   views_root: /shared/cse/initial-conversion-trials/restricted/releases/example-system/trial-001/views
   modules_root: /shared/cse/initial-conversion-trials/restricted/releases/example-system/trial-001/modules
 buildcache:

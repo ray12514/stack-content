@@ -7,6 +7,7 @@ import os
 import pwd
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -69,7 +70,10 @@ def values() -> dict:
             }
         },
         "catalog_scopes": {"common": "scopes/common", "platform": None},
-        "paths": {"views_root": "/views"},
+        "paths": {
+            "misc_cache": "/shared/cse/cache/misc",
+            "views_root": "/views",
+        },
         "shared": {
             "compiler": {
                 "name": "gcc",
@@ -150,11 +154,29 @@ def write_shared_surface_controls(workspace: Path) -> Path:
 
 
 class ToolchainTemplateTests(unittest.TestCase):
+    def test_generated_cache_permission_shell_is_syntax_valid(self) -> None:
+        site_values = yaml.safe_load(SITE_VALUES_PATH.read_text(encoding="utf-8"))
+        for template in (
+            "cse-build.j2",
+            "env/share-cache-permissions.sh.j2",
+            "env/workspace-shell.rc.j2",
+        ):
+            with self.subTest(template=template):
+                result = subprocess.run(
+                    ["bash", "-n"],
+                    input=render_text(template, values=site_values),
+                    check=False,
+                    text=True,
+                    capture_output=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_blueprint_declares_shared_workspace_access_contract(self) -> None:
         blueprint = yaml.safe_load(BLUEPRINT_PATH.read_text(encoding="utf-8"))
         self.assertTrue(blueprint["apply_workspace_permissions"])
         self.assertIn("configs/common/config.yaml", blueprint["control_files"])
-        self.assertNotIn("paths.misc_cache", blueprint["required_values"])
+        self.assertIn("env/share-cache-permissions.sh", blueprint["control_files"])
+        self.assertIn("paths.misc_cache", blueprint["required_values"])
         self.assertEqual(
             blueprint["allowed_values"]["permissions.read"],
             ["group", "world"],
@@ -202,9 +224,17 @@ class ToolchainTemplateTests(unittest.TestCase):
             spack_root = root / "shared-spack"
             builder_home = root / "builder-home"
             workdir = root / "work"
+            misc_cache = root / "shared-misc"
+            builder_user = pwd.getpwuid(os.getuid()).pw_name
             workspace.mkdir()
             builder_home.mkdir()
             workdir.mkdir()
+            provider_cache = misc_cache / builder_user / "providers"
+            provider_cache.mkdir(parents=True)
+            provider_cache.chmod(0o700)
+            provider_index = provider_cache / "providers.json"
+            provider_index.write_text("{}\n", encoding="utf-8")
+            provider_index.chmod(0o600)
 
             (spack_root / "bin").mkdir(parents=True)
             (spack_root / "share" / "spack").mkdir(parents=True)
@@ -212,6 +242,12 @@ class ToolchainTemplateTests(unittest.TestCase):
             fake_spack.write_text(
                 "#!/usr/bin/env bash\n"
                 "set -euo pipefail\n"
+                "if [ -n \"${SPACK_MISC_CACHE_PATH:-}\" ]; then\n"
+                "  mkdir -p \"$SPACK_MISC_CACHE_PATH/concretization\"\n"
+                "  chmod 0700 \"$SPACK_MISC_CACHE_PATH/concretization\"\n"
+                "  printf '{}\\n' >\"$SPACK_MISC_CACHE_PATH/concretization/new.json\"\n"
+                "  chmod 0600 \"$SPACK_MISC_CACHE_PATH/concretization/new.json\"\n"
+                "fi\n"
                 "if [ \"${1:-}\" = --version ]; then\n"
                 "  printf '1.2.2\\n'\n"
                 "elif [ \"${1:-}\" = python ]; then\n"
@@ -283,6 +319,10 @@ class ToolchainTemplateTests(unittest.TestCase):
 
             test_values = {
                 **values(),
+                "paths": {
+                    **values()["paths"],
+                    "misc_cache": str(misc_cache),
+                },
                 "build_jobs": 16,
                 "system": {"name": "raider"},
                 "release": "trial-001",
@@ -324,6 +364,10 @@ class ToolchainTemplateTests(unittest.TestCase):
             )
             env_dir = workspace / "env"
             env_dir.mkdir()
+            (env_dir / "share-cache-permissions.sh").write_text(
+                render_text("env/share-cache-permissions.sh.j2", values=test_values),
+                encoding="utf-8",
+            )
             (env_dir / "select-build-context.sh").write_text(
                 render_text("env/select-build-context.sh.j2", values=test_values),
                 encoding="utf-8",
@@ -354,17 +398,32 @@ class ToolchainTemplateTests(unittest.TestCase):
                 capture_output=True,
                 env={
                     "HOME": str(builder_home),
-                    "USER": pwd.getpwuid(os.getuid()).pw_name,
+                    "USER": builder_user,
                     "WORKDIR": str(workdir),
                     "PATH": os.environ["PATH"],
                 },
             )
             home_entries = list(builder_home.iterdir())
+            self.assertEqual(result.returncode, 0, result.stderr)
+            concretization_cache = misc_cache / builder_user / "concretization"
+            concretization_index = concretization_cache / "new.json"
+            provider_cache_mode = stat.S_IMODE(provider_cache.stat().st_mode)
+            provider_index_mode = stat.S_IMODE(provider_index.stat().st_mode)
+            concretization_cache_mode = stat.S_IMODE(
+                concretization_cache.stat().st_mode
+            )
+            concretization_index_mode = stat.S_IMODE(
+                concretization_index.stat().st_mode
+            )
 
-        self.assertEqual(result.returncode, 0, result.stderr)
+        expected_directory_mode = 0o770 if sys.platform == "darwin" else 0o2770
         self.assertIn("Node context: login (login)", result.stdout)
         self.assertIn("Concrete locks: 0/8", result.stdout)
         self.assertEqual(home_entries, [])
+        self.assertEqual(provider_cache_mode, expected_directory_mode)
+        self.assertEqual(provider_index_mode, 0o660)
+        self.assertEqual(concretization_cache_mode, expected_directory_mode)
+        self.assertEqual(concretization_index_mode, 0o660)
 
     def test_gcc_groups_bind_the_managed_producer_with_a_conditional_toolchain(
         self,
@@ -558,7 +617,7 @@ class ToolchainTemplateTests(unittest.TestCase):
 
         self.assertEqual(rendered["packages"]["iconv"]["require"], ["glibc"])
 
-    def test_mutable_spack_misc_cache_is_per_builder(self) -> None:
+    def test_mutable_spack_misc_cache_uses_the_prepared_shared_path(self) -> None:
         rendered = render(
             "configs/common/config.yaml.j2",
             values={
@@ -578,6 +637,13 @@ class ToolchainTemplateTests(unittest.TestCase):
         self.assertEqual(
             rendered["config"]["misc_cache"],
             "${SPACK_MISC_CACHE_PATH}",
+        )
+        site_values = yaml.safe_load(SITE_VALUES_PATH.read_text(encoding="utf-8"))
+        setup = render_text("env/setup-build-env.sh.j2", values=site_values)
+        self.assertIn(
+            "CSE_SHARED_MISC_CACHE_ROOT="
+            '"/shared/cse/initial-conversion-trials/restricted/cache/misc"',
+            setup,
         )
 
     def test_common_package_policy_enables_standard_boost_libraries(self) -> None:
@@ -1177,11 +1243,11 @@ class ToolchainTemplateTests(unittest.TestCase):
             script,
         )
         self.assertIn(
-            'SPACK_MISC_CACHE_PATH="$SPACK_USER_STATE_ROOT/misc"',
+            'SPACK_MISC_CACHE_PATH="$CSE_SHARED_MISC_CACHE_ROOT/$USER"',
             script,
         )
         self.assertIn(
-            "workspace still selects a shared Spack misc cache",
+            "could not normalize the shared builder cache",
             script,
         )
 

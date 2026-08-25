@@ -40,6 +40,7 @@ def test_refreshes_declared_controls_and_preserves_build_inputs(tmp_path: Path) 
             "control_files": [
                 "cse-build",
                 "configs/common/config.yaml",
+                "env/share-cache-permissions.sh",
                 "env/setup-build-env.sh",
                 "scripts/verify-lockfiles.py",
             ]
@@ -55,10 +56,12 @@ def test_refreshes_declared_controls_and_preserves_build_inputs(tmp_path: Path) 
     for relative in (
         Path("cse-build"),
         Path("configs/common/config.yaml"),
+        Path("env/share-cache-permissions.sh"),
         Path("env/setup-build-env.sh"),
         Path("scripts/verify-lockfiles.py"),
     ):
-        (workspace / relative).write_text("old\n", encoding="utf-8")
+        if relative != Path("env/share-cache-permissions.sh"):
+            (workspace / relative).write_text("old\n", encoding="utf-8")
         (staged / relative).write_text("new\n", encoding="utf-8")
         (staged / relative).chmod(0o770)
 
@@ -77,11 +80,15 @@ def test_refreshes_declared_controls_and_preserves_build_inputs(tmp_path: Path) 
     assert refreshed == [
         Path("cse-build"),
         Path("configs/common/config.yaml"),
+        Path("env/share-cache-permissions.sh"),
         Path("env/setup-build-env.sh"),
         Path("scripts/verify-lockfiles.py"),
     ]
     assert (workspace / "cse-build").read_text(encoding="utf-8") == "new\n"
     assert (workspace / "configs/common/config.yaml").read_text(
+        encoding="utf-8"
+    ) == "new\n"
+    assert (workspace / "env/share-cache-permissions.sh").read_text(
         encoding="utf-8"
     ) == "new\n"
     assert stat.S_IMODE((workspace / "cse-build").stat().st_mode) == 0o770
