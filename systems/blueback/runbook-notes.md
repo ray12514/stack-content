@@ -199,6 +199,43 @@ and no-world-access policy across the workspace, source/misc caches, views,
 modules, and file-backed build cache. The source cache remains shared without a
 builder suffix; installed prefixes remain governed by Spack package permissions.
 
+### Blueback shared generated-content recovery
+
+This is the Blueback entry point for the common runbook's
+**Shared generated-content permission recovery** procedure. Use it when the
+existing Blueback workspace predates the common generated-permission helper, a
+second builder receives `PermissionError`, or the accidental recursive
+`chmod 660` removed directory traversal below the misc cache.
+
+First stop every process using the Blueback workspace or misc cache and run the
+controls-only refresh above. That refresh is required for an already-rendered
+workspace; synchronizing Stack Content by itself does not replace the helper in
+that workspace.
+
+Before using the one-time manual repair in the common runbook, set and verify
+the Blueback-specific context:
+
+```bash
+source "$CSE_OPERATOR_SESSION_FILE"
+
+test "$SYSTEM_NAME" = "blueback"
+test "$CSE_GROUP" = "cse"
+export BROKEN_ROOT="$CSE_RESTRICTED_ROOT/cache/misc"
+test -d "$BROKEN_ROOT"
+```
+
+Then follow `stack-planning/docs/runbook.md` from the `chmod 0770
+"$BROKEN_ROOT"` command through the final `./cse-build login status` check.
+Run the ownership-filtered repair as the builder who owns the affected entries.
+If another builder owns a reported entry, that builder or a filesystem
+administrator must repair it.
+
+Do not point `BROKEN_ROOT` at the restricted trial root, release root, or Spack
+install tree, and do not recursively apply `660` to a directory tree. After the
+one-time traversal repair and controls refresh, every builder must enter through
+the refreshed `cse-build`; it normalizes that builder's generated content on
+entry and exit and verifies the complete handoff surfaces with `status`.
+
 Use this reviewed Step 7 selection:
 
 ```bash
