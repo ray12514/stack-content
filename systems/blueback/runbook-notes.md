@@ -207,6 +207,13 @@ existing Blueback workspace predates the common generated-permission helper, a
 second builder receives `PermissionError`, or the accidental recursive
 `chmod 660` removed directory traversal below the misc cache.
 
+The permanent refreshed control is not limited to Blueback's misc cache. It
+enforces the common owner/`cse` group contract for the workspace and lockfiles,
+source cache, builder misc partitions, views, modules, file-backed build cache,
+and Spack-created install prefixes through the rendered package-permission
+policy. Only the emergency commands below are misc-specific because that is the
+tree that was manually changed.
+
 First stop every process using the Blueback workspace or misc cache and run the
 controls-only refresh above. That refresh is required for an already-rendered
 workspace; synchronizing Stack Content by itself does not replace the helper in

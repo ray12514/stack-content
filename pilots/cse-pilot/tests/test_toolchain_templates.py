@@ -200,6 +200,37 @@ class ToolchainTemplateTests(unittest.TestCase):
         self.assertIn("default `tcsh` login", handoff)
         self.assertIn("`catalog/profile.yaml`", handoff)
 
+    def test_shared_permission_contract_names_every_handoff_surface(self) -> None:
+        site_values = yaml.safe_load(SITE_VALUES_PATH.read_text(encoding="utf-8"))
+        helper = render_text(
+            "env/share-generated-permissions.sh.j2", values=site_values
+        )
+        launcher = render_text("cse-build.j2", values=site_values)
+
+        for shared_surface in (
+            "CSE_BUILD_WORKSPACE",
+            "CSE_INSTALL_TREE_ROOT",
+            "SPACK_MISC_CACHE_PATH",
+            "CSE_SHARED_SOURCE_CACHE_ROOT",
+            "CSE_VIEWS_ROOT",
+            "CSE_MODULES_ROOT",
+            "CSE_BUILDCACHE_ROOT",
+        ):
+            with self.subTest(shared_surface=shared_surface):
+                self.assertIn(shared_surface, helper)
+                self.assertIn(shared_surface, launcher)
+
+        roster = yaml.safe_load(ROSTER_PATH.read_text(encoding="utf-8"))
+        packages = render(
+            "configs/common/packages.yaml.j2",
+            values=site_values,
+            data={"roster": roster},
+        )
+        self.assertEqual(
+            packages["packages"]["all"]["permissions"],
+            {"read": "group", "write": "group", "group": "cse"},
+        )
+
     def test_publication_workspace_does_not_apply_restricted_build_modes(self) -> None:
         publication_values = yaml.safe_load(
             SITE_VALUES_PATH.read_text(encoding="utf-8")
