@@ -79,6 +79,11 @@ case "$WORKDIR" in
     ;;
 esac
 
+# Keep every later file created in the restricted CSE workspace writable by
+# both its owner and the explicit collaboration group.  Private per-builder
+# directories below use an explicit 0700 mode and are not widened by this.
+umask 0007
+
 export INSPECTOR="$WORK_ROOT/cluster-inspector"
 export COMPOSER="$WORK_ROOT/stack-composer"
 export CONTENT="$WORK_ROOT/stack-content"

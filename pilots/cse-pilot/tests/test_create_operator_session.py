@@ -10,9 +10,16 @@ from pathlib import Path
 SCRIPT = (
     Path(__file__).resolve().parents[1] / "scripts" / "create-operator-session.py"
 )
+OPERATOR_SESSION = (
+    Path(__file__).resolve().parents[1] / "scripts" / "operator-session.sh"
+)
 
 
 class ProviderSelectionTemplateTests(unittest.TestCase):
+    def test_operator_session_sets_group_collaborative_umask(self) -> None:
+        session = OPERATOR_SESSION.read_text(encoding="utf-8")
+        self.assertIn("umask 0007", session)
+
     def test_node_context_selections_are_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

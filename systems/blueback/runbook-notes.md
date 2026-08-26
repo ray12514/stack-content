@@ -201,11 +201,11 @@ builder suffix; installed prefixes remain governed by Spack package permissions.
 
 ### Blueback shared generated-content recovery
 
-This is the Blueback entry point for the common runbook's
-**Shared generated-content permission recovery** procedure. Use it when the
-existing Blueback workspace predates the common generated-permission helper, a
-second builder receives `PermissionError`, or the accidental recursive
-`chmod 660` removed directory traversal below the misc cache.
+Use this complete Blueback procedure when the existing workspace predates the
+common generated-permission helper, a second builder receives
+`PermissionError`, or the accidental recursive `chmod 660` removed directory
+traversal below the misc cache. No other runbook section is required for this
+Blueback recovery.
 
 The permanent refreshed control is not limited to Blueback's misc cache. It
 enforces the common owner/`cse` group contract for the workspace and lockfiles,
@@ -214,13 +214,11 @@ and Spack-created install prefixes through the rendered package-permission
 policy. Only the emergency commands below are misc-specific because that is the
 tree that was manually changed.
 
-First stop every process using the Blueback workspace or misc cache and run the
-controls-only refresh above. That refresh is required for an already-rendered
-workspace; synchronizing Stack Content by itself does not replace the helper in
-that workspace.
-
-Before using the one-time manual repair in the common runbook, set and verify
-the Blueback-specific context:
+First stop every process using the Blueback workspace or misc cache. Then
+restore traversal and owner/`cse` parity on the exact misc-cache tree that was
+changed. The ownership filters are deliberate: a builder repairs that builder's
+entries; another owner or a filesystem administrator repairs entries owned by
+someone else.
 
 ```bash
 source "$CSE_OPERATOR_SESSION_FILE"
@@ -229,13 +227,57 @@ test "$SYSTEM_NAME" = "blueback"
 test "$CSE_GROUP" = "cse"
 export BROKEN_ROOT="$CSE_RESTRICTED_ROOT/cache/misc"
 test -d "$BROKEN_ROOT"
+
+# Restore traversal in preorder so find can descend into nested 0660 dirs.
+chmod 0770 "$BROKEN_ROOT"
+find "$BROKEN_ROOT" -xdev -user "$USER" -type d \
+  -exec chmod 0770 {} \;
+
+find "$BROKEN_ROOT" -xdev -user "$USER" -type d \
+  -exec chgrp "$CSE_GROUP" {} +
+find "$BROKEN_ROOT" -xdev -user "$USER" -type f \
+  -exec chgrp "$CSE_GROUP" {} +
+find "$BROKEN_ROOT" -xdev -user "$USER" -type d \
+  -exec chmod 2770 {} +
+find "$BROKEN_ROOT" -xdev -user "$USER" -type f -perm -0100 \
+  -exec chmod 0770 {} +
+find "$BROKEN_ROOT" -xdev -user "$USER" -type f ! -perm -0100 \
+  -exec chmod 0660 {} +
 ```
 
-Then follow `stack-planning/docs/runbook.md` from the `chmod 0770
-"$BROKEN_ROOT"` command through the final `./cse-build login status` check.
-Run the ownership-filtered repair as the builder who owns the affected entries.
-If another builder owns a reported entry, that builder or a filesystem
-administrator must repair it.
+Synchronize Stack Content and replace the generated controls in the existing
+Blueback workspace. Pulling the repository alone does not update that already
+rendered workspace:
+
+```bash
+git -C "$CONTENT" status --short --branch
+# Stop here if the checkout contains unreviewed work.
+git -C "$CONTENT" pull --ff-only origin codex/simplified-render-plan
+
+"$CSE_PYTHON" \
+  "$CONTENT/pilots/cse-pilot/scripts/create-build-values.py"
+
+"$CSE_PYTHON" \
+  "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
+  --composer "$STACK_COMPOSER" \
+  --blueprint "$CONTENT/pilots/cse-pilot" \
+  --values "$BUILD_VALUES" \
+  --workspace "$BUILD_WORKSPACE"
+
+grep -F 'misc_cache: ${SPACK_MISC_CACHE_PATH}' \
+  "$BUILD_WORKSPACE/configs/common/config.yaml"
+
+cd "$BUILD_WORKSPACE"
+./cse-build login status
+./cse-build login verify
+```
+
+The originating builder exits the prepared shell and reruns `./cse-build login
+status`. The second Blueback builder then sources that builder's own operator
+session, enters the same workspace, and runs the same status command. A clean
+status from both accounts is the handoff gate. Each account uses its own
+`cache/misc/$USER` partition while sharing the workspace, source cache, install
+tree, views, modules, and file-backed build cache.
 
 Do not point `BROKEN_ROOT` at the restricted trial root, release root, or Spack
 install tree, and do not recursively apply `660` to a directory tree. After the
