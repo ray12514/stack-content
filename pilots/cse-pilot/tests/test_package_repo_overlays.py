@@ -28,6 +28,26 @@ class PackageRepoOverlayTests(unittest.TestCase):
             'package-repos/spack_repo/cse_trials/packages/dakota"',
             notes,
         )
+
+    def test_raider_recovery_uses_rendered_hdf5_overlay_paths(self) -> None:
+        notes = RAIDER_NOTES.read_text(encoding="utf-8")
+
+        self.assertIn(
+            'RAIDER_HDF5_SOURCE="$CONTENT/pilots/cse-pilot/templates/'
+            'package-repos/spack_repo/cse_trials/packages/hdf5"',
+            notes,
+        )
+        self.assertIn(
+            'RAIDER_HDF5_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/'
+            'spack_repo/cse_trials/packages/hdf5"',
+            notes,
+        )
+        self.assertIn(
+            '"$PLATFORM_COMPILER_NAME/mpi-$PLATFORM_MPI_NAME"',
+            notes,
+        )
+        self.assertIn("concretize -f --reuse-deps -j 1", notes)
+        self.assertIn("--fail-fast hdf5@2.1.0", notes)
         self.assertIn(
             'RAIDER_DAKOTA_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/'
             'spack_repo/cse_trials/packages/dakota"',
@@ -51,6 +71,54 @@ class PackageRepoOverlayTests(unittest.TestCase):
             'patch("boost-system-header-only.patch", when="@6.23.0:6.24.0")',
             recipe,
         )
+
+    def test_hdf5_overlay_limits_module_fix_to_2_1_0_parallel_fortran_hl(self) -> None:
+        recipe = (PACKAGE_ROOT / "hdf5" / "package.py").read_text(encoding="utf-8")
+
+        ast.parse(recipe)
+        self.assertIn(
+            'patch("parallel-fortran-module-dir.patch", '
+            'when="@2.1.0+mpi+fortran+hl")',
+            recipe,
+        )
+
+    @unittest.skipUnless(shutil.which("patch"), "patch is not installed")
+    def test_hdf5_patch_adds_module_dir_to_both_high_level_targets(self) -> None:
+        cmake_source = """\
+if (BUILD_STATIC_LIBS)
+  add_library (${HDF5_HL_F90_LIB_TARGET} STATIC ${HDF5_HL_F90_F_SOURCES})
+  target_include_directories (${HDF5_HL_F90_LIB_TARGET}
+      PRIVATE "${HDF5_F90_BINARY_DIR};${CMAKE_Fortran_MODULE_DIRECTORY}/static;$<$<BOOL:${HDF5_ENABLE_PARALLEL}>:${MPI_Fortran_INCLUDE_DIRS}>"
+      INTERFACE "$<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${HDF5_INSTALL_MODULE_DIR}/static>"
+  )
+  target_compile_options(${HDF5_HL_F90_LIB_TARGET} PRIVATE "${HDF5_CMAKE_Fortran_FLAGS}")
+endif ()
+if (BUILD_SHARED_LIBS)
+  add_library (${HDF5_HL_F90_LIBSH_TARGET} SHARED ${DLLDEF} ${HDF5_HL_F90_F_SOURCES_SHARED})
+  target_include_directories (${HDF5_HL_F90_LIBSH_TARGET}
+      PRIVATE "${HDF5_F90_BINARY_DIR};${CMAKE_Fortran_MODULE_DIRECTORY}/shared;$<$<BOOL:${HDF5_ENABLE_PARALLEL}>:${MPI_Fortran_INCLUDE_DIRS}>"
+      INTERFACE "$<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${HDF5_INSTALL_MODULE_DIR}/shared>"
+  )
+  target_compile_options(${HDF5_HL_F90_LIBSH_TARGET} PRIVATE "${HDF5_CMAKE_Fortran_FLAGS}")
+endif ()
+"""
+        patch_path = PACKAGE_ROOT / "hdf5" / "parallel-fortran-module-dir.patch"
+
+        with tempfile.TemporaryDirectory() as temporary:
+            source_path = Path(temporary) / "hl" / "fortran" / "src" / "CMakeLists.txt"
+            source_path.parent.mkdir(parents=True)
+            source_path.write_text(cmake_source, encoding="utf-8")
+            result = subprocess.run(
+                ["patch", "-p1", "--input", str(patch_path)],
+                cwd=temporary,
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+            patched = source_path.read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(patched.count("${MPI_Fortran_MODULE_DIR}"), 2)
 
     @unittest.skipUnless(shutil.which("patch"), "patch is not installed")
     def test_dakota_patch_removes_all_removed_boost_system_references(self) -> None:

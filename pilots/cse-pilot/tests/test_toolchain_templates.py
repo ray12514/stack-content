@@ -160,6 +160,27 @@ def write_shared_surface_controls(workspace: Path) -> Path:
     return compiler_config
 
 
+def copy_trial_package_overlay(workspace: Path, package: str) -> Path:
+    source = (
+        TEMPLATE_ROOT
+        / "package-repos"
+        / "spack_repo"
+        / "cse_trials"
+        / "packages"
+        / package
+    )
+    destination = (
+        workspace
+        / "package-repos"
+        / "spack_repo"
+        / "cse_trials"
+        / "packages"
+        / package
+    )
+    shutil.copytree(source, destination)
+    return destination
+
+
 class ToolchainTemplateTests(unittest.TestCase):
     def test_generated_cache_permission_shell_is_syntax_valid(self) -> None:
         site_values = yaml.safe_load(SITE_VALUES_PATH.read_text(encoding="utf-8"))
@@ -922,7 +943,7 @@ class ToolchainTemplateTests(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("do not match the +binutils producer hash", errors[0])
 
-    def test_workspace_gate_rejects_an_incomplete_dakota_overlay(self) -> None:
+    def test_workspace_gate_rejects_incomplete_package_overlays(self) -> None:
         script = render_text(
             "scripts/verify-lockfiles.py.j2",
             values=values(),
@@ -949,26 +970,29 @@ class ToolchainTemplateTests(unittest.TestCase):
         incomplete_patch = current_patch.split(
             "diff --git a/src/surrogates/unit/CMakeLists.txt", 1
         )[0]
+        hdf5_source = (
+            TEMPLATE_ROOT
+            / "package-repos"
+            / "spack_repo"
+            / "cse_trials"
+            / "packages"
+            / "hdf5"
+        )
+        current_hdf5_patch = (
+            hdf5_source / "parallel-fortran-module-dir.patch"
+        ).read_text(encoding="utf-8")
+        incomplete_hdf5_patch = current_hdf5_patch.replace(
+            ";${MPI_Fortran_MODULE_DIR}", ""
+        )
 
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary) / "workspace"
             script_path = workspace / "scripts" / "verify-lockfiles.py"
-            overlay = (
-                workspace
-                / "package-repos"
-                / "spack_repo"
-                / "cse_trials"
-                / "packages"
-                / "dakota"
-            )
             script_path.parent.mkdir(parents=True)
-            overlay.mkdir(parents=True)
+            overlay = copy_trial_package_overlay(workspace, "dakota")
+            hdf5_overlay = copy_trial_package_overlay(workspace, "hdf5")
             write_shared_surface_controls(workspace)
             script_path.write_text(script, encoding="utf-8")
-            shutil.copyfile(dakota_source / "package.py", overlay / "package.py")
-            (overlay / "boost-system-header-only.patch").write_text(
-                current_patch, encoding="utf-8"
-            )
             producer = "gcc@12.5.0+binutils languages='c,c++,fortran'"
             downstream_constraint = "target=x86_64_v3 %cse_shared"
             for lane in ("core", "common", "serial", "mpi-openmpi"):
@@ -1002,11 +1026,25 @@ class ToolchainTemplateTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
             )
+            (overlay / "boost-system-header-only.patch").write_text(
+                current_patch, encoding="utf-8"
+            )
+            (hdf5_overlay / "parallel-fortran-module-dir.patch").write_text(
+                incomplete_hdf5_patch, encoding="utf-8"
+            )
+            stale_hdf5 = subprocess.run(
+                [sys.executable, str(script_path), "--workspace-only"],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
 
         self.assertEqual(current.returncode, 0, current.stderr)
         self.assertIn("Workspace input verification passed", current.stdout)
         self.assertNotEqual(stale.returncode, 0)
         self.assertIn("Dakota overlay is incomplete", stale.stderr)
+        self.assertNotEqual(stale_hdf5.returncode, 0)
+        self.assertIn("HDF5 overlay is incomplete", stale_hdf5.stderr)
 
     def test_workspace_gate_rejects_a_stale_gcc_producer_spec(self) -> None:
         script = render_text(
@@ -1021,35 +1059,14 @@ class ToolchainTemplateTests(unittest.TestCase):
                 }
             },
         )
-        dakota_source = (
-            TEMPLATE_ROOT
-            / "package-repos"
-            / "spack_repo"
-            / "cse_trials"
-            / "packages"
-            / "dakota"
-        )
-
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary) / "workspace"
             script_path = workspace / "scripts" / "verify-lockfiles.py"
-            overlay = (
-                workspace
-                / "package-repos"
-                / "spack_repo"
-                / "cse_trials"
-                / "packages"
-                / "dakota"
-            )
             script_path.parent.mkdir(parents=True)
-            overlay.mkdir(parents=True)
+            copy_trial_package_overlay(workspace, "dakota")
+            copy_trial_package_overlay(workspace, "hdf5")
             write_shared_surface_controls(workspace)
             script_path.write_text(script, encoding="utf-8")
-            shutil.copyfile(dakota_source / "package.py", overlay / "package.py")
-            shutil.copyfile(
-                dakota_source / "boost-system-header-only.patch",
-                overlay / "boost-system-header-only.patch",
-            )
 
             producer = "gcc@12.5.0+binutils languages='c,c++,fortran'"
             downstream_constraint = "target=x86_64_v3 %cse_shared"
@@ -1106,35 +1123,14 @@ class ToolchainTemplateTests(unittest.TestCase):
                 }
             },
         )
-        dakota_source = (
-            TEMPLATE_ROOT
-            / "package-repos"
-            / "spack_repo"
-            / "cse_trials"
-            / "packages"
-            / "dakota"
-        )
-
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary) / "workspace"
             script_path = workspace / "scripts" / "verify-lockfiles.py"
-            overlay = (
-                workspace
-                / "package-repos"
-                / "spack_repo"
-                / "cse_trials"
-                / "packages"
-                / "dakota"
-            )
             script_path.parent.mkdir(parents=True)
-            overlay.mkdir(parents=True)
+            copy_trial_package_overlay(workspace, "dakota")
+            copy_trial_package_overlay(workspace, "hdf5")
             shared_config = write_shared_surface_controls(workspace)
             script_path.write_text(script, encoding="utf-8")
-            shutil.copyfile(dakota_source / "package.py", overlay / "package.py")
-            shutil.copyfile(
-                dakota_source / "boost-system-header-only.patch",
-                overlay / "boost-system-header-only.patch",
-            )
 
             producer = "gcc@12.5.0+binutils languages='c,c++,fortran'"
             downstream_constraint = "target=x86_64_v3 %cse_shared"

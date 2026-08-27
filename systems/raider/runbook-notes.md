@@ -659,14 +659,17 @@ jobserver-token warning visible earlier in the output are not this failure.
 HDF5 1.10.6 continuing in another build process also does not clear the failed
 HDF5 2.1.0 concrete spec.
 
-The leading diagnosis is the upstream HDF5 2.x CMake defect recorded in
-[HDFGroup/hdf5#6581](https://github.com/HDFGroup/hdf5/issues/6581): parallel
-high-level Fortran targets can receive `MPI_Fortran_INCLUDE_DIRS` while omitting
-the separate `MPI_Fortran_MODULE_DIR`. AOCC exposes that omission when the
-OpenMPI `mpi_f08` module files are not all reachable through the ordinary MPI
-include directory. Two alternatives must still be excluded before adding a
-CSE overlay: the AOCC lane may have selected the GCC-built OpenMPI prefix, or
-the AOCC-built OpenMPI may not provide a usable `mpi_f08` binding.
+The Raider probe confirmed the upstream HDF5 CMake defect recorded in
+[HDFGroup/hdf5#6581](https://github.com/HDFGroup/hdf5/issues/6581). The selected
+OpenMPI 4.1.8 prefix belongs to the AOCC lane, `mpifort --showme:command`
+selects AOCC Flang 4.1.0, and a direct `use mpi_f08` compile succeeds. CMake
+records the separate OpenMPI module directory in `MPI_Fortran_MODULE_DIR`, but
+the failed `H5DOFF.F90` compile command omits it. This excludes both a
+GCC/AOCC provider mismatch and a broken AOCC OpenMPI Fortran binding.
+
+HDF5 1.10.6 does not compile the failing `H5DOFF.F90` source and is not part of
+this recovery. The CSE overlay is limited to the exact HDF5 2.1.0 parallel,
+Fortran, high-level variant combination.
 
 Do not reconcretize, uninstall OpenMPI, edit the failed stage, or disable HDF5
 Fortran. Enter the existing platform environment through the generated
@@ -763,15 +766,69 @@ Interpret and preserve the result before taking another build action:
   ```
 
 A passing direct probe plus a missing module directory on the HDF5 compile
-line confirms the HDF5 CMake failure pattern. The recovery is then a narrow,
-reviewed HDF5 2.1.0 overlay patch that supplies the discovered
-`MPI_Fortran_MODULE_DIR` to the high-level Fortran targets. Land and test that
-overlay in Stack Content before copying it into the generated workspace. Force
-only the affected HDF5 2.1.0 root to a new hash with `--reuse-deps`; the AOCC
-OpenMPI hash and unrelated dependency hashes must remain unchanged. Until that
-overlay exists, retain the failed stage and log as evidence and hold this one
-AOCC MPI root rather than editing a lockfile or broadly reconcretizing the
-environment.
+line confirms the HDF5 CMake failure pattern. Preserve that result with the
+failed build log as the pre-fix evidence.
+
+### Recover the already-rendered Raider AOCC workspace
+
+The tracked CSE overlay adds CMake's discovered `MPI_Fortran_MODULE_DIR` to
+both HDF5 2.1.0 high-level Fortran library targets. It does not change
+OpenMPI, disable Fortran, or patch HDF5 1.10.6. Pull Stack Content, copy only
+the HDF5 overlay into the generated package repository, and retain group
+access:
+
+```bash
+git -C "$CONTENT" pull --ff-only
+
+RAIDER_HDF5_SOURCE="$CONTENT/pilots/cse-pilot/templates/package-repos/spack_repo/cse_trials/packages/hdf5"
+RAIDER_HDF5_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/spack_repo/cse_trials/packages/hdf5"
+
+install -d -m 2770 -g "$CSE_GROUP" "$RAIDER_HDF5_DESTINATION"
+install -m 0660 -g "$CSE_GROUP" \
+  "$RAIDER_HDF5_SOURCE/package.py" \
+  "$RAIDER_HDF5_SOURCE/parallel-fortran-module-dir.patch" \
+  "$RAIDER_HDF5_DESTINATION/"
+
+cmp "$RAIDER_HDF5_SOURCE/package.py" \
+  "$RAIDER_HDF5_DESTINATION/package.py"
+cmp "$RAIDER_HDF5_SOURCE/parallel-fortran-module-dir.patch" \
+  "$RAIDER_HDF5_DESTINATION/parallel-fortran-module-dir.patch"
+```
+
+Both `cmp` commands must exit zero. Work only in the existing AOCC MPI
+environment. Record the OpenMPI and HDF5 hashes before forcing replacement of
+the patched root:
+
+```bash
+export RAIDER_AOCC_MPI_ENV="$CSE_BUILD_WORKSPACE/environments/$PLATFORM_COMPILER_NAME/mpi-$PLATFORM_MPI_NAME"
+test -f "$RAIDER_AOCC_MPI_ENV/spack.lock"
+
+spack -e "$RAIDER_AOCC_MPI_ENV" repo list
+spack -e "$RAIDER_AOCC_MPI_ENV" find -cl openmpi@4.1.8 hdf5@2.1.0
+
+spack -e "$RAIDER_AOCC_MPI_ENV" concretize -f --reuse-deps -j 1
+
+spack -e "$RAIDER_AOCC_MPI_ENV" find -cl openmpi@4.1.8 hdf5@2.1.0
+
+cd "$CSE_BUILD_WORKSPACE"
+./cse-build compute verify
+
+spack -e "$RAIDER_AOCC_MPI_ENV" install --only-concrete \
+  -j "$BUILD_JOBS" --fail-fast hdf5@2.1.0
+```
+
+`spack repo list` must place the generated workspace `cse_trials` repository
+ahead of `builtin`. The HDF5 2.1.0 hash must change, while the AOCC OpenMPI
+4.1.8 hash must remain unchanged. Downstream roots that depend on HDF5 2.1.0
+may also receive new hashes; `--reuse-deps` preserves unrelated installed
+dependencies. If the HDF5 hash does not change, stop before rebuilding and
+correct the repository order or workspace overlay.
+
+The green build must compile both `hdf5_hl_fortran-static` and
+`hdf5_hl_fortran-shared` without an `Unable to open MODULE file` diagnostic.
+After that focused install succeeds, resume the normal AOCC MPI environment
+install through `cse-build`. Do not edit the retained Spack stage, add ambient
+include paths, rebuild OpenMPI, or broadly remove existing lockfiles.
 
 ## Restricted build and cache gates
 

@@ -235,6 +235,13 @@ The selected package-build CMake is 3.31.12. CMake 4.4.2 is the second public
 version. The workspace overlay recipe adds those two versions to the pinned
 `spack-packages` generation.
 
+The same workspace package repository carries reviewed trial source fixes.
+Its HDF5 overlay applies `parallel-fortran-module-dir.patch` only to
+`hdf5@2.1.0+mpi+fortran+hl`, adding CMake's separately discovered MPI Fortran
+module directory to the static and shared high-level Fortran targets. The
+workspace verifier rejects a missing, stale, or broadened overlay before
+concretization or installation.
+
 After all eight environments concretize, run:
 
 ```sh

@@ -17,6 +17,14 @@ DAKOTA_OVERLAY = (
     / "packages"
     / "dakota"
 )
+HDF5_OVERLAY = (
+    WORKSPACE
+    / "package-repos"
+    / "spack_repo"
+    / "cse_trials"
+    / "packages"
+    / "hdf5"
+)
 BUILD_CMAKE = {{ data.roster.cmake.build_default | tojson }}
 PUBLIC_CMAKE = {{ data.roster.cmake.current | tojson }}
 EXPECTED_PYTHON_VERSIONS = {"3.8.20", "3.10.20", "3.12.13"}
@@ -127,6 +135,46 @@ def workspace_input_errors() -> List[str]:
             "Dakota overlay is incomplete; refresh the workspace package repository "
             "before concretizing or building. Missing patch fragments: "
             + ", ".join(repr(fragment) for fragment in missing_fragments)
+        )
+
+    hdf5_recipe_path = HDF5_OVERLAY / "package.py"
+    hdf5_patch_path = HDF5_OVERLAY / "parallel-fortran-module-dir.patch"
+    try:
+        hdf5_recipe = hdf5_recipe_path.read_text(encoding="utf-8")
+    except OSError as error:
+        errors.append(f"HDF5 overlay recipe is unavailable: {error}")
+        hdf5_recipe = ""
+    try:
+        hdf5_patch = hdf5_patch_path.read_text(encoding="utf-8")
+    except OSError as error:
+        errors.append(f"HDF5 overlay patch is unavailable: {error}")
+        hdf5_patch = ""
+
+    hdf5_declaration = (
+        'patch("parallel-fortran-module-dir.patch", '
+        'when="@2.1.0+mpi+fortran+hl")'
+    )
+    if hdf5_recipe and hdf5_declaration not in hdf5_recipe:
+        errors.append(
+            "HDF5 overlay recipe does not limit the MPI Fortran module-directory "
+            "patch to HDF5 2.1.0 +mpi+fortran+hl"
+        )
+
+    required_hdf5_patch_fragments = (
+        "diff --git a/hl/fortran/src/CMakeLists.txt",
+        "/static;${MPI_Fortran_MODULE_DIR};$<$<BOOL:${HDF5_ENABLE_PARALLEL}>",
+        "/shared;${MPI_Fortran_MODULE_DIR};$<$<BOOL:${HDF5_ENABLE_PARALLEL}>",
+    )
+    missing_hdf5_fragments = [
+        fragment
+        for fragment in required_hdf5_patch_fragments
+        if fragment not in hdf5_patch
+    ]
+    if hdf5_patch and missing_hdf5_fragments:
+        errors.append(
+            "HDF5 overlay is incomplete; refresh the workspace package repository "
+            "before concretizing or building. Missing patch fragments: "
+            + ", ".join(repr(fragment) for fragment in missing_hdf5_fragments)
         )
 
     for environment in sorted(GCC_ENVIRONMENTS):
@@ -365,7 +413,7 @@ def main(workspace_only: bool = False) -> int:
                 print(f"ERROR: {error}", file=sys.stderr)
             return 1
         print(
-            "Workspace input verification passed: current CSE Dakota overlay and "
+            "Workspace input verification passed: current CSE package overlays and "
             "GCC producer/needs/toolchain inputs."
         )
         return 0
