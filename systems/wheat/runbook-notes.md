@@ -169,18 +169,17 @@ Wheat's catalog uses a different exact key.
 - Confirm no site MPI is selected merely because it is loaded by default.
 
 For the LLVM-based oneAPI 2024.2.1 surface, the reviewed profile and generated
-catalog deliberately use two related prefixes. The profile retains the
-verified driver component:
+catalog deliberately use two related prefixes. Name the reviewed suite root
+once and derive the verified driver component from it:
 
-```text
-/p/app/intel/2024.2.1/compiler/2024.2
+```bash
+export WHEAT_ONEAPI_SUITE_ROOT="<profile-selected oneAPI suite root>"
+export WHEAT_ONEAPI_DRIVER_ROOT="$WHEAT_ONEAPI_SUITE_ROOT/compiler/2024.2"
 ```
 
-The generated `intel-oneapi-compilers` external must use the suite root:
-
-```text
-/p/app/intel/2024.2.1
-```
+The profile retains `$WHEAT_ONEAPI_DRIVER_ROOT` as the verified compiler
+component. The generated `intel-oneapi-compilers` external must use
+`$WHEAT_ONEAPI_SUITE_ROOT`.
 
 Its `extra_attributes.compilers` entries must point to `icx`, `icpx`, and
 `ifx` below the verified component directory exactly once. Reject the catalog

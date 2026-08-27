@@ -20,7 +20,7 @@ Platform-specific facts should come from the generated profile and the
 stack/default policy. The runbook should not require a Blueback-style directory
 layout or any preexisting project checkouts on the target system.
 
-## Stage 0 — Create the stack test area
+## Stage 0 - Create the stack test area
 
 Start from a fresh shell on the target system. The only assumption is that you
 can create a working directory, clone the project repos, and source a supported
@@ -134,7 +134,7 @@ export STACK_COMPOSER="$COMPOSER/dist/stack-composer.pyz"
 Source the Spack setup for the target test and verify the pinned version:
 
 ```bash
-source /path/to/use-spack.sh
+source "<path-to-reviewed-Spack-setup>/use-spack.sh"
 : "${SPACK_ROOT:?SPACK_ROOT is not set; source use-spack.sh first}"
 spack --version
 ```
@@ -143,7 +143,7 @@ Use the approved Spack 1.2.2 tag and commit for the current control run. Treat
 any different Spack release as an explicit adoption test until its smoke matrix
 passes.
 
-## Stage 1 — Profile fragments
+## Stage 1 - Profile fragments
 
 Ensure the system directory exists:
 
@@ -233,7 +233,7 @@ If a profile fact is wrong, fix Cluster Inspector or the reviewed system hint
 and regenerate the fragment and profile. Do not hand-edit `profile.yaml` or
 render from a diagnostic copy.
 
-## Stage 2 — Deployment input
+## Stage 2 - Deployment input
 
 Create `deployment.yaml` from the selected test roots. These are installer-owned
 paths, not discovered facts.
@@ -294,7 +294,7 @@ For the first smoke, use the existing `stacks/mpi-smoke/stack.yaml` if MPI is
 available. If no external MPI should be used, use or create a serial-only smoke
 stack and record that decision.
 
-## Stage 3 — Validate and render
+## Stage 3 - Validate and render
 
 ```bash
 export PROFILE="$SYSTEM_DIR/profile.yaml"
@@ -348,7 +348,7 @@ are selected:
 grep -R "vendor/cray\\|cray-mpich\\|cray-gtl\\|cray-libsci" "$WORKSPACE" -n && false || true
 ```
 
-## Stage 4 — Build
+## Stage 4 - Build
 
 Build one cheap lane first, then all lanes:
 

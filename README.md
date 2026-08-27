@@ -1,7 +1,6 @@
 # stack-content
 
-The human-authored **source of truth** that `stack-composer render` consumes —
-the "stack directory" / definition center for the stack-generation project. It is
+The human-authored **source of truth** that `stack-composer render` consumes - the "stack directory" / definition center for the stack-generation project. It is
 **data, not a tool**: the fourth repo alongside `cluster-inspector`,
 `stack-composer`, and `stack-planning`.
 
@@ -38,13 +37,14 @@ access choices for that system. Stack Composer maps `access` to Spack package
 permissions; the build/publish path applies the same policy to non-package
 artifacts.
 
-## Two trees — what's authored vs what's generated
+## Two trees - what's authored vs what's generated
 
 - **Authored (here):** `templates/<set>/` is the placeholder tree. It barely
   changes between systems; the `.j2` files carry `{{ placeholders }}` (OS,
   target, compiler prefixes, …).
 - **Generated (by stack-composer, not committed here):** the rendered workspace
-  — concrete `configs/` + `environments/<compiler>/<lane>/spack.yaml` that
+  contains concrete `configs/` and
+  `environments/<compiler>/<lane>/spack.yaml` files that
   `include::`s them + `release-manifest.yaml`. That tree is the **handoff** to a
   build path (spacktools / spack-build / Ansible / bare Spack). See
   stack-planning `docs/stack_build_handoff_note_v1.md`.

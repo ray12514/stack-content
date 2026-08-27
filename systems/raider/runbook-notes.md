@@ -146,9 +146,11 @@ workspace manifest rather than guessing them:
 ```bash
 export WORK_ROOT="$HOME/STACK_TESTING"
 export CONTENT="$WORK_ROOT/stack-content"
-export RAIDER_TRIAL_ROOT="/p/app/CSE/initial-conversion-trials"
+export RAIDER_CSE_ROOT="<reviewed Raider CSE application root>"
+export RAIDER_TRIAL_ROOT="$RAIDER_CSE_ROOT/initial-conversion-trials"
 export RAIDER_WORKSPACE_PARENT="$RAIDER_TRIAL_ROOT/restricted/workspaces/raider/initial-conversion-trials"
 
+test -d "$RAIDER_CSE_ROOT"
 find "$RAIDER_WORKSPACE_PARENT" \
   -mindepth 2 -maxdepth 2 \
   -name workspace-manifest.yaml -print
@@ -178,7 +180,7 @@ an existing session must be reviewed instead of silently replaced:
 
 ```bash
 export STACK_BRANCH="codex/simplified-render-plan"
-export RAIDER_TOOLS_ROOT="/p/app/CSE/tools"
+export RAIDER_TOOLS_ROOT="$RAIDER_CSE_ROOT/tools"
 export RAIDER_BOOTSTRAP_PYTHON="$WORK_ROOT/stack-composer/.venv/bin/python"
 export CSE_GROUP="cse"
 
@@ -230,12 +232,13 @@ that used the parent CSE directory must not be resumed. The old and correct
 roots are:
 
 ```bash
-export RAIDER_OLD_RESTRICTED_ROOT="/p/app/CSE/restricted"
-export RAIDER_TRIAL_ROOT="/p/app/CSE/initial-conversion-trials"
+: "${RAIDER_CSE_ROOT:?Set the reviewed Raider CSE application root}"
+export RAIDER_OLD_RESTRICTED_ROOT="$RAIDER_CSE_ROOT/restricted"
+export RAIDER_TRIAL_ROOT="$RAIDER_CSE_ROOT/initial-conversion-trials"
 export RAIDER_CORRECT_RESTRICTED_ROOT="$RAIDER_TRIAL_ROOT/restricted"
 
 test "$RAIDER_OLD_RESTRICTED_ROOT" != "$RAIDER_CORRECT_RESTRICTED_ROOT"
-test "${RAIDER_TRIAL_ROOT%/initial-conversion-trials}" = "/p/app/CSE"
+test "${RAIDER_TRIAL_ROOT%/initial-conversion-trials}" = "$RAIDER_CSE_ROOT"
 ```
 
 The current Raider incident has one populated tree and one empty destination:
@@ -442,10 +445,11 @@ continuing.
 9. Keep the old tree until every required new lane is installed, exercised,
    and recorded. Then obtain the release owner's approval to remove only the
    confirmed Raider-owned old catalog, workspace, release, build-cache, and
-   evidence paths. Do not delete or move `/p/app/CSE/restricted` as a unit, and
-   do not remove the shared source cache merely because Raider used it. Do not
-   remove another builder's CSE-group-accessible misc-cache partition. The
-   corrected workspace and caches must not retain an upstream, mirror, include,
+   evidence paths. Do not delete or move `$RAIDER_OLD_RESTRICTED_ROOT` as a
+   unit, and do not remove the shared source cache merely because Raider used
+   it. Do not remove another builder's CSE-group-accessible misc-cache
+   partition. The corrected workspace and caches must not retain an upstream,
+   mirror, include,
    or install-tree reference to the wrong root.
 
 ## Readline 8.3 patch fetch recovery (2026-08-20)
@@ -659,6 +663,10 @@ dependencies. Do not delete the workspace or reconcretize unrelated roots.
 
 ## AOCC HDF5 2.1.0 parallel-Fortran failure (2026-08-27)
 
+**Status:** Resolved and validated on Raider. The patched HDF5 2.1.0 targets
+passed, and the normal AOCC MPI environment build resumed. Keep this section as
+the reproducible diagnosis, recovery, and regression procedure.
+
 The Raider AOCC MPI environment reached the HDF5 2.1.0 high-level Fortran
 sources and failed at `hl/fortran/src/H5DOFF.F90:39` with this fatal AOCC
 Flang diagnostic:
@@ -798,7 +806,7 @@ cd "$BUILD_WORKSPACE"
 Run the remaining recovery commands inside that prepared shell. These guards
 must succeed before any destination path is constructed. If
 `CSE_BUILD_WORKSPACE` is empty, stop: otherwise the destination would collapse
-to `/package-repos/...`, which is outside the CSE workspace.
+to a root-level package-repository path outside the CSE workspace.
 
 ```bash
 : "${CSE_BUILD_WORKSPACE:?Run this block inside ./cse-build login shell}"
