@@ -644,6 +644,135 @@ Correct the repository order or workspace overlay first.
 This recovery preserves the workspace, OpenMPI, Boost, and all other installed
 dependencies. Do not delete the workspace or reconcretize unrelated roots.
 
+## AOCC HDF5 2.1.0 parallel-Fortran failure (2026-08-27)
+
+The Raider AOCC MPI environment reached the HDF5 2.1.0 high-level Fortran
+sources and failed at `hl/fortran/src/H5DOFF.F90:39` with this fatal AOCC
+Flang diagnostic:
+
+```text
+F90-F-0004-Unable to open MODULE file mpi_f08_types.mod
+```
+
+The C/C++ conversion warnings, unused CMake-variable warning, and GNU Make
+jobserver-token warning visible earlier in the output are not this failure.
+HDF5 1.10.6 continuing in another build process also does not clear the failed
+HDF5 2.1.0 concrete spec.
+
+The leading diagnosis is the upstream HDF5 2.x CMake defect recorded in
+[HDFGroup/hdf5#6581](https://github.com/HDFGroup/hdf5/issues/6581): parallel
+high-level Fortran targets can receive `MPI_Fortran_INCLUDE_DIRS` while omitting
+the separate `MPI_Fortran_MODULE_DIR`. AOCC exposes that omission when the
+OpenMPI `mpi_f08` module files are not all reachable through the ordinary MPI
+include directory. Two alternatives must still be excluded before adding a
+CSE overlay: the AOCC lane may have selected the GCC-built OpenMPI prefix, or
+the AOCC-built OpenMPI may not provide a usable `mpi_f08` binding.
+
+Do not reconcretize, uninstall OpenMPI, edit the failed stage, or disable HDF5
+Fortran. Enter the existing platform environment through the generated
+launcher:
+
+```bash
+cd "$BUILD_WORKSPACE"
+./cse-build login shell
+```
+
+In that prepared shell, identify the exact concrete pair and the installed
+OpenMPI Fortran wrapper. The OpenMPI row must name the AOCC compiler, not GCC:
+
+```bash
+export RAIDER_AOCC_MPI_ENV="$CSE_BUILD_WORKSPACE/environments/$PLATFORM_COMPILER_NAME/mpi-$PLATFORM_MPI_NAME"
+test -f "$RAIDER_AOCC_MPI_ENV/spack.lock"
+
+spack -e "$RAIDER_AOCC_MPI_ENV" find -cl openmpi@4.1.8
+spack -e "$RAIDER_AOCC_MPI_ENV" find -cl hdf5@2.1.0
+
+export RAIDER_AOCC_MPI_PREFIX="$(
+  spack -e "$RAIDER_AOCC_MPI_ENV" location -i openmpi@4.1.8
+)"
+test -x "$RAIDER_AOCC_MPI_PREFIX/bin/mpifort"
+
+"$RAIDER_AOCC_MPI_PREFIX/bin/mpifort" --showme:command
+"$RAIDER_AOCC_MPI_PREFIX/bin/mpifort" --showme:incdirs
+
+find "$RAIDER_AOCC_MPI_PREFIX" -type f \
+  \( -iname 'mpi_f08.mod' -o -iname 'mpi_f08_types.mod' \) -print
+```
+
+Use this small compile as the red/green discriminator. It exercises the same
+OpenMPI Fortran-2008 module without involving HDF5:
+
+```bash
+export RAIDER_F08_PROBE_DIR="$(
+  mktemp -d "$CSE_BUILD_STAGE/cse-raider-f08.XXXXXX"
+)"
+
+printf '%s\n' \
+  'program cse_mpi_f08_probe' \
+  '  use mpi_f08' \
+  '  implicit none' \
+  'end program cse_mpi_f08_probe' \
+  > "$RAIDER_F08_PROBE_DIR/probe.f90"
+
+"$RAIDER_AOCC_MPI_PREFIX/bin/mpifort" \
+  -c "$RAIDER_F08_PROBE_DIR/probe.f90" \
+  -o "$RAIDER_F08_PROBE_DIR/probe.o"
+```
+
+Interpret and preserve the result before taking another build action:
+
+- If the direct probe fails, this is not yet an HDF5-only failure. Record the
+  `spack find`, wrapper, and module-file output. Correct a GCC/AOCC provider
+  mismatch or diagnose the AOCC OpenMPI `mpi_f08` build before retrying HDF5.
+- If the direct probe succeeds, the AOCC OpenMPI binding is usable. Inspect the
+  failed HDF5 stage and prove whether its `H5DOFF.F90` compile command omitted
+  the directory containing `mpi_f08_types.mod`:
+
+  ```bash
+  export RAIDER_HDF5_STAGE="$(
+    find "$CSE_BUILD_STAGE" -maxdepth 1 -type d \
+      -name 'spack-stage-hdf5-2.1.0-*' \
+      -exec ls -td {} + 2>/dev/null \
+      | head -1
+  )"
+  test -n "$RAIDER_HDF5_STAGE"
+  test -f "$RAIDER_HDF5_STAGE/spack-build-out.txt"
+
+  export RAIDER_MPI_F08_TYPES="$(
+    find "$RAIDER_AOCC_MPI_PREFIX" -type f \
+      -iname 'mpi_f08_types.mod' -print -quit
+  )"
+  test -n "$RAIDER_MPI_F08_TYPES"
+  export RAIDER_MPI_F08_MODULE_DIR="$(dirname "$RAIDER_MPI_F08_TYPES")"
+
+  find "$RAIDER_HDF5_STAGE" -name CMakeCache.txt -type f \
+    -exec grep -HE \
+      'MPI_Fortran_(MODULE_DIR|INCLUDE_DIRS)' {} + || true
+
+  grep -F 'H5DOFF.F90' \
+    "$RAIDER_HDF5_STAGE/spack-build-out.txt" | tail -5
+
+  if grep -F 'H5DOFF.F90' \
+      "$RAIDER_HDF5_STAGE/spack-build-out.txt" \
+      | grep -F "$RAIDER_MPI_F08_MODULE_DIR"; then
+    printf 'H5DOFF compile line contains the MPI Fortran module directory.\n'
+  else
+    printf 'H5DOFF compile line omits %s.\n' \
+      "$RAIDER_MPI_F08_MODULE_DIR"
+  fi
+  ```
+
+A passing direct probe plus a missing module directory on the HDF5 compile
+line confirms the HDF5 CMake failure pattern. The recovery is then a narrow,
+reviewed HDF5 2.1.0 overlay patch that supplies the discovered
+`MPI_Fortran_MODULE_DIR` to the high-level Fortran targets. Land and test that
+overlay in Stack Content before copying it into the generated workspace. Force
+only the affected HDF5 2.1.0 root to a new hash with `--reuse-deps`; the AOCC
+OpenMPI hash and unrelated dependency hashes must remain unchanged. Until that
+overlay exists, retain the failed stage and log as evidence and hold this one
+AOCC MPI root rather than editing a lockfile or broadly reconcretizing the
+environment.
+
 ## Restricted build and cache gates
 
 - Both compiler surfaces and both CSE-built OpenMPI toolchains must be explicit
