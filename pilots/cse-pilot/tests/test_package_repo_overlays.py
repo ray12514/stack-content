@@ -22,46 +22,76 @@ RAIDER_NOTES = Path(__file__).resolve().parents[3] / "systems" / "raider" / "run
 class PackageRepoOverlayTests(unittest.TestCase):
     def test_raider_recovery_uses_rendered_dakota_overlay_paths(self) -> None:
         notes = RAIDER_NOTES.read_text(encoding="utf-8")
+        recovery = notes.split(
+            "### Recover an already-rendered Raider workspace", 1
+        )[1].split("## AOCC HDF5 2.1.0 parallel-Fortran failure", 1)[0]
+        shell_entry = 'cd "$BUILD_WORKSPACE"\n./cse-build login shell'
+        workspace_guard = (
+            ': "${CSE_BUILD_WORKSPACE:?Run this block inside '
+            './cse-build login shell}"'
+        )
+        destination = (
+            'RAIDER_DAKOTA_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/'
+            'spack_repo/cse_trials/packages/dakota"'
+        )
+
+        self.assertIn(shell_entry, recovery)
+        self.assertIn(workspace_guard, recovery)
+        self.assertLess(
+            recovery.index(workspace_guard), recovery.index(destination)
+        )
 
         self.assertIn(
             'RAIDER_DAKOTA_SOURCE="$CONTENT/pilots/cse-pilot/templates/'
             'package-repos/spack_repo/cse_trials/packages/dakota"',
-            notes,
+            recovery,
+        )
+        self.assertIn(destination, recovery)
+        self.assertIn("-name 'spack-stage-dakota-6.2[34].0-*'", notes)
+        self.assertIn(
+            '"$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"',
+            recovery,
+        )
+        self.assertIn(
+            '"$PLATFORM_COMPILER_NAME/mpi-$PLATFORM_MPI_NAME"',
+            recovery,
         )
 
     def test_raider_recovery_uses_rendered_hdf5_overlay_paths(self) -> None:
         notes = RAIDER_NOTES.read_text(encoding="utf-8")
+        recovery = notes.split(
+            "### Recover the already-rendered Raider AOCC workspace", 1
+        )[1]
+
+        shell_entry = 'cd "$BUILD_WORKSPACE"\n./cse-build login shell'
+        workspace_guard = (
+            ': "${CSE_BUILD_WORKSPACE:?Run this block inside '
+            './cse-build login shell}"'
+        )
+        destination = (
+            'RAIDER_HDF5_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/'
+            'spack_repo/cse_trials/packages/hdf5"'
+        )
+
+        self.assertIn(shell_entry, recovery)
+        self.assertIn(workspace_guard, recovery)
+        self.assertLess(
+            recovery.index(workspace_guard), recovery.index(destination)
+        )
 
         self.assertIn(
             'RAIDER_HDF5_SOURCE="$CONTENT/pilots/cse-pilot/templates/'
             'package-repos/spack_repo/cse_trials/packages/hdf5"',
-            notes,
+            recovery,
         )
+        self.assertIn(destination, recovery)
         self.assertIn(
-            'RAIDER_HDF5_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/'
-            'spack_repo/cse_trials/packages/hdf5"',
-            notes,
+            'RAIDER_AOCC_MPI_ENV="$CSE_BUILD_WORKSPACE/environments/'
+            '$PLATFORM_COMPILER_NAME/mpi-$PLATFORM_MPI_NAME"',
+            recovery,
         )
-        self.assertIn(
-            '"$PLATFORM_COMPILER_NAME/mpi-$PLATFORM_MPI_NAME"',
-            notes,
-        )
-        self.assertIn("concretize -f --reuse-deps -j 1", notes)
-        self.assertIn("--fail-fast hdf5@2.1.0", notes)
-        self.assertIn(
-            'RAIDER_DAKOTA_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/'
-            'spack_repo/cse_trials/packages/dakota"',
-            notes,
-        )
-        self.assertIn("-name 'spack-stage-dakota-6.2[34].0-*'", notes)
-        self.assertIn(
-            '"$SHARED_COMPILER_NAME/mpi-$SHARED_MPI_NAME"',
-            notes,
-        )
-        self.assertIn(
-            '"$PLATFORM_COMPILER_NAME/mpi-$PLATFORM_MPI_NAME"',
-            notes,
-        )
+        self.assertIn("concretize -f --reuse-deps -j 1", recovery)
+        self.assertIn("--fail-fast hdf5@2.1.0", recovery)
 
     def test_dakota_overlay_limits_boost_system_fix_to_trial_versions(self) -> None:
         recipe = (PACKAGE_ROOT / "dakota" / "package.py").read_text(encoding="utf-8")

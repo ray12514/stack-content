@@ -591,6 +591,19 @@ Update the generated workspace overlay, prove that it is byte-for-byte current,
 force only the affected Dakota roots to receive new hashes, and retry Dakota:
 
 ```bash
+cd "$BUILD_WORKSPACE"
+./cse-build login shell
+```
+
+Run the remaining recovery commands inside that prepared shell. These guards
+must succeed before any destination path is constructed:
+
+```bash
+: "${CSE_BUILD_WORKSPACE:?Run this block inside ./cse-build login shell}"
+: "${CSE_GROUP:?CSE group is unavailable in this shell}"
+test "$CSE_BUILD_WORKSPACE" = "$BUILD_WORKSPACE"
+test -x "$CSE_BUILD_WORKSPACE/cse-build"
+
 git -C "$CONTENT" pull --ff-only
 
 RAIDER_DAKOTA_SOURCE="$CONTENT/pilots/cse-pilot/templates/package-repos/spack_repo/cse_trials/packages/dakota"
@@ -778,6 +791,23 @@ the HDF5 overlay into the generated package repository, and retain group
 access:
 
 ```bash
+cd "$BUILD_WORKSPACE"
+./cse-build login shell
+```
+
+Run the remaining recovery commands inside that prepared shell. These guards
+must succeed before any destination path is constructed. If
+`CSE_BUILD_WORKSPACE` is empty, stop: otherwise the destination would collapse
+to `/package-repos/...`, which is outside the CSE workspace.
+
+```bash
+: "${CSE_BUILD_WORKSPACE:?Run this block inside ./cse-build login shell}"
+: "${CSE_GROUP:?CSE group is unavailable in this shell}"
+: "${PLATFORM_COMPILER_NAME:?Platform compiler is unavailable in this shell}"
+: "${PLATFORM_MPI_NAME:?Platform MPI is unavailable in this shell}"
+test "$CSE_BUILD_WORKSPACE" = "$BUILD_WORKSPACE"
+test -x "$CSE_BUILD_WORKSPACE/cse-build"
+
 git -C "$CONTENT" pull --ff-only
 
 RAIDER_HDF5_SOURCE="$CONTENT/pilots/cse-pilot/templates/package-repos/spack_repo/cse_trials/packages/hdf5"
