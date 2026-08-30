@@ -237,6 +237,26 @@ spack -e <environment> env view regenerate
 spack -e <environment> module tcl refresh --delete-tree -y
 ```
 
+Those Spack commands own package modules only. After every required package
+module and view exists, publish the separate CSE presentation files with:
+
+```bash
+./cse-build login publish-modules
+```
+
+The command writes only the generated compiler front doors and short lane
+selectors into the module root recorded by the current values. With restricted
+trial values, it is a CSE team-review checkpoint rather than public promotion.
+It does not publish the static catalog, create a publication workspace, or
+change filesystem audience. It preserves the package roster, environment
+files, lockfiles, views, package-module trees, caches, and installed prefixes. A
+CSE-built-compiler/external-MPI selector marked
+`multi-node-validation-required` remains usable from the workspace
+`modulefiles/` tree but is withheld from the release module root. The completed
+locked package builds establish the build-plane compiler, link, and runtime
+closure. Publish the selector only after the site-native multi-node launch
+passes. This gate cannot be bypassed by the presentation command.
+
 The default session uses `tmux new-session -A` with the generated
 `cse-{{ values.system.name }}-{{ values.release }}-<context>` session name. Inspect
 `./cse-build` at any time; it is generated plain Bash, not a compiled build

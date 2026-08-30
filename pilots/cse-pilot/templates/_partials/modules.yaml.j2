@@ -92,4 +92,5 @@ modules:
         py-numpy: '{name}/{version}-python{^python.version}'
         all: '{name}/{version}'
       all:
-        autoload: none
+        autoload: direct
+        conflict: ['{name}']

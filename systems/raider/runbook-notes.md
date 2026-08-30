@@ -90,11 +90,8 @@ for repo in stack-composer stack-content; do
   git -C "$WORK_ROOT/$repo" pull --ff-only
 done
 
-cd "$COMPOSER"
-PYTHON="$CSE_PYTHON" bash scripts/build-pyz.sh
-"$CSE_PYTHON" "$STACK_COMPOSER" --help >/dev/null
-git -C "$COMPOSER" rev-parse HEAD \
-  > "$CSE_TOOL_STATE_ROOT/stack-composer.commit"
+source "$CSE_OPERATOR_SESSION_FILE"
+cse_rebuild_tools composer
 ```
 
 Refresh the declared control set in place, then run the read-only status and
@@ -119,7 +116,9 @@ cd "$BUILD_WORKSPACE"
 The refresh renders a disposable workspace, confirms the blueprint, Raider
 system, and catalog release match, and atomically replaces only `cse-build`,
 the common config, its environment helpers, the lock verifier, and the builder
-handoff note. A mismatch stops without changing the existing controls. If
+handoff note, plus the generated workspace `modulefiles/` and `presentation/`
+control trees. Those workspace trees do not contain Spack's release package
+modules. A mismatch stops without changing the existing controls. If
 environment inputs or package overlays changed, use the common runbook's
 appropriate workspace or release recovery instead of this shortcut.
 

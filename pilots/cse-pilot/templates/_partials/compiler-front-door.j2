@@ -1,10 +1,25 @@
 #%Module1.0
+# CSE-PRESENTATION-MODULE: 1
 proc ModulesHelp { } {
     puts stderr "CSE {{ surface.compiler.public_name }} environment for {{ values.system.name }} ({{ values.release }})"
 }
 module-whatis "CSE {{ surface.compiler.public_name }} environment for {{ values.system.name }}"
 
 conflict cse
+{% for other_surface in (values.shared, values.platform) %}
+{% if other_surface.compiler.public_name != surface.compiler.public_name %}
+conflict cse/{{ other_surface.compiler.public_name }}
+{% endif %}
+{% endfor %}
+set cseExpectedRelease {{ values.release | yaml_scalar }}
+set cseExpectedInitModule {{ ('cse/' ~ surface.compiler.public_name) | yaml_scalar }}
+if { [info exists env(STACK_RELEASE)] && $env(STACK_RELEASE) ne $cseExpectedRelease } {
+    error "another CSE release is already active; unload it before loading cse/{{ surface.compiler.public_name }}"
+}
+if { [info exists env(STACK_INIT_MODULE)] && $env(STACK_INIT_MODULE) ne $cseExpectedInitModule } {
+    error "another CSE compiler surface is already active; unload it before loading cse/{{ surface.compiler.public_name }}"
+}
+unset cseExpectedRelease cseExpectedInitModule
 {% if surface.compiler.source == 'build' %}
 prepend-path MODULEPATH {{ values.paths.modules_root }}/{{ surface.compiler.name }}/compiler
 module load {{ surface.compiler.name }}/{{ surface.compiler.version }}
@@ -14,8 +29,21 @@ module load {{ module }}
 {% endfor %}
 {% endif %}
 
-set foundation {{ values.paths.views_root }}/{{ values.shared.compiler.name }}/foundation
+setenv STACK_RELEASE {{ values.release | yaml_scalar }}
+setenv STACK_COMPILER {{ surface.compiler.name | yaml_scalar }}
+setenv STACK_INIT_MODULE {{ ('cse/' ~ surface.compiler.public_name) | yaml_scalar }}
+setenv CSE_COMPILER {{ surface.compiler.name | yaml_scalar }}
+setenv CSE_COMPILER_VERSION {{ surface.compiler.version | yaml_scalar }}
+setenv CSE_COMPILER_SOURCE {{ surface.compiler.source | yaml_scalar }}
+setenv CSE_COMPILER_FRONT_DOOR {{ ('cse/' ~ surface.compiler.public_name) | yaml_scalar }}
+setenv CSE_CC {{ surface.compiler.commands.c | yaml_scalar }}
+setenv CSE_CXX {{ surface.compiler.commands.cxx | yaml_scalar }}
+setenv CSE_FC {{ surface.compiler.commands.fortran | yaml_scalar }}
+
+set foundation {{ values.paths.views_root }}/{{ surface.compiler.name }}/foundation
 prepend-path PATH $foundation/bin
+prepend-path LIBRARY_PATH $foundation/lib
+prepend-path LIBRARY_PATH $foundation/lib64
 prepend-path LD_LIBRARY_PATH $foundation/lib
 prepend-path LD_LIBRARY_PATH $foundation/lib64
 prepend-path CPATH $foundation/include
@@ -25,8 +53,7 @@ prepend-path PKG_CONFIG_PATH $foundation/share/pkgconfig
 prepend-path MANPATH $foundation/share/man
 prepend-path CMAKE_PREFIX_PATH $foundation
 
-set sharedcore {{ values.paths.modules_root }}/{{ values.shared.compiler.name }}/core
 set modulebase {{ values.paths.modules_root }}/{{ surface.compiler.name }}
-prepend-path MODULEPATH $sharedcore
+prepend-path MODULEPATH $modulebase/core
 prepend-path MODULEPATH $modulebase/common
 prepend-path MODULEPATH $modulebase/lanes

@@ -41,6 +41,10 @@ shared:
     public_name: GCC
     source: build
     modules: []
+    commands:
+      c: gcc
+      cxx: g++
+      fortran: gfortran
     build_with:
       name: gcc
       version: 11.4.0
@@ -50,6 +54,10 @@ shared:
     version: 4.1.8
     source: build
     modules: []
+    commands:
+      c: mpicc
+      cxx: mpicxx
+      fortran: mpifort
     spec: openmpi@4.1.8 fabrics=ucx schedulers=slurm ~rsh ~cuda ~lustre +romio romio-filesystem=none +pmi +legacylaunchers ^ucx@1.16.0+thread_multiple ^slurm@24.05.4
     provider_constraint: openmpi@4.1.8 fabrics=ucx schedulers=slurm ~rsh ~cuda ~lustre +romio romio-filesystem=none +pmi +legacylaunchers
   catalog_scopes:
@@ -72,11 +80,19 @@ platform:
     public_name: AOCC
     source: external
     modules: [aocc/4.2.0]
+    commands:
+      c: clang
+      cxx: clang++
+      fortran: flang
   mpi:
     name: openmpi
     version: 4.1.8
     source: build
     modules: []
+    commands:
+      c: mpicc
+      cxx: mpicxx
+      fortran: mpifort
     spec: openmpi@4.1.8 fabrics=ucx schedulers=slurm ~rsh ~cuda ~lustre +romio romio-filesystem=none +pmi +legacylaunchers ^ucx@1.16.0+thread_multiple ^slurm@24.05.4
     provider_constraint: openmpi@4.1.8 fabrics=ucx schedulers=slurm ~rsh ~cuda ~lustre +romio romio-filesystem=none +pmi +legacylaunchers
   catalog_scopes:

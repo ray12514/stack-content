@@ -86,10 +86,8 @@ synchronize both repositories and rebuild the inspector:
 git -C "$INSPECTOR" pull --ff-only
 git -C "$CONTENT" pull --ff-only
 
-cd "$INSPECTOR"
-make build
-./cluster-inspector --help >/dev/null
-git rev-parse HEAD > "$CSE_TOOL_STATE_ROOT/cluster-inspector.commit"
+source "$CSE_OPERATOR_SESSION_FILE"
+cse_rebuild_tools inspector
 ```
 
 Compiler, MPI, fabric, and module inventory are system facts. Rerun only the
@@ -158,11 +156,8 @@ for repo in stack-composer stack-content; do
   git -C "$WORK_ROOT/$repo" pull --ff-only
 done
 
-cd "$COMPOSER"
-PYTHON="$CSE_PYTHON" bash scripts/build-pyz.sh
-"$CSE_PYTHON" "$STACK_COMPOSER" --help >/dev/null
-git -C "$COMPOSER" rev-parse HEAD \
-  > "$CSE_TOOL_STATE_ROOT/stack-composer.commit"
+source "$CSE_OPERATOR_SESSION_FILE"
+cse_rebuild_tools composer
 ```
 
 Refresh the declared control set in place, then run the read-only status and
@@ -187,7 +182,9 @@ cd "$BUILD_WORKSPACE"
 The refresh renders a disposable workspace, confirms the blueprint, Blueback
 system, and catalog release match, and atomically replaces only `cse-build`,
 the common config, its environment helpers, the lock verifier, and the builder
-handoff note. A mismatch stops without changing the existing controls. If
+handoff note, plus the generated workspace `modulefiles/` and `presentation/`
+control trees. Those workspace trees do not contain Spack's release package
+modules. A mismatch stops without changing the existing controls. If
 environment inputs or package overlays changed, use the common runbook's
 appropriate workspace or release recovery instead of this shortcut.
 
@@ -798,7 +795,76 @@ promotion, replace the complete workspace through the common runbook's
 pre-installation `--overwrite` recovery. If installation began, preserve it and
 create a new trial release.
 
-## Publication gates
+## Restricted review and publication gates
+
+### Phase Zero restricted module review after both surfaces finish
+
+Do not add a package, root spec, environment, or replacement lock to create the
+consumer entrance. Refresh the declared workspace controls, finish all eight
+existing environments, and then run:
+
+```bash
+cd "$BUILD_WORKSPACE"
+./cse-build login verify
+./cse-build login publish-modules
+```
+
+The command requires the existing Foundation views and package-module roots. It
+copies only `cse/init-GCC`, `cse/init-CCE`, and the ready short lane selectors
+into the module root recorded by the restricted build values. Despite the
+command name, this is not public stack promotion. It does not write under the
+published root, publish the static catalog, create the cache-only publication
+workspace, or grant access to users outside CSE. This is the CSE team-review
+checkpoint for the restricted module presentation.
+
+The CSE-GCC/Cray-MPICH selector is reported as withheld because its
+simple-wrapper interface remains
+`multi-node-validation-required`; the CCE selector continues to use the
+reviewed platform module chain. The completed locked GCC MPI package builds
+establish the build-plane compiler, link, and runtime closure.
+
+Load the withheld GCC MPI selector from the generated workspace `modulefiles/`
+tree. Confirm that `mpicc`, `mpicxx`, `mpifort`, `mpif90`, and `mpif77` resolve
+under the recorded Cray MPICH prefix and that their `MPICH_*` overrides select
+CSE GCC. Then run the candidate across multiple nodes through Blueback's
+approved Slurm MPI plugin or Cray native launch path. Record that result with
+`presentation/mpi-consumer-candidates.yaml` and publish the selector only after
+the native launch succeeds. `publish-modules` has no bypass flag. The command
+does not run a Spack module refresh or change the package roster, environment
+YAML, lockfiles, views, package-module trees, caches, or installed prefixes.
+
+Validate the candidate from a clean module state:
+
+```bash
+module --force purge
+module load cse/init-GCC
+module use "$BUILD_WORKSPACE/modulefiles/gcc/lanes"
+module load MPI
+module list
+command -v "$CSE_MPICC" "$CSE_MPICXX" "$CSE_MPIFC"
+printf '%s\n' "$MPICH_CC" "$MPICH_CXX" "$MPICH_FC"
+"$CSE_MPICC" -show
+srun --mpi=list
+
+# Inside the approved allocation, substitute Blueback's reviewed plugin.
+CSE_SLURM_MPI_PLUGIN="REPLACE_WITH_REVIEWED_PLUGIN"
+srun --mpi="$CSE_SLURM_MPI_PLUGIN" -N 2 -n 2 ./cse-mpi-smoke
+```
+
+If Blueback uses a Cray native launcher rather than a Slurm MPI plugin for this
+lane, record and run that site command instead. Do not infer a launcher from the
+Cray MPICH compiler-wrapper prefix.
+
+Stop at this checkpoint for team review. If the restricted module presentation
+and runtime evidence are accepted, record the lanes as `runtime-passed`, push
+their exact hashes to the
+private build cache, and continue with the common runbook's public static
+catalog and cache-only publication steps. If only module presentation changes,
+refresh the workspace controls and repeat this checkpoint without rebuilding or
+reconcretizing. A package, provider, compiler, MPI, or dependency change follows
+the common runbook's DAG-changing recovery rules.
+
+### After team acceptance: public promotion
 
 - Copy the approved restricted lockfiles; do not reconcretize the publication
   workspace.

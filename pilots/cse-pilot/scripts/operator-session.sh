@@ -253,6 +253,122 @@ cse_session_use_spack() {
   verify_spack_tool_root
 }
 
+_cse_tool_head() {
+  local repo="$1" label="$2" head dirty
+  if [[ ! -d "$repo/.git" ]]; then
+    _cse_session_error "$label checkout is missing: $repo"
+    return 1
+  fi
+  head="$(git -C "$repo" rev-parse HEAD 2>/dev/null)" || {
+    _cse_session_error "could not read $label checkout commit: $repo"
+    return 1
+  }
+  dirty="$(git -C "$repo" status --porcelain \
+    --untracked-files=normal 2>/dev/null)" || {
+    _cse_session_error "could not inspect $label checkout: $repo"
+    return 1
+  }
+  if [[ -n "$dirty" ]]; then
+    _cse_session_error "$label checkout contains unreviewed changes"
+    return 1
+  fi
+  printf '%s\n' "$head"
+}
+
+_cse_record_tool_commit() {
+  local stamp="$1" commit="$2" temporary
+  temporary="${stamp}.pending.$$"
+  if ! printf '%s\n' "$commit" > "$temporary"; then
+    rm -f -- "$temporary"
+    return 1
+  fi
+  if ! mv -f -- "$temporary" "$stamp"; then
+    rm -f -- "$temporary"
+    return 1
+  fi
+}
+
+cse_rebuild_cluster_inspector() {
+  local head
+  head="$(_cse_tool_head "$INSPECTOR" "Cluster Inspector")" || return 1
+  if ! command -v go >/dev/null 2>&1; then
+    _cse_session_error \
+      "Go 1.22 or newer is required to rebuild Cluster Inspector; commit state was not changed"
+    return 1
+  fi
+  if ! (
+    cd "$INSPECTOR" &&
+      make build &&
+      ./cluster-inspector --help >/dev/null
+  ); then
+    _cse_session_error \
+      "Cluster Inspector build or smoke test failed; commit state was not changed"
+    return 1
+  fi
+  _cse_record_tool_commit \
+    "$CSE_TOOL_STATE_ROOT/cluster-inspector.commit" "$head" || {
+    _cse_session_error "could not record the Cluster Inspector build commit"
+    return 1
+  }
+  printf 'CSE operator session: Cluster Inspector rebuilt at %s\n' \
+    "${head:0:12}"
+}
+
+cse_rebuild_stack_composer() {
+  local head
+  head="$(_cse_tool_head "$COMPOSER" "Stack Composer")" || return 1
+  if [[ ! -x "$CSE_BOOTSTRAP_PYTHON" ]]; then
+    _cse_session_error \
+      "the reviewed bootstrap Python is unavailable: $CSE_BOOTSTRAP_PYTHON"
+    return 1
+  fi
+  if ! (
+    cd "$COMPOSER" &&
+      "$CSE_BOOTSTRAP_PYTHON" -c \
+        'import sys; assert sys.version_info >= (3, 9), sys.version' &&
+      "$CSE_BOOTSTRAP_PYTHON" -m venv .venv &&
+      "$CSE_PYTHON" -m pip install --upgrade \
+        pip "setuptools>=77" "wheel>=0.44,<1" "build>=1.2,<2" &&
+      "$CSE_PYTHON" -m pip install -e '.[dev]' &&
+      PYTHON="$CSE_PYTHON" bash scripts/build-pyz.sh &&
+      "$CSE_PYTHON" "$STACK_COMPOSER" --help >/dev/null
+  ); then
+    _cse_session_error \
+      "Stack Composer build or smoke test failed; commit state was not changed"
+    return 1
+  fi
+  _cse_record_tool_commit \
+    "$CSE_TOOL_STATE_ROOT/stack-composer.commit" "$head" || {
+    _cse_session_error "could not record the Stack Composer build commit"
+    return 1
+  }
+  printf 'CSE operator session: Stack Composer rebuilt at %s\n' \
+    "${head:0:12}"
+}
+
+cse_rebuild_tools() {
+  local selection="${1:-all}" status=0
+  case "$selection" in
+    inspector)
+      cse_rebuild_cluster_inspector || status=1
+      ;;
+    composer)
+      cse_rebuild_stack_composer || status=1
+      ;;
+    all)
+      cse_rebuild_cluster_inspector || status=1
+      cse_rebuild_stack_composer || status=1
+      ;;
+    *)
+      _cse_session_error \
+        "cse_rebuild_tools accepts inspector, composer, or all"
+      return 2
+      ;;
+  esac
+  cse_session_status
+  return "$status"
+}
+
 cse_session_status() {
   local head recorded dirty
   printf 'CSE operator session\n'

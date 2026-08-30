@@ -34,7 +34,10 @@ case " $(id -Gn) " in
     ;;
 esac
 
-{% if values.permissions.write == 'group' %}
+{% if values.permissions.read == 'world' and values.permissions.write == 'group' %}
+# Publication workspace: collaborative for CSE and readable/searchable by users.
+umask 0002
+{% elif values.permissions.write == 'group' %}
 # Restricted build workspace: collaborative and private to CSE.
 umask 0007
 {% elif values.permissions.read == 'world' %}

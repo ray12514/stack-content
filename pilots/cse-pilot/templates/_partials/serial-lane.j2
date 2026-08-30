@@ -1,4 +1,14 @@
 #%Module1.0
+# CSE-PRESENTATION-MODULE: 1
 module-whatis "CSE Serial lane for {{ surface.compiler.public_name }}"
+prereq cse/{{ surface.compiler.public_name }}
 conflict MPI
+
+setenv STACK_RELEASE {{ values.release | yaml_scalar }}
+setenv STACK_COMPILER {{ surface.compiler.name | yaml_scalar }}
+setenv STACK_LANE "Serial"
+setenv STACK_LANE_ID "serial"
+setenv STACK_VIEW {{ (values.paths.views_root ~ '/' ~ surface.compiler.name ~ '/serial-modules') | yaml_scalar }}
+setenv CSE_LANE "Serial"
+
 prepend-path MODULEPATH {{ values.paths.modules_root }}/{{ surface.compiler.name }}/serial

@@ -3,7 +3,7 @@
 
 source "$SPACK_ROOT/share/spack/setup-env.sh"
 source "$CSE_BUILD_WORKSPACE/env/setup-build-env.sh"
-{% if values.permissions.write == 'group' %}
+{% if values.workspace.role == 'build' and values.permissions.write == 'group' %}
 source "$CSE_BUILD_WORKSPACE/env/share-generated-permissions.sh"
 
 cse_workspace_shared_content_on_exit() {

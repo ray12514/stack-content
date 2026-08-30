@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import ast
+import copy
 import grp
 import json
 import os
 import pwd
+import re
 import shlex
 import shutil
 import stat
@@ -50,6 +52,8 @@ def render_text(template: str, **context: object) -> str:
 
 def values() -> dict:
     return {
+        "system": {"name": "raider"},
+        "release": "trial-001",
         "architecture": {"target": "x86_64_v3", "binary_target": "x86_64"},
         "build": {
             "contexts": {
@@ -85,8 +89,14 @@ def values() -> dict:
             "compiler": {
                 "name": "gcc",
                 "version": "12.5.0",
+                "public_name": "init-GCC",
                 "source": "build",
                 "modules": [],
+                "commands": {
+                    "c": "gcc",
+                    "cxx": "g++",
+                    "fortran": "gfortran",
+                },
                 "build_with": {
                     "name": "gcc",
                     "version": "12.2.1",
@@ -105,6 +115,11 @@ def values() -> dict:
                 "provider_constraint": (
                     "openmpi@4.1.8 fabrics=ucx schedulers=slurm +pmi"
                 ),
+                "commands": {
+                    "c": "mpicc",
+                    "cxx": "mpicxx",
+                    "fortran": "mpifort",
+                },
             },
             "catalog_scopes": {"compiler": "scopes/compilers/gcc/12.2.1"},
         },
@@ -112,8 +127,14 @@ def values() -> dict:
             "compiler": {
                 "name": "aocc",
                 "version": "4.1.0",
+                "public_name": "init-AOCC",
                 "source": "external",
                 "modules": ["amd/aocc/4.1.0"],
+                "commands": {
+                    "c": "clang",
+                    "cxx": "clang++",
+                    "fortran": "flang",
+                },
             },
             "mpi": {
                 "name": "openmpi",
@@ -127,6 +148,11 @@ def values() -> dict:
                 "provider_constraint": (
                     "openmpi@4.1.8 fabrics=ucx schedulers=slurm +pmi"
                 ),
+                "commands": {
+                    "c": "mpicc",
+                    "cxx": "mpicxx",
+                    "fortran": "mpifort",
+                },
             },
             "catalog_scopes": {
                 "compiler": "scopes/compilers/aocc/4.1.0",
@@ -182,6 +208,389 @@ def copy_trial_package_overlay(workspace: Path, package: str) -> Path:
 
 
 class ToolchainTemplateTests(unittest.TestCase):
+    def test_compiler_front_doors_expose_the_selected_surface(self) -> None:
+        test_values = values()
+
+        shared = render_text(
+            "modulefiles/cse/{{ values.shared.compiler.public_name }}.j2",
+            values=test_values,
+        )
+        platform = render_text(
+            "modulefiles/cse/{{ values.platform.compiler.public_name }}.j2",
+            values=test_values,
+        )
+
+        self.assertIn("module load gcc/12.5.0", shared)
+        self.assertIn("set foundation /views/gcc/foundation", shared)
+        self.assertIn("set modulebase /modules/gcc", shared)
+        self.assertIn('setenv STACK_INIT_MODULE "cse/init-GCC"', shared)
+        self.assertIn('setenv CSE_COMPILER "gcc"', shared)
+        self.assertIn('setenv CSE_COMPILER_VERSION "12.5.0"', shared)
+        self.assertIn('setenv CSE_CC "gcc"', shared)
+        self.assertIn('setenv CSE_CXX "g++"', shared)
+        self.assertIn('setenv CSE_FC "gfortran"', shared)
+        self.assertIn("conflict cse/init-AOCC", shared)
+        self.assertIn("another CSE release is already active", shared)
+        self.assertIn("another CSE compiler surface is already active", shared)
+
+        self.assertIn("module load amd/aocc/4.1.0", platform)
+        self.assertIn("set foundation /views/aocc/foundation", platform)
+        self.assertIn("set modulebase /modules/aocc", platform)
+        self.assertIn("prepend-path MODULEPATH $modulebase/core", platform)
+        self.assertIn('setenv STACK_INIT_MODULE "cse/init-AOCC"', platform)
+        self.assertIn('setenv CSE_COMPILER "aocc"', platform)
+        self.assertIn('setenv CSE_COMPILER_VERSION "4.1.0"', platform)
+        self.assertIn('setenv CSE_CC "clang"', platform)
+        self.assertIn("conflict cse/init-GCC", platform)
+        self.assertNotIn("/views/gcc/foundation", platform)
+        self.assertNotIn("/modules/gcc/core", platform)
+
+    def test_workspace_readme_records_builder_selected_module_entrances(self) -> None:
+        test_values = yaml.safe_load(SITE_VALUES_PATH.read_text(encoding="utf-8"))
+        test_values["shared"]["compiler"]["public_name"] = "init-GCC"
+        test_values["platform"]["compiler"]["public_name"] = "init-AOCC"
+        roster = yaml.safe_load(ROSTER_PATH.read_text(encoding="utf-8"))
+
+        readme = render_text(
+            "README.md.j2", values=test_values, data={"roster": roster}
+        )
+
+        self.assertIn("trial release owner selects", readme)
+        self.assertIn("shared compiler front door: `cse/init-GCC`", readme)
+        self.assertIn("platform compiler front door: `cse/init-AOCC`", readme)
+        self.assertIn("module load cse/init-GCC", readme)
+        self.assertIn("module load Serial", readme)
+        self.assertIn("package builds establish the selected", readme)
+        self.assertIn("workspace `MPI` selector exposes", readme)
+        self.assertIn("`mpifort`, `mpif90`, and `mpif77`", readme)
+        self.assertIn("Launcher selection remains a", readme)
+        self.assertIn("separate live site fact", readme)
+
+    def test_lane_modules_require_the_matching_front_door_and_set_identity(self) -> None:
+        test_values = values()
+        test_values["platform"]["mpi"].update(
+            {
+                "name": "cray-mpich",
+                "version": "9.1.0",
+                "source": "external",
+                "modules": ["PrgEnv-aocc/8.7.0", "cray-mpich/9.1.0"],
+                "commands": {
+                    "c": "cc",
+                    "cxx": "CC",
+                    "fortran": "ftn",
+                },
+            }
+        )
+
+        serial = render_text(
+            "modulefiles/{{ values.platform.compiler.name }}/lanes/Serial.j2",
+            values=test_values,
+        )
+        mpi = render_text(
+            "modulefiles/{{ values.platform.compiler.name }}/lanes/MPI.j2",
+            values=test_values,
+        )
+
+        self.assertIn("prereq cse/init-AOCC", serial)
+        self.assertIn('setenv STACK_LANE "Serial"', serial)
+        self.assertIn('setenv STACK_LANE_ID "serial"', serial)
+        self.assertIn('setenv STACK_VIEW "/views/aocc/serial-modules"', serial)
+
+        self.assertIn("prereq cse/init-AOCC", mpi)
+        self.assertIn("prereq PrgEnv-aocc/8.7.0", mpi)
+        self.assertIn("prereq cray-mpich/9.1.0", mpi)
+        self.assertNotIn("module load PrgEnv-aocc/8.7.0", mpi)
+        self.assertNotIn("module load cray-mpich/9.1.0", mpi)
+        self.assertIn('setenv STACK_LANE "MPI"', mpi)
+        self.assertIn('setenv STACK_LANE_ID "mpi-cray-mpich"', mpi)
+        self.assertIn('setenv CSE_LANE "MPI"', mpi)
+        self.assertIn('setenv CSE_MPI_PROVIDER "cray-mpich"', mpi)
+        self.assertIn('setenv CSE_MPI_VERSION "9.1.0"', mpi)
+        self.assertIn('setenv CSE_MPICC "cc"', mpi)
+        self.assertIn('setenv CSE_MPICXX "CC"', mpi)
+        self.assertIn('setenv CSE_MPIFC "ftn"', mpi)
+        self.assertIn(
+            'setenv STACK_VIEW "/views/aocc/mpi-cray-mpich-modules"', mpi
+        )
+
+    def test_cse_gcc_cray_mpi_lane_exposes_workspace_validation_interface(
+        self,
+    ) -> None:
+        test_values = values()
+        prefix = "/opt/cray/pe/mpich/9.1.0/ofi/gnu/12.3"
+        test_values["shared"]["mpi"] = {
+            "name": "cray-mpich",
+            "version": "9.1.0",
+            "source": "external",
+            "modules": ["cray-mpich/9.1.0"],
+            "commands": {"c": "cc", "cxx": "CC", "fortran": "ftn"},
+            "spec": "cray-mpich@9.1.0",
+            "provider_constraint": "cray-mpich@9.1.0",
+            "consumer": {
+                "status": "multi-node-validation-required",
+                "interface": "vendor-wrapper",
+                "wrapper_provider": "cray-mpich-simple-wrapper",
+                "prefix": prefix,
+                "wrappers": {
+                    "c": f"{prefix}/bin/mpicc",
+                    "cxx": f"{prefix}/bin/mpicxx",
+                    "fortran": f"{prefix}/bin/mpifort",
+                    "fortran90": f"{prefix}/bin/mpif90",
+                    "fortran77": f"{prefix}/bin/mpif77",
+                },
+                "runtime_environment": {
+                    "prepend_path": {
+                        "LD_LIBRARY_PATH": ["/opt/cray/libfabric/2.3.1/lib64"]
+                    }
+                },
+            },
+        }
+
+        mpi = render_text(
+            "modulefiles/{{ values.shared.compiler.name }}/lanes/MPI.j2",
+            values=test_values,
+        )
+
+        self.assertIn(
+            'setenv STACK_MPI_INTERFACE "cray-mpich-simple-wrapper"', mpi
+        )
+        self.assertIn(
+            'setenv STACK_MPI_INTERFACE_STATUS "multi-node-validation-required"',
+            mpi,
+        )
+        self.assertIn(f'setenv STACK_MPI_PREFIX "{prefix}"', mpi)
+        expected_variables = {
+            "MPICC": f"{prefix}/bin/mpicc",
+            "MPICXX": f"{prefix}/bin/mpicxx",
+            "MPIFC": f"{prefix}/bin/mpifort",
+            "MPIF90": f"{prefix}/bin/mpif90",
+            "MPIF77": f"{prefix}/bin/mpif77",
+            "MPICH_CC": "gcc",
+            "MPICH_CXX": "g++",
+            "MPICH_FC": "gfortran",
+            "MPICH_F90": "gfortran",
+            "MPICH_F77": "gfortran",
+            "CSE_MPICC": f"{prefix}/bin/mpicc",
+            "CSE_MPICXX": f"{prefix}/bin/mpicxx",
+            "CSE_MPIFC": f"{prefix}/bin/mpifort",
+        }
+        for variable, value in expected_variables.items():
+            self.assertIn(f'setenv {variable} "{value}"', mpi)
+        self.assertIn(f'prepend-path PATH "{prefix}/bin"', mpi)
+        self.assertIn(
+            'prepend-path LD_LIBRARY_PATH "/opt/cray/libfabric/2.3.1/lib64"',
+            mpi,
+        )
+        self.assertNotIn("setenv CC", mpi)
+        self.assertNotIn("module load PrgEnv-gnu", mpi)
+        self.assertNotIn("module load cray-mpich/9.1.0", mpi)
+        self.assertNotIn("error ", mpi)
+
+    def test_presentation_publish_is_exact_and_withholds_candidate_mpi(self) -> None:
+        test_values = values()
+        prefix = "/opt/cray/pe/mpich/9.1.0/ofi/gnu/12.3"
+        test_values["workspace"] = {"role": "build"}
+        test_values["permissions"] = {
+            "group": "cse",
+            "read": "group",
+            "write": "group",
+        }
+        test_values["build_jobs"] = 16
+        test_values["spack"] = {
+            "source": "https://github.com/spack/spack.git",
+            "version": "1.2.2",
+            "tag": "v1.2.2",
+            "commit": "abc123",
+            "default_mode": "shared",
+            "shared_root": "/tools/spack/1.2.2",
+            "initial_root": "/tools/spack/1.2.2",
+        }
+        test_values["shared"]["mpi"] = {
+            "name": "cray-mpich",
+            "version": "9.1.0",
+            "source": "external",
+            "modules": ["cray-mpich/9.1.0"],
+            "spec": "cray-mpich@9.1.0",
+            "provider_constraint": "cray-mpich@9.1.0",
+            "consumer": {
+                "status": "multi-node-validation-required",
+                "interface": "vendor-wrapper",
+                "wrapper_provider": "cray-mpich-simple-wrapper",
+                "prefix": prefix,
+                "wrappers": {
+                    "c": f"{prefix}/bin/mpicc",
+                    "cxx": f"{prefix}/bin/mpicxx",
+                    "fortran": f"{prefix}/bin/mpifort",
+                    "fortran90": f"{prefix}/bin/mpif90",
+                    "fortran77": f"{prefix}/bin/mpif77",
+                },
+                "runtime_environment": {"prepend_path": {}},
+            },
+        }
+
+        launcher = render_text("cse-build.j2", values=test_values)
+        syntax = subprocess.run(
+            ["bash", "-n"],
+            input=launcher,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+        self.assertIn("publish-modules", launcher)
+        self.assertNotIn("--include-unvalidated-mpi", launcher)
+        self.assertIn('"cse/init-GCC"', launcher)
+        self.assertIn('"gcc/lanes/Serial"', launcher)
+        self.assertNotIn('"modulefiles/gcc/lanes/MPI"', launcher)
+        self.assertIn(
+            "withheld gcc/lanes/MPI: native multi-node validation is required",
+            launcher,
+        )
+        self.assertIn(
+            "presentation/mpi-consumer-candidates.yaml",
+            launcher,
+        )
+        publish_calls = set(
+            re.findall(
+                r'publish_module_file \\\n\s+"([^"]+)" \\\n\s+"([^"]+)"',
+                launcher,
+            )
+        )
+        self.assertEqual(
+            publish_calls,
+            {
+                ("modulefiles/cse/init-GCC", "cse/init-GCC"),
+                ("modulefiles/gcc/lanes/Serial", "gcc/lanes/Serial"),
+                ("modulefiles/cse/init-AOCC", "cse/init-AOCC"),
+                ("modulefiles/aocc/lanes/Serial", "aocc/lanes/Serial"),
+                ("modulefiles/aocc/lanes/MPI", "aocc/lanes/MPI"),
+            },
+        )
+
+    def test_candidate_report_is_machine_readable_and_separate_from_spack(
+        self,
+    ) -> None:
+        test_values = values()
+        prefix = "/opt/cray/pe/mpich/9.1.0/ofi/gnu/12.3"
+        test_values["shared"]["mpi"] = {
+            "name": "cray-mpich",
+            "version": "9.1.0",
+            "source": "external",
+            "modules": ["cray-mpich/9.1.0"],
+            "spec": "cray-mpich@9.1.0",
+            "provider_constraint": "cray-mpich@9.1.0",
+            "consumer": {
+                "status": "multi-node-validation-required",
+                "interface": "vendor-wrapper",
+                "wrapper_provider": "cray-mpich-simple-wrapper",
+                "prefix": prefix,
+                "wrappers": {
+                    "c": f"{prefix}/bin/mpicc",
+                    "cxx": f"{prefix}/bin/mpicxx",
+                    "fortran": f"{prefix}/bin/mpifort",
+                    "fortran90": f"{prefix}/bin/mpif90",
+                    "fortran77": f"{prefix}/bin/mpif77",
+                },
+                "runtime_environment": {
+                    "prepend_path": {
+                        "LD_LIBRARY_PATH": ["/opt/cray/libfabric/2.3.1/lib64"]
+                    }
+                },
+            },
+        }
+
+        report = render(
+            "presentation/mpi-consumer-candidates.yaml.j2",
+            values=test_values,
+        )
+
+        shared = report["surfaces"]["shared"]
+        self.assertEqual(shared["compiler"]["front_door"], "cse/init-GCC")
+        self.assertEqual(
+            shared["consumer_candidate"]["presentation"],
+            "workspace-validation-only",
+        )
+        self.assertEqual(shared["consumer_candidate"]["prefix"], prefix)
+        self.assertEqual(
+            shared["consumer_candidate"]["wrappers"]["c"],
+            f"{prefix}/bin/mpicc",
+        )
+        self.assertIsNone(
+            report["surfaces"]["platform"]["consumer_candidate"]
+        )
+
+    def test_build_sourced_mpi_selectors_are_ready_for_presentation(self) -> None:
+        site_values = yaml.safe_load(SITE_VALUES_PATH.read_text(encoding="utf-8"))
+
+        launcher = render_text("cse-build.j2", values=site_values)
+
+        self.assertIn('"modulefiles/gcc/lanes/MPI"', launcher)
+        self.assertIn('"gcc/lanes/MPI"', launcher)
+        self.assertIn('"modulefiles/aocc/lanes/MPI"', launcher)
+        self.assertIn('"aocc/lanes/MPI"', launcher)
+        self.assertNotIn("native multi-node validation is required", launcher)
+        publish_calls = set(
+            re.findall(
+                r'publish_module_file \\\n\s+"([^"]+)" \\\n\s+"([^"]+)"',
+                launcher,
+            )
+        )
+        self.assertEqual(
+            publish_calls,
+            {
+                ("modulefiles/cse/GCC", "cse/GCC"),
+                ("modulefiles/gcc/lanes/Serial", "gcc/lanes/Serial"),
+                ("modulefiles/cse/AOCC", "cse/AOCC"),
+                ("modulefiles/aocc/lanes/Serial", "aocc/lanes/Serial"),
+                ("modulefiles/gcc/lanes/MPI", "gcc/lanes/MPI"),
+                ("modulefiles/aocc/lanes/MPI", "aocc/lanes/MPI"),
+            },
+        )
+
+    def test_consumer_metadata_cannot_change_any_spack_environment_input(
+        self,
+    ) -> None:
+        before = values()
+        before["shared"]["mpi"].update(
+            {
+                "name": "cray-mpich",
+                "version": "9.1.0",
+                "source": "external",
+                "modules": ["cray-mpich/9.1.0"],
+                "spec": "cray-mpich@9.1.0",
+                "provider_constraint": "cray-mpich@9.1.0",
+            }
+        )
+        before["shared"]["catalog_scopes"]["mpi"] = (
+            "scopes/mpi/cray-mpich/9.1.0/gcc-12.3"
+        )
+        after = copy.deepcopy(before)
+        after["shared"]["mpi"]["consumer"] = {
+            "status": "multi-node-validation-required",
+            "interface": "vendor-wrapper",
+            "wrapper_provider": "cray-mpich-simple-wrapper",
+            "prefix": "/opt/cray/pe/mpich/9.1.0/ofi/gnu/12.3",
+            "wrappers": {},
+            "runtime_environment": {"prepend_path": {}},
+        }
+        roster = {
+            "specs": {
+                "foundation": ["zlib@1.3.1"],
+                "build_tools": ["cmake@3.31.12"],
+                "mpi": ["hdf5@2.1.0+mpi"],
+            }
+        }
+
+        def mpi_environment(test_values: dict) -> str:
+            return render_text(
+                "environments/{{ values.shared.compiler.name }}/mpi-{{ values.shared.mpi.name }}/spack.yaml.j2",
+                values=test_values,
+                data={"roster": roster},
+            )
+
+        self.assertEqual(mpi_environment(before), mpi_environment(after))
+
     def test_generated_cache_permission_shell_is_syntax_valid(self) -> None:
         site_values = yaml.safe_load(SITE_VALUES_PATH.read_text(encoding="utf-8"))
         for template in (
@@ -206,7 +615,17 @@ class ToolchainTemplateTests(unittest.TestCase):
         self.assertIn(
             "env/share-generated-permissions.sh", blueprint["control_files"]
         )
+        self.assertEqual(
+            blueprint["control_trees"], ["modulefiles", "presentation"]
+        )
         self.assertIn("paths.misc_cache", blueprint["required_values"])
+        for surface in ("shared", "platform"):
+            for provider in ("compiler", "mpi"):
+                for language in ("c", "cxx", "fortran"):
+                    self.assertIn(
+                        f"{surface}.{provider}.commands.{language}",
+                        blueprint["required_values"],
+                    )
         self.assertEqual(
             blueprint["allowed_values"]["permissions.read"],
             ["group", "world"],
@@ -252,7 +671,7 @@ class ToolchainTemplateTests(unittest.TestCase):
             {"read": "group", "write": "group", "group": "cse"},
         )
 
-    def test_publication_workspace_does_not_apply_restricted_build_modes(self) -> None:
+    def test_publication_workspace_keeps_cse_group_write_and_world_read(self) -> None:
         publication_values = yaml.safe_load(
             SITE_VALUES_PATH.read_text(encoding="utf-8")
         )
@@ -260,14 +679,27 @@ class ToolchainTemplateTests(unittest.TestCase):
         publication_values["permissions"] = {
             "group": "cse",
             "read": "world",
-            "write": "user",
+            "write": "group",
         }
 
         launcher = render_text("cse-build.j2", values=publication_values)
         shell_rc = render_text("env/workspace-shell.rc.j2", values=publication_values)
+        build_env = render_text("env/setup-build-env.sh.j2", values=publication_values)
+        roster = yaml.safe_load(ROSTER_PATH.read_text(encoding="utf-8"))
+        packages = render(
+            "configs/common/packages.yaml.j2",
+            values=publication_values,
+            data={"roster": roster},
+        )
 
         self.assertNotIn("cse_normalize_shared_generated_content", launcher)
         self.assertNotIn("cse_normalize_shared_generated_content", shell_rc)
+        self.assertIn("umask 0002", build_env)
+        self.assertNotIn("umask 0007", build_env)
+        self.assertEqual(
+            packages["packages"]["all"]["permissions"],
+            {"read": "world", "write": "group", "group": "cse"},
+        )
 
     @unittest.skipUnless(shutil.which("tcsh"), "tcsh is not installed")
     def test_cse_build_runs_directly_from_tcsh(self) -> None:
@@ -861,6 +1293,10 @@ class ToolchainTemplateTests(unittest.TestCase):
         self.assertIn(
             "python@3.12.13 %gcc@12.5.0+binutils",
             shared["default"]["tcl"]["include"],
+        )
+        self.assertEqual(shared["default"]["tcl"]["all"]["autoload"], "direct")
+        self.assertEqual(
+            shared["default"]["tcl"]["all"]["conflict"], ["{name}"]
         )
 
         test_values["platform"]["compiler"].update(

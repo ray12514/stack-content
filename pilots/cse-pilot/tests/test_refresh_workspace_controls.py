@@ -43,7 +43,8 @@ def test_refreshes_declared_controls_and_preserves_build_inputs(tmp_path: Path) 
                 "env/share-generated-permissions.sh",
                 "env/setup-build-env.sh",
                 "scripts/verify-lockfiles.py",
-            ]
+            ],
+            "control_trees": ["modulefiles", "presentation"],
         },
     )
     workspace = tmp_path / "workspace"
@@ -53,6 +54,18 @@ def test_refreshes_declared_controls_and_preserves_build_inputs(tmp_path: Path) 
         (root / "env").mkdir()
         (root / "configs" / "common").mkdir(parents=True)
         (root / "scripts").mkdir()
+    old_module = workspace / "modulefiles/cse/old-GCC"
+    old_module.parent.mkdir(parents=True)
+    old_module.write_text("old module\n", encoding="utf-8")
+    new_module = staged / "modulefiles/cse/init-GCC"
+    new_module.parent.mkdir(parents=True)
+    new_module.write_text("new module\n", encoding="utf-8")
+    old_presentation = workspace / "presentation/mpi-consumer-candidates.yaml"
+    old_presentation.parent.mkdir()
+    old_presentation.write_text("status: old\n", encoding="utf-8")
+    new_presentation = staged / "presentation/mpi-consumer-candidates.yaml"
+    new_presentation.parent.mkdir()
+    new_presentation.write_text("status: new\n", encoding="utf-8")
     for relative in (
         Path("cse-build"),
         Path("configs/common/config.yaml"),
@@ -83,6 +96,8 @@ def test_refreshes_declared_controls_and_preserves_build_inputs(tmp_path: Path) 
         Path("env/share-generated-permissions.sh"),
         Path("env/setup-build-env.sh"),
         Path("scripts/verify-lockfiles.py"),
+        Path("modulefiles"),
+        Path("presentation"),
     ]
     assert (workspace / "cse-build").read_text(encoding="utf-8") == "new\n"
     assert (workspace / "configs/common/config.yaml").read_text(
@@ -94,6 +109,11 @@ def test_refreshes_declared_controls_and_preserves_build_inputs(tmp_path: Path) 
     assert stat.S_IMODE((workspace / "cse-build").stat().st_mode) == 0o770
     assert lock.read_text(encoding="utf-8") == "locked\n"
     assert environment.read_text(encoding="utf-8") == "spack: {}\n"
+    assert not old_module.exists()
+    assert (workspace / "modulefiles/cse/init-GCC").read_text(
+        encoding="utf-8"
+    ) == "new module\n"
+    assert old_presentation.read_text(encoding="utf-8") == "status: new\n"
 
 
 def test_rejects_controls_for_another_system(tmp_path: Path) -> None:
@@ -122,6 +142,17 @@ def test_rejects_control_path_escape(tmp_path: Path) -> None:
 
     with pytest.raises(REFRESH.RefreshError, match="invalid control file path"):
         REFRESH._control_files(REFRESH._load_mapping(blueprint, "blueprint"))
+
+
+def test_rejects_control_tree_path_escape(tmp_path: Path) -> None:
+    blueprint = tmp_path / "blueprint.yaml"
+    write_yaml(
+        blueprint,
+        {"control_files": ["cse-build"], "control_trees": ["../modulefiles"]},
+    )
+
+    with pytest.raises(REFRESH.RefreshError, match="invalid control tree path"):
+        REFRESH._control_trees(REFRESH._load_mapping(blueprint, "blueprint"))
 
 
 def test_rejects_values_for_another_trial_release(tmp_path: Path) -> None:

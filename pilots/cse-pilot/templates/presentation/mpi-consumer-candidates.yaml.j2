@@ -1,0 +1,37 @@
+schema_version: 1
+kind: cse-mpi-consumer-candidates
+system: {{ values.system.name | yaml_scalar }}
+release: {{ values.release | yaml_scalar }}
+surfaces:
+{% for surface_name, surface in [('shared', values.shared), ('platform', values.platform)] %}
+  {{ surface_name }}:
+    compiler:
+      name: {{ surface.compiler.name | yaml_scalar }}
+      version: {{ surface.compiler.version | yaml_scalar }}
+      source: {{ surface.compiler.source | yaml_scalar }}
+      front_door: {{ ('cse/' ~ surface.compiler.public_name) | yaml_scalar }}
+    mpi:
+      name: {{ surface.mpi.name | yaml_scalar }}
+      version: {{ surface.mpi.version | yaml_scalar }}
+      source: {{ surface.mpi.source | yaml_scalar }}
+      lane_selector: {{ (surface.compiler.name ~ '/lanes/MPI') | yaml_scalar }}
+{% if surface.mpi.consumer is defined %}
+    consumer_candidate:
+      status: {{ surface.mpi.consumer.status | yaml_scalar }}
+      interface: {{ surface.mpi.consumer.interface | yaml_scalar }}
+      wrapper_provider: {{ surface.mpi.consumer.get('wrapper_provider', 'unspecified') | yaml_scalar }}
+      prefix: {{ surface.mpi.consumer.prefix | yaml_scalar }}
+      wrappers:
+{% for language, wrapper in surface.mpi.consumer.wrappers | dictsort %}
+        {{ language }}: {{ wrapper | yaml_scalar }}
+{% endfor %}
+      runtime_environment: {{ surface.mpi.consumer.runtime_environment | yaml_flow }}
+{% if surface.compiler.source == 'build' %}
+      presentation: workspace-validation-only
+{% else %}
+      presentation: platform-module-chain
+{% endif %}
+{% else %}
+    consumer_candidate: null
+{% endif %}
+{% endfor %}

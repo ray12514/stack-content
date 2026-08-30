@@ -48,7 +48,13 @@ Actions:
   concretize  Concretize only environments that do not have a lockfile.
   verify      Verify configuration scopes and all existing lockfiles.
   fetch       Fetch all sources for the locked environments.
-  install     Install, regenerate views, and refresh modules in order.
+  install     Install, regenerate views, and refresh package modules in order.
+  publish-modules
+              Copy only the generated CSE front doors and lane selectors into
+              the module root recorded by the current values. With restricted
+              build values this is a team-review checkpoint, not public stack
+              promotion. This never refreshes package modules, views,
+              environments, locks, or installed prefixes.
 
 Spack selection:
   auto        Use the recorded checkout when accessible; otherwise follow the
@@ -85,7 +91,7 @@ while [ "$#" -gt 0 ]; do
       CSE_NODE_CONTEXT="$1"
       CONTEXT_SET=1
       ;;
-    tmux|shell|status|concretize|verify|fetch|install)
+    tmux|shell|status|concretize|verify|fetch|install|publish-modules)
       [ "$ACTION_SET" -eq 0 ] || fail "only one action may be selected"
       ACTION="$1"
       ACTION_SET=1
@@ -331,7 +337,7 @@ grep -Fxq '  misc_cache: ${SPACK_MISC_CACHE_PATH}' \
   "$CSE_WORKSPACE_ROOT/configs/common/config.yaml" || fail \
   "workspace does not select the prepared shared misc cache; refresh workspace controls"
 
-{% if values.permissions.write == 'group' %}
+{% if values.workspace.role == 'build' and values.permissions.write == 'group' %}
 source "$CSE_WORKSPACE_ROOT/env/share-generated-permissions.sh"
 cse_normalize_shared_content_on_exit() {
   local status=$?
@@ -518,9 +524,92 @@ install_selected() {
   done
 }
 
+publish_module_file() {
+  local source="$1" relative="$2" destination temporary
+  case "$relative" in
+    /*|*../*|../*|*/..|..|"") fail "unsafe presentation-module target: $relative" ;;
+  esac
+  source="$CSE_WORKSPACE_ROOT/$source"
+  destination="$CSE_MODULES_ROOT/$relative"
+  [ -f "$source" ] && [ ! -L "$source" ] || fail \
+    "presentation-module source is missing or unsafe: $source"
+  mkdir -p "$(dirname "$destination")"
+  temporary="$(dirname "$destination")/.${destination##*/}.cse-publish.$$"
+  [ ! -e "$temporary" ] || fail \
+    "stale presentation-module publish file exists: $temporary"
+  if ! cp -p -- "$source" "$temporary"; then
+    rm -f -- "$temporary"
+    fail "could not stage presentation module: $relative"
+  fi
+  if ! mv -f -- "$temporary" "$destination"; then
+    rm -f -- "$temporary"
+    fail "could not publish presentation module: $relative"
+  fi
+  note "published presentation module: $relative"
+}
+
+require_presentation_directory() {
+  [ -d "$1" ] || fail \
+    "presentation prerequisite is missing; finish package installation first: $1"
+}
+
+publish_presentation_modules() {
+  verify_locks
+
+{% for surface in (values.shared, values.platform) %}
+  require_presentation_directory \
+    {{ (values.paths.views_root ~ '/' ~ surface.compiler.name ~ '/foundation') | yaml_scalar }}
+  require_presentation_directory \
+    {{ (values.paths.modules_root ~ '/' ~ surface.compiler.name ~ '/core') | yaml_scalar }}
+  require_presentation_directory \
+    {{ (values.paths.modules_root ~ '/' ~ surface.compiler.name ~ '/common') | yaml_scalar }}
+  require_presentation_directory \
+    {{ (values.paths.modules_root ~ '/' ~ surface.compiler.name ~ '/serial') | yaml_scalar }}
+  require_presentation_directory \
+    {{ (values.paths.modules_root ~ '/' ~ surface.compiler.name ~ '/mpi-' ~ surface.mpi.name) | yaml_scalar }}
+{% if surface.compiler.source == 'build' %}
+  [ -f {{ (values.paths.modules_root ~ '/' ~ surface.compiler.name ~ '/compiler/' ~ surface.compiler.name ~ '/' ~ surface.compiler.version) | yaml_scalar }} ] || fail \
+    "generated compiler module is missing for {{ surface.compiler.name }}@{{ surface.compiler.version }}"
+{% endif %}
+{% if surface.mpi.source == 'build' %}
+  [ -f {{ (values.paths.modules_root ~ '/' ~ surface.compiler.name ~ '/mpi-' ~ surface.mpi.name ~ '-provider/' ~ surface.mpi.name ~ '/' ~ surface.mpi.version) | yaml_scalar }} ] || fail \
+    "generated MPI provider module is missing for {{ surface.mpi.name }}@{{ surface.mpi.version }}"
+{% endif %}
+{% endfor %}
+
+  publish_module_file \
+    {{ ('modulefiles/cse/' ~ values.shared.compiler.public_name) | yaml_scalar }} \
+    {{ ('cse/' ~ values.shared.compiler.public_name) | yaml_scalar }}
+  publish_module_file \
+    {{ ('modulefiles/' ~ values.shared.compiler.name ~ '/lanes/Serial') | yaml_scalar }} \
+    {{ (values.shared.compiler.name ~ '/lanes/Serial') | yaml_scalar }}
+  publish_module_file \
+    {{ ('modulefiles/cse/' ~ values.platform.compiler.public_name) | yaml_scalar }} \
+    {{ ('cse/' ~ values.platform.compiler.public_name) | yaml_scalar }}
+  publish_module_file \
+    {{ ('modulefiles/' ~ values.platform.compiler.name ~ '/lanes/Serial') | yaml_scalar }} \
+    {{ (values.platform.compiler.name ~ '/lanes/Serial') | yaml_scalar }}
+
+{% if values.shared.compiler.source == 'build' and values.shared.mpi.source == 'external' %}
+  note "withheld {{ values.shared.compiler.name }}/lanes/MPI: native multi-node validation is required"
+{% if values.shared.mpi.consumer is defined %}
+  note "candidate facts: $CSE_WORKSPACE_ROOT/presentation/mpi-consumer-candidates.yaml"
+{% else %}
+  note "candidate facts are missing; regenerate reviewed build values and refresh controls"
+{% endif %}
+{% else %}
+  publish_module_file \
+    {{ ('modulefiles/' ~ values.shared.compiler.name ~ '/lanes/MPI') | yaml_scalar }} \
+    {{ (values.shared.compiler.name ~ '/lanes/MPI') | yaml_scalar }}
+{% endif %}
+  publish_module_file \
+    {{ ('modulefiles/' ~ values.platform.compiler.name ~ '/lanes/MPI') | yaml_scalar }} \
+    {{ (values.platform.compiler.name ~ '/lanes/MPI') | yaml_scalar }}
+}
+
 verify_workspace_inputs
 verify_scopes
-{% if values.permissions.write == 'group' %}
+{% if values.workspace.role == 'build' and values.permissions.write == 'group' %}
 case "$ACTION" in
   status|concretize|verify)
     cse_normalize_shared_generated_content "$CSE_RECORDED_GROUP" || fail \
@@ -561,4 +650,5 @@ case "$ACTION" in
   verify) verify_locks ;;
   fetch) fetch_selected ;;
   install) install_selected ;;
+  publish-modules) publish_presentation_modules ;;
 esac

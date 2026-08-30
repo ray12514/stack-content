@@ -60,7 +60,8 @@ spack:
 {% endfor %}
           all: '{name}/{version}'
         all:
-          autoload: none
+          autoload: direct
+          conflict: ['{name}']
 {% endfor %}
   # Two colons: override every ambient scope (~/.spack, site, system) so a
   # lane concretizes from this tree alone and stays reproducible.

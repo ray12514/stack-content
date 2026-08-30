@@ -56,6 +56,22 @@ def _control_files(blueprint: dict[str, Any]) -> list[Path]:
     return controls
 
 
+def _control_trees(blueprint: dict[str, Any]) -> list[Path]:
+    entries = blueprint.get("control_trees") or []
+    if not isinstance(entries, list):
+        raise RefreshError("blueprint.control_trees must be a list")
+
+    trees: list[Path] = []
+    for entry in entries:
+        if not isinstance(entry, str) or not entry.strip():
+            raise RefreshError("every blueprint.control_trees entry must be a path")
+        path = Path(entry)
+        if path.is_absolute() or ".." in path.parts or path == Path("."):
+            raise RefreshError(f"invalid control tree path: {entry}")
+        trees.append(path)
+    return trees
+
+
 def _workspace_identity(manifest: dict[str, Any]) -> tuple[str, str, str]:
     catalog = _mapping(manifest.get("catalog"), "workspace manifest catalog")
     identity = (
@@ -97,9 +113,10 @@ def refresh_control_files(
     staged_workspace: Path,
     workspace: Path,
 ) -> list[Path]:
-    """Replace only blueprint-declared control files in an existing workspace."""
+    """Replace only blueprint-declared controls in an existing workspace."""
     blueprint = _load_mapping(blueprint_path, "blueprint")
     controls = _control_files(blueprint)
+    control_trees = _control_trees(blueprint)
     existing_manifest = _load_mapping(
         workspace / "workspace-manifest.yaml", "existing workspace manifest"
     )
@@ -121,7 +138,26 @@ def refresh_control_files(
                 f"existing control directory is missing: {relative.parent}"
             )
 
+    for relative in control_trees:
+        source = staged_workspace / relative
+        destination = workspace / relative
+        if not source.is_dir() or source.is_symlink():
+            raise RefreshError(f"staged control tree is missing or unsafe: {relative}")
+        unsafe = next((path for path in source.rglob("*") if path.is_symlink()), None)
+        if unsafe is not None:
+            raise RefreshError(
+                f"staged control tree contains an unsafe symlink: "
+                f"{unsafe.relative_to(staged_workspace)}"
+            )
+        if not destination.parent.is_dir():
+            raise RefreshError(
+                f"existing control tree parent is missing: {relative.parent}"
+            )
+        if destination.is_symlink():
+            raise RefreshError(f"existing control tree is an unsafe symlink: {relative}")
+
     pending: list[tuple[Path, Path]] = []
+    pending_trees: list[tuple[Path, Path, Path | None]] = []
     try:
         for relative in controls:
             source = staged_workspace / relative
@@ -132,18 +168,45 @@ def refresh_control_files(
             shutil.copyfile(source, temporary)
             os.chmod(temporary, source.stat().st_mode & 0o7777)
             pending.append((temporary, destination))
+        for relative in control_trees:
+            source = staged_workspace / relative
+            destination = workspace / relative
+            temporary = destination.with_name(f".{destination.name}.cse-refresh")
+            backup = destination.with_name(f".{destination.name}.cse-previous")
+            if temporary.exists() or backup.exists():
+                stale = temporary if temporary.exists() else backup
+                raise RefreshError(f"stale control refresh tree exists: {stale}")
+            shutil.copytree(source, temporary)
+            pending_trees.append(
+                (temporary, destination, backup if destination.exists() else None)
+            )
         for temporary, destination in pending:
             temporary.replace(destination)
+        for temporary, destination, backup in pending_trees:
+            if backup is not None:
+                destination.replace(backup)
+            try:
+                temporary.replace(destination)
+            except OSError:
+                if backup is not None and backup.exists() and not destination.exists():
+                    backup.replace(destination)
+                raise
+            if backup is not None:
+                shutil.rmtree(backup)
     finally:
         for temporary, _destination in pending:
             temporary.unlink(missing_ok=True)
-    return controls
+        for temporary, _destination, backup in pending_trees:
+            if temporary.exists():
+                shutil.rmtree(temporary)
+    return [*controls, *control_trees]
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Refresh generated workspace controls and common configuration while "
+            "Refresh generated workspace controls, presentation modulefiles, and "
+            "common configuration while "
             "preserving environment YAML, lockfiles, caches, views, and installed "
             "packages."
         )

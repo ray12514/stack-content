@@ -44,6 +44,71 @@ Selected surfaces:
 - package-build CMake: `{{ data.roster.cmake.build_default }}`
 - second public CMake: `{{ data.roster.cmake.current }}`
 
+## Consumer module entrance
+
+The trial release owner selects the two public compiler front-door names when
+creating the reviewed build-values file. They are CSE presentation names; they
+are not inferred from the login shell's default compiler or `PrgEnv-*` module.
+This workspace records:
+
+- shared compiler front door: `cse/{{ values.shared.compiler.public_name }}`
+- platform compiler front door: `cse/{{ values.platform.compiler.public_name }}`
+
+After the release's module root is published on the site `MODULEPATH`, enter one
+surface and exactly one payload lane:
+
+```bash
+module load cse/{{ values.shared.compiler.public_name }}  # or cse/{{ values.platform.compiler.public_name }}
+module load Serial                                        # or MPI
+module load <package>/<version>
+```
+
+The `init-` prefix used by the current trial selections is trial-only. The full
+Stack Composer renderer's canonical convention is `cse/<Compiler>`, followed
+by the same short lane selector. The generated front door owns the reviewed
+compiler-module sequence and the selected surface's Foundation, Core, Common,
+and lane-module paths. A CSE-built MPI lane loads its exact generated provider
+module. A platform Cray MPI lane requires the reviewed Cray MPI module to
+already be active and does not replace the site programming environment. In
+both cases the lane then exposes only its package-module root. The generated
+modules record the resolved commands in `CSE_CC`, `CSE_CXX`, `CSE_FC`,
+`CSE_MPICC`, `CSE_MPICXX`, and `CSE_MPIFC`.
+
+For a CSE-built GCC surface backed by external Cray MPICH, the completed locked
+package builds establish the selected headers, link inputs, and runtime closure
+for the Spack build plane. The workspace `MPI` selector exposes the selected
+Cray MPICH simple wrappers for ordinary validation. It binds `mpicc`, `mpicxx`,
+`mpifort`, `mpif90`, and `mpif77` to the compiler already activated by the CSE
+front door through the `MPICH_*` compiler overrides. It prepends the recorded
+runtime paths without loading a compiler-selecting `PrgEnv-*`, loading the
+platform Cray MPICH module chain, or replacing `CC`, `CXX`, or `FC`.
+
+The external-MPI consumer record is presentation metadata only. It is derived
+from the selected static-catalog scope and is not used by an environment spec,
+package roster, package overlay, or Spack toolchain constraint. The exact
+prefix, simple-wrapper paths, and allowlisted runtime paths are recorded in
+`presentation/mpi-consumer-candidates.yaml`. Launcher selection remains a
+separate live site fact and is not inferred from the compile-wrapper prefix.
+
+After all package installs and package-module refreshes finish, copy the
+independent presentation layer into the module root recorded by the current
+values with:
+
+```bash
+./cse-build login publish-modules
+```
+
+For restricted trial values, this is a restricted CSE team-review checkpoint,
+not public promotion. It does not publish the static catalog, create a
+publication workspace, change filesystem audience, or refresh or replace a
+package module tree. It copies only `cse/<public-name>` and
+`<compiler>/lanes/{Serial,MPI}` files. A CSE-built-compiler/external-MPI
+selector whose status is
+`multi-node-validation-required` remains usable from the workspace
+`modulefiles/` tree but is withheld from the release module root. Publish it
+only after a native multi-node launch succeeds through the site's approved
+Slurm or Cray launch path. The presentation command has no bypass flag.
+
 Generated environment order (used by the sequential wrapper path):
 
 1. `environments/{{ values.shared.compiler.name }}/core`

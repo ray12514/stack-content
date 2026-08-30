@@ -17,6 +17,11 @@ control_files:
   - env/workspace-shell.rc
   - scripts/verify-lockfiles.py
   - BUILDER-HANDOFF.md
+control_trees:
+  # Presentation-only controls. Package modulefiles are generated directly
+  # below values.paths.modules_root and are never part of this workspace tree.
+  - modulefiles
+  - presentation
 required_values:
   - workspace.role
   - build.contexts.login.node_type
@@ -34,6 +39,9 @@ required_values:
   - shared.compiler.public_name
   - shared.compiler.source
   - shared.compiler.modules
+  - shared.compiler.commands.c
+  - shared.compiler.commands.cxx
+  - shared.compiler.commands.fortran
   - shared.compiler.build_with.name
   - shared.compiler.build_with.version
   - shared.compiler.build_with.modules
@@ -42,6 +50,9 @@ required_values:
   - shared.mpi.version
   - shared.mpi.source
   - shared.mpi.modules
+  - shared.mpi.commands.c
+  - shared.mpi.commands.cxx
+  - shared.mpi.commands.fortran
   - shared.mpi.spec
   - shared.mpi.provider_constraint
   - platform.compiler.name
@@ -49,11 +60,17 @@ required_values:
   - platform.compiler.public_name
   - platform.compiler.source
   - platform.compiler.modules
+  - platform.compiler.commands.c
+  - platform.compiler.commands.cxx
+  - platform.compiler.commands.fortran
   - platform.catalog_scopes.compiler
   - platform.mpi.name
   - platform.mpi.version
   - platform.mpi.source
   - platform.mpi.modules
+  - platform.mpi.commands.c
+  - platform.mpi.commands.cxx
+  - platform.mpi.commands.fortran
   - platform.mpi.spec
   - platform.mpi.provider_constraint
   - catalog_scopes.common

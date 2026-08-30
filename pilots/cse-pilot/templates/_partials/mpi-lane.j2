@@ -1,12 +1,82 @@
 #%Module1.0
+# CSE-PRESENTATION-MODULE: 1
 module-whatis "CSE MPI lane ({{ surface.mpi.name }}@{{ surface.mpi.version }})"
+prereq cse/{{ surface.compiler.public_name }}
 conflict Serial
-{% if surface.mpi.source == 'build' %}
+{% if surface.compiler.source == 'build' and surface.mpi.source == 'external' %}
+{% if surface.mpi.consumer is defined %}
+# Cray MPICH's simple wrappers are selected by exact prefix and retargeted to
+# the compiler already activated by the CSE compiler front door. This avoids
+# loading a Cray programming environment that could replace that compiler.
+prepend-path PATH {{ (surface.mpi.consumer.prefix ~ '/bin') | yaml_scalar }}
+{% for variable, paths in surface.mpi.consumer.runtime_environment.prepend_path | dictsort %}
+{% for path in paths %}
+prepend-path {{ variable }} {{ path | yaml_scalar }}
+{% endfor %}
+{% endfor %}
+setenv MPICH_CC {{ surface.compiler.commands.c | yaml_scalar }}
+setenv MPICH_CXX {{ surface.compiler.commands.cxx | yaml_scalar }}
+setenv MPICH_FC {{ surface.compiler.commands.fortran | yaml_scalar }}
+setenv MPICH_F90 {{ surface.compiler.commands.fortran | yaml_scalar }}
+setenv MPICH_F77 {{ surface.compiler.commands.fortran | yaml_scalar }}
+setenv MPICC {{ surface.mpi.consumer.wrappers.c | yaml_scalar }}
+setenv MPICXX {{ surface.mpi.consumer.wrappers.cxx | yaml_scalar }}
+setenv MPIFC {{ surface.mpi.consumer.wrappers.fortran | yaml_scalar }}
+setenv MPIF90 {{ surface.mpi.consumer.wrappers.fortran90 | yaml_scalar }}
+setenv MPIF77 {{ surface.mpi.consumer.wrappers.fortran77 | yaml_scalar }}
+{% else %}
+error "CSE-built compiler plus external MPI is missing reviewed consumer metadata"
+{% endif %}
+{% elif surface.mpi.source == 'build' %}
 prepend-path MODULEPATH {{ values.paths.modules_root }}/{{ surface.compiler.name }}/mpi-{{ surface.mpi.name }}-provider
 module load {{ surface.mpi.name }}/{{ surface.mpi.version }}
 {% else %}
 {% for module in surface.mpi.modules %}
-module load {{ module }}
+prereq {{ module }}
 {% endfor %}
 {% endif %}
+
+setenv STACK_RELEASE {{ values.release | yaml_scalar }}
+setenv STACK_COMPILER {{ surface.compiler.name | yaml_scalar }}
+setenv STACK_LANE "MPI"
+setenv STACK_LANE_ID {{ ('mpi-' ~ surface.mpi.name) | yaml_scalar }}
+setenv STACK_VIEW {{ (values.paths.views_root ~ '/' ~ surface.compiler.name ~ '/mpi-' ~ surface.mpi.name ~ '-modules') | yaml_scalar }}
+setenv STACK_MPI_PROVIDER {{ surface.mpi.name | yaml_scalar }}
+setenv STACK_MPI_VERSION {{ surface.mpi.version | yaml_scalar }}
+setenv CSE_LANE "MPI"
+setenv CSE_MPI_PROVIDER {{ surface.mpi.name | yaml_scalar }}
+setenv CSE_MPI_VERSION {{ surface.mpi.version | yaml_scalar }}
+setenv CSE_MPI_SOURCE {{ surface.mpi.source | yaml_scalar }}
+{% if surface.compiler.source == 'build' and surface.mpi.source == 'external' and surface.mpi.consumer is defined %}
+setenv CSE_MPICC {{ surface.mpi.consumer.wrappers.c | yaml_scalar }}
+setenv CSE_MPICXX {{ surface.mpi.consumer.wrappers.cxx | yaml_scalar }}
+setenv CSE_MPIFC {{ surface.mpi.consumer.wrappers.fortran | yaml_scalar }}
+{% else %}
+setenv CSE_MPICC {{ surface.mpi.commands.c | yaml_scalar }}
+setenv CSE_MPICXX {{ surface.mpi.commands.cxx | yaml_scalar }}
+setenv CSE_MPIFC {{ surface.mpi.commands.fortran | yaml_scalar }}
+{% endif %}
+
+{% if surface.compiler.source == 'build' and surface.mpi.source == 'external' %}
+{% if surface.mpi.consumer is defined %}
+# This workspace interface is usable for validation. Public promotion remains
+# gated by the site-native multi-node launch check.
+setenv STACK_MPI_INTERFACE {{ surface.mpi.consumer.wrapper_provider | yaml_scalar }}
+setenv STACK_MPI_INTERFACE_STATUS {{ surface.mpi.consumer.status | yaml_scalar }}
+setenv STACK_MPI_PREFIX {{ surface.mpi.consumer.prefix | yaml_scalar }}
+{% else %}
+setenv STACK_MPI_INTERFACE "missing-consumer-metadata"
+setenv STACK_MPI_INTERFACE_STATUS "missing-candidate-metadata"
+{% endif %}
+{% elif surface.mpi.source == 'build' %}
+setenv STACK_MPI_INTERFACE "spack-generated-wrapper"
+setenv STACK_MPI_INTERFACE_STATUS "ready"
+{% else %}
+setenv STACK_MPI_INTERFACE "platform-module-chain"
+setenv STACK_MPI_INTERFACE_STATUS "reviewed"
+{% if surface.mpi.consumer is defined %}
+setenv STACK_MPI_PREFIX {{ surface.mpi.consumer.prefix | yaml_scalar }}
+{% endif %}
+{% endif %}
+
 prepend-path MODULEPATH {{ values.paths.modules_root }}/{{ surface.compiler.name }}/mpi-{{ surface.mpi.name }}

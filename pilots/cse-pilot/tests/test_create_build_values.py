@@ -217,6 +217,28 @@ class BuildContextTests(unittest.TestCase):
 
 
 class PlatformCompilerRuntimeTests(unittest.TestCase):
+    def test_compiler_activation_commands_follow_the_selected_module_chain(self) -> None:
+        self.assertEqual(
+            CREATE_BUILD_VALUES.compiler_activation_commands("gcc", []),
+            {"c": "gcc", "cxx": "g++", "fortran": "gfortran"},
+        )
+        self.assertEqual(
+            CREATE_BUILD_VALUES.compiler_activation_commands(
+                "cce", ["PrgEnv-cray", "cce/17.0.1"]
+            ),
+            {"c": "cc", "cxx": "CC", "fortran": "ftn"},
+        )
+
+    def test_mpi_activation_commands_follow_the_selected_provider(self) -> None:
+        self.assertEqual(
+            CREATE_BUILD_VALUES.mpi_activation_commands("openmpi"),
+            {"c": "mpicc", "cxx": "mpicxx", "fortran": "mpifort"},
+        )
+        self.assertEqual(
+            CREATE_BUILD_VALUES.mpi_activation_commands("cray-mpich"),
+            {"c": "cc", "cxx": "CC", "fortran": "ftn"},
+        )
+
     def test_only_oneapi_reuses_the_gcc_seed_scope(self) -> None:
         seed_scope = "scopes/compilers/gcc/12.2.1"
 
@@ -343,6 +365,193 @@ class OpenMpiSpecTests(unittest.TestCase):
                 },
                 {"profile_facts": {"system_externals": []}},
             )
+
+
+class ExternalMpiConsumerTests(unittest.TestCase):
+    def write_cray_scope(
+        self,
+        catalog: Path,
+        *,
+        externals: list[dict] | None = None,
+        variants: str = "+wrappers",
+    ) -> str:
+        relative = "scopes/mpi/cray-mpich/9.1.0/gcc-12.3"
+        scope = catalog / relative
+        scope.mkdir(parents=True)
+        packages = {
+            "packages": {
+                "cray-mpich": {
+                    "buildable": False,
+                    "variants": variants,
+                    "externals": externals
+                    or [
+                        {
+                            "spec": "cray-mpich@9.1.0",
+                            "prefix": "/opt/cray/pe/mpich/9.1.0/ofi/gnu/12.3",
+                            "modules": ["cray-mpich/9.1.0"],
+                            "extra_attributes": {
+                                "environment": {
+                                    "prepend_path": {
+                                        "LD_LIBRARY_PATH": (
+                                            "/opt/cray/libfabric/2.3.1/lib64"
+                                        )
+                                    }
+                                }
+                            },
+                        }
+                    ],
+                }
+            }
+        }
+        (scope / "packages.yaml").write_text(
+            CREATE_BUILD_VALUES.yaml.safe_dump(packages, sort_keys=False),
+            encoding="utf-8",
+        )
+        return relative
+
+    def test_external_cray_mpi_exposes_normalized_candidate_interface(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            catalog = Path(temporary)
+            relative = self.write_cray_scope(catalog)
+
+            consumer = CREATE_BUILD_VALUES.external_mpi_consumer(
+                catalog=catalog,
+                scope_path=relative,
+                package_name="cray-mpich",
+                version="9.1.0",
+            )
+
+        prefix = "/opt/cray/pe/mpich/9.1.0/ofi/gnu/12.3"
+        self.assertEqual(
+            consumer["status"], "multi-node-validation-required"
+        )
+        self.assertEqual(consumer["interface"], "vendor-wrapper")
+        self.assertEqual(
+            consumer["wrapper_provider"], "cray-mpich-simple-wrapper"
+        )
+        self.assertEqual(consumer["prefix"], prefix)
+        self.assertEqual(
+            consumer["wrappers"],
+            {
+                "c": f"{prefix}/bin/mpicc",
+                "cxx": f"{prefix}/bin/mpicxx",
+                "fortran": f"{prefix}/bin/mpifort",
+                "fortran90": f"{prefix}/bin/mpif90",
+                "fortran77": f"{prefix}/bin/mpif77",
+            },
+        )
+        self.assertEqual(
+            consumer["runtime_environment"],
+            {
+                "prepend_path": {
+                    "LD_LIBRARY_PATH": ["/opt/cray/libfabric/2.3.1/lib64"]
+                }
+            },
+        )
+
+    def test_mpi_values_adds_consumer_data_without_changing_the_provider_spec(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            catalog = Path(temporary)
+            relative = self.write_cray_scope(catalog)
+            mpi, selected_scope = CREATE_BUILD_VALUES.mpi_values(
+                surface="cse",
+                source="external",
+                provider_ref="cray-mpich@9.1.0",
+                compiler_ref="gcc@12.5.0",
+                scopes=[
+                    {
+                        "kind": "mpi",
+                        "name": "cray-mpich",
+                        "package": "cray-mpich",
+                        "version": "9.1.0",
+                        "compiler_ref": "gcc@12.3",
+                        "path": relative,
+                    }
+                ],
+                module_map={relative: ["cray-mpich/9.1.0"]},
+                catalog=catalog,
+                common_externals={},
+                manifest={},
+            )
+
+        self.assertEqual(selected_scope, relative)
+        self.assertEqual(mpi["spec"], "cray-mpich@9.1.0")
+        self.assertEqual(mpi["provider_constraint"], "cray-mpich@9.1.0")
+        self.assertEqual(mpi["modules"], ["cray-mpich/9.1.0"])
+        self.assertEqual(
+            mpi["consumer"]["prefix"],
+            "/opt/cray/pe/mpich/9.1.0/ofi/gnu/12.3",
+        )
+
+    def test_external_cray_mpi_rejects_ambiguous_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            catalog = Path(temporary)
+            relative = self.write_cray_scope(
+                catalog,
+                externals=[
+                    {
+                        "spec": "cray-mpich@9.1.0",
+                        "prefix": "/opt/cray/pe/mpich/9.1.0/ofi/gnu/12.3",
+                    },
+                    {
+                        "spec": "cray-mpich@9.1.0",
+                        "prefix": "/another/prefix",
+                    },
+                ],
+            )
+
+            with self.assertRaisesRegex(
+                CREATE_BUILD_VALUES.InputError,
+                "exactly one cray-mpich@9.1.0 external",
+            ):
+                CREATE_BUILD_VALUES.external_mpi_consumer(
+                    catalog=catalog,
+                    scope_path=relative,
+                    package_name="cray-mpich",
+                    version="9.1.0",
+                )
+
+    def test_external_cray_mpi_requires_wrapper_enabled_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            catalog = Path(temporary)
+            relative = self.write_cray_scope(catalog, variants="")
+
+            with self.assertRaisesRegex(
+                CREATE_BUILD_VALUES.InputError,
+                r"must enable \+wrappers",
+            ):
+                CREATE_BUILD_VALUES.external_mpi_consumer(
+                    catalog=catalog,
+                    scope_path=relative,
+                    package_name="cray-mpich",
+                    version="9.1.0",
+                )
+
+    def test_module_front_door_name_must_be_one_path_segment(self) -> None:
+        with self.assertRaisesRegex(
+            CREATE_BUILD_VALUES.InputError,
+            "CSE_SHARED_COMPILER_PUBLIC_NAME",
+        ):
+            CREATE_BUILD_VALUES.safe_path_segment(
+                "init/GCC", "CSE_SHARED_COMPILER_PUBLIC_NAME"
+            )
+
+    def test_compiler_front_door_names_must_be_distinct(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {
+                "CSE_SHARED_COMPILER_PUBLIC_NAME": "init-CSE",
+                "CSE_PLATFORM_COMPILER_PUBLIC_NAME": "init-CSE",
+            },
+            clear=False,
+        ):
+            with self.assertRaisesRegex(
+                CREATE_BUILD_VALUES.InputError,
+                "must be distinct",
+            ):
+                CREATE_BUILD_VALUES.public_compiler_module_names()
 
 
 if __name__ == "__main__":

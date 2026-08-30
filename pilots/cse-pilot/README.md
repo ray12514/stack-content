@@ -111,10 +111,12 @@ with group read and write access. The setup requires this group explicitly; it
 does not infer a default. The surrounding workspace, caches, build cache, views,
 modules, evidence, and release roots must use setgid group-writable directories
 or an equivalent default ACL. Publication values use `read: world` and
-`write: user`; after promotion, consumer-facing directories and executables are
-readable/searchable/executable by users and ordinary files are readable, while
-group and other write access is disabled. The private build cache remains below
-the restricted root.
+`write: group`. CSE package managers retain write access, while users outside
+the CSE group receive read/search/execute access without write access. The
+final publication modes are `2775` for directories, `0775` for executable
+files, and `0664` for ordinary files. The leading `2` is setgid, not sticky;
+it causes new entries to inherit the CSE group. The private build cache remains
+below the restricted root.
 
 For external Cray MPICH, the compiler scope and MPI scope intentionally carry
 different version semantics. The compiler scope names the exact selected
@@ -188,6 +190,80 @@ read/write/search access: directories `2770`, ordinary files `0660`, and
 executable entry points `0770`. The setgid parent supplies the recorded
 collaboration-group ownership.
 Hand the entire initialized workspace and its reviewed lockfiles to the builder.
+
+## Builder-selected user module entrance
+
+The release builder/operator chooses the trial's public compiler front-door
+suffixes in the reviewed provider selections before creating the build-values
+file. `CSE_SHARED_COMPILER_PUBLIC_NAME` and
+`CSE_PLATFORM_COMPILER_PUBLIC_NAME` produce `cse/<public-name>` modules; the
+current Blueback and Fran selections are `cse/init-GCC` and `cse/init-CCE`.
+Those names are release presentation policy, not values inferred from the
+login shell, default `PrgEnv-*`, or compiler executable. Once published, a user
+enters one compiler surface and one lane:
+
+```sh
+module load cse/init-GCC   # or the release's recorded platform front door
+module load Serial        # or MPI
+module load <package>/<version>
+```
+
+The `init-` prefix is a trial convention. The full Stack Composer renderer's
+canonical form is `cse/<Compiler>` followed by the same short lane selector.
+The compiler front door activates the reviewed compiler-module chain. Lane
+selection is separate. A CSE-built MPI lane adds its provider-module root and
+loads the exact generated MPI provider module. A platform Cray MPI lane does
+not replace the site programming environment; it requires the exact reviewed
+Cray MPI module to already be active, then exposes that lane's package-module
+root. The front door and lane record the resolved commands in `CSE_CC`,
+`CSE_CXX`, `CSE_FC`, `CSE_MPICC`, `CSE_MPICXX`, and `CSE_MPIFC`. This
+consumption entrance is separate from the clean build environment established
+by `cse-build`.
+
+For CSE-built GCC with external Cray MPICH, the completed locked package builds
+establish that the selected headers, link inputs, and runtime closure work for
+the Spack build plane. The generated workspace `MPI` selector makes the same
+exact-prefix wrapper interface available for ordinary validation. It prepends
+the selected Cray MPICH `bin` directory and reviewed runtime paths, binds
+`MPICH_CC`, `MPICH_CXX`, and the Fortran overrides to the compiler already
+activated by `cse/<public-name>`, and exposes `mpicc`, `mpicxx`, `mpifort`,
+`mpif90`, and `mpif77`. It does not load a compiler-selecting `PrgEnv-*`, load
+the platform Cray MPICH module chain, or replace `CC`, `CXX`, or `FC`.
+
+The values helper derives this consumer interface from the selected static
+catalog scope and records it in
+`presentation/mpi-consumer-candidates.yaml`. The record is presentation data
+only. It is not referenced by a `spack.yaml`, package roster, package overlay,
+or toolchain constraint. The selector deliberately does not declare a launcher.
+The approved `srun` MPI plugin or Cray site launcher remains a live system fact.
+
+After all package installs and module refreshes are complete, copy the
+presentation layer into the module root recorded by the current values with:
+
+```bash
+./cse-build login publish-modules
+```
+
+For restricted trial values, this is a restricted CSE team-review checkpoint,
+not public promotion. The command does not publish the static catalog, create a
+publication workspace, change filesystem audience, run `spack module refresh`,
+or delete or replace a package module tree. It copies the two
+`cse/<public-name>` front doors and only the ready lane selectors. A
+CSE-GCC/external-Cray-MPICH selector marked
+`multi-node-validation-required` remains available from the workspace
+`modulefiles/` tree but is withheld from the release module root. Publish it
+only after a native multi-node launch succeeds through the site's approved
+Slurm or Cray launch path. There is no bypass flag.
+
+The in-place workspace control refresh also replaces the workspace's generated
+`modulefiles/` and `presentation/` control trees. Those trees are separate from
+`values.paths.modules_root`, where Spack writes the package modulefiles, so the
+refresh continues to preserve every environment YAML, lockfile, view, cache,
+installed prefix, and generated package module. Rerun
+`scripts/create-build-values.py` from the reviewed operator session immediately
+before this refresh. Current values include the exact compiler and MPI command
+metadata required by the presentation modules; refreshing with an older values
+file fails validation instead of guessing those commands.
 
 The `cse-build` entry point first appears inside that initialized workspace.
 Use the operator session through profile/catalog/value preparation, then use

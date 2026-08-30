@@ -52,7 +52,9 @@ If Fran already has eight lockfiles, do not infer compliance from an older
 hashes but did not prove that the shared compiler producer had `+binutils` or
 that every downstream GCC root reached that producer. Refresh only the
 workspace controls first; this preserves every environment YAML file, lockfile,
-cache, view, and installed prefix while installing the current verifier:
+cache, view, generated package module, and installed prefix while installing
+the current verifier and replacing only the generated workspace
+`modulefiles/` and `presentation/` control trees:
 
 ```bash
 "$CSE_PYTHON" \
@@ -601,6 +603,70 @@ The source bundle is not the signed CSE binary build cache and does not change
 any `spack.lock`. If the Spack runtime itself must be bootstrapped without
 network access, prepare a separate Spack bootstrap mirror; do not mix bootstrap
 artifacts into this source bundle.
+
+## Phase Zero restricted module review after both surfaces finish
+
+The consumer gate is a presentation step over the eight existing environments;
+it is not another package or Spack root. After the GCC and CCE surfaces have
+both installed and their package modules have refreshed, synchronize Stack
+Content, run the control-only workspace refresh above, and then run:
+
+```bash
+cd "$BUILD_WORKSPACE"
+./cse-build login verify
+./cse-build login publish-modules
+```
+
+This copies only `cse/init-GCC`, `cse/init-CCE`, and ready short lane selectors
+into the module root recorded by the restricted build values. Despite the
+command name, this is not public stack promotion. It does not write under the
+published root, publish the static catalog, create the cache-only publication
+workspace, or grant access to users outside CSE. This is the CSE team-review
+checkpoint for the restricted module presentation.
+
+The command leaves the CSE-GCC/Cray-MPICH MPI selector withheld from the
+restricted release module root while its catalog-derived simple-wrapper
+interface is
+`multi-node-validation-required`. The completed locked MPI package builds are
+the build-plane compiler, link, and runtime evidence. Load the generated
+selector from the workspace `modulefiles/` tree and record the exact wrapper
+identity and compiler bindings, then run it across multiple nodes through
+Fran's approved native launcher. Use
+`presentation/mpi-consumer-candidates.yaml` as the candidate-fact input.
+Publish the selector only after that native launch succeeds. The presentation
+command has no bypass flag and preserves the package roster, environment YAML,
+lockfiles, views, generated package modules, caches, and installed prefixes.
+
+Validate the candidate from a clean module state:
+
+```bash
+module --force purge
+module load cse/init-GCC
+module use "$BUILD_WORKSPACE/modulefiles/gcc/lanes"
+module load MPI
+module list
+command -v "$CSE_MPICC" "$CSE_MPICXX" "$CSE_MPIFC"
+printf '%s\n' "$MPICH_CC" "$MPICH_CXX" "$MPICH_FC"
+"$CSE_MPICC" -show
+srun --mpi=list
+
+# Inside the approved allocation, substitute Fran's reviewed plugin.
+CSE_SLURM_MPI_PLUGIN="REPLACE_WITH_REVIEWED_PLUGIN"
+srun --mpi="$CSE_SLURM_MPI_PLUGIN" -N 2 -n 2 ./cse-mpi-smoke
+```
+
+If Fran uses a Cray native launcher rather than a Slurm MPI plugin for this
+lane, record and run that site command instead. Do not infer a launcher from the
+Cray MPICH compiler-wrapper prefix.
+
+Stop at this checkpoint for team review. If the restricted module presentation
+and runtime evidence are accepted, record the lanes as `runtime-passed`, push
+their exact hashes to the
+private build cache, and continue with the common runbook's public static
+catalog and cache-only publication steps. If only module presentation changes,
+refresh the workspace controls and repeat this checkpoint without rebuilding or
+reconcretizing. A package, provider, compiler, MPI, or dependency change follows
+the common runbook's DAG-changing recovery rules.
 
 ## Current run record
 

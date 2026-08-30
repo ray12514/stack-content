@@ -27,6 +27,31 @@ GENERIC_BINARY_TARGETS = {
     "x86_64": "x86_64",
 }
 OPENMPI_POLICY_PATH = Path(__file__).resolve().parents[1] / "openmpi-policy.yaml"
+MPI_CONSUMER_PREPEND_PATH_VARIABLES = {"LD_LIBRARY_PATH", "LIBRARY_PATH"}
+COMPILER_ACTIVATION_COMMANDS = {
+    "aocc": {"c": "clang", "cxx": "clang++", "fortran": "flang"},
+    "cce": {"c": "craycc", "cxx": "crayCC", "fortran": "crayftn"},
+    "gcc": {"c": "gcc", "cxx": "g++", "fortran": "gfortran"},
+    "intel": {"c": "icc", "cxx": "icpc", "fortran": "ifort"},
+    "intel-oneapi-compilers": {"c": "icx", "cxx": "icpx", "fortran": "ifx"},
+    "intel-oneapi-compilers-classic": {
+        "c": "icc",
+        "cxx": "icpc",
+        "fortran": "ifort",
+    },
+    "llvm": {"c": "clang", "cxx": "clang++", "fortran": "flang"},
+    "nvhpc": {"c": "nvc", "cxx": "nvc++", "fortran": "nvfortran"},
+    "oneapi": {"c": "icx", "cxx": "icpx", "fortran": "ifx"},
+    "rocmcc": {"c": "amdclang", "cxx": "amdclang++", "fortran": "amdflang"},
+}
+MPI_ACTIVATION_COMMANDS = {
+    "cray-mpich": {"c": "cc", "cxx": "CC", "fortran": "ftn"},
+    "intel-mpi": {"c": "mpiicc", "cxx": "mpiicpc", "fortran": "mpiifort"},
+    "intel-oneapi-mpi": {"c": "mpiicx", "cxx": "mpiicpx", "fortran": "mpiifx"},
+    "mpich": {"c": "mpicc", "cxx": "mpicxx", "fortran": "mpifort"},
+    "mvapich2": {"c": "mpicc", "cxx": "mpicxx", "fortran": "mpifort"},
+    "openmpi": {"c": "mpicc", "cxx": "mpicxx", "fortran": "mpifort"},
+}
 
 
 def required(name: str) -> str:
@@ -182,6 +207,41 @@ def safe_path_segment(value: str, label: str) -> str:
             f"{label} must contain only letters, numbers, '.', '_', or '-'; got {value!r}"
         )
     return value
+
+
+def public_compiler_module_names() -> tuple[str, str]:
+    shared = safe_path_segment(
+        os.environ.get("CSE_SHARED_COMPILER_PUBLIC_NAME", "GCC"),
+        "CSE_SHARED_COMPILER_PUBLIC_NAME",
+    )
+    platform = safe_path_segment(
+        required("CSE_PLATFORM_COMPILER_PUBLIC_NAME"),
+        "CSE_PLATFORM_COMPILER_PUBLIC_NAME",
+    )
+    if shared == platform:
+        raise InputError(
+            "CSE shared and platform compiler public names must be distinct; "
+            f"both resolve to cse/{shared}"
+        )
+    return shared, platform
+
+
+def compiler_activation_commands(name: str, modules: list[str]) -> dict[str, str]:
+    if any(module.split("/", 1)[0].startswith("PrgEnv-") for module in modules):
+        return {"c": "cc", "cxx": "CC", "fortran": "ftn"}
+    commands = COMPILER_ACTIVATION_COMMANDS.get(name)
+    if commands is None:
+        raise InputError(
+            f"no CSE compiler activation command policy exists for {name!r}"
+        )
+    return dict(commands)
+
+
+def mpi_activation_commands(name: str) -> dict[str, str]:
+    commands = MPI_ACTIVATION_COMMANDS.get(name)
+    if commands is None:
+        raise InputError(f"no CSE MPI activation command policy exists for {name!r}")
+    return dict(commands)
 
 
 def namespaced_stage_path(
@@ -384,6 +444,131 @@ def scope_external_specs(catalog: Path, relative: str) -> dict[str, list[str]]:
             if isinstance(external, dict) and external.get("spec")
         ]
     return result
+
+
+def external_mpi_consumer(
+    *,
+    catalog: Path,
+    scope_path: str,
+    package_name: str,
+    version: str,
+) -> dict[str, Any] | None:
+    """Normalize consumer-only facts for an external MPI implementation.
+
+    These values describe a module-facing candidate interface. They are kept
+    separate from ``spec`` and ``provider_constraint`` so adding them cannot
+    change any Spack root or concrete DAG.
+    """
+    if package_name != "cray-mpich":
+        return None
+
+    path = catalog / scope_path / "packages.yaml"
+    data = load_mapping(path)
+    packages = data.get("packages") or {}
+    if not isinstance(packages, dict):
+        raise InputError(f"expected packages mapping in {path}")
+    package = packages.get(package_name)
+    if not isinstance(package, dict):
+        raise InputError(f"{path} has no {package_name} package mapping")
+
+    variants = package.get("variants") or ""
+    variant_tokens = (
+        {str(token) for token in variants}
+        if isinstance(variants, list)
+        else set(str(variants).split())
+    )
+    if "+wrappers" not in variant_tokens:
+        raise InputError(
+            f"{path} must enable +wrappers before {package_name} can expose a "
+            "candidate consumer interface"
+        )
+
+    pattern = re.compile(
+        rf"^{re.escape(package_name)}@{re.escape(version)}(?:[+~%\s]|$)"
+    )
+    candidates = [
+        external
+        for external in package.get("externals") or []
+        if isinstance(external, dict)
+        and pattern.match(str(external.get("spec") or ""))
+    ]
+    if len(candidates) != 1:
+        raise InputError(
+            f"{path} must contain exactly one {package_name}@{version} external; "
+            f"found {len(candidates)}"
+        )
+    external = candidates[0]
+
+    prefix_value = str(external.get("prefix") or "").rstrip("/")
+    prefix = Path(prefix_value)
+    if not prefix_value or not prefix.is_absolute():
+        raise InputError(
+            f"{package_name}@{version} consumer prefix must be absolute in {path}"
+        )
+
+    extra_attributes = external.get("extra_attributes") or {}
+    if not isinstance(extra_attributes, dict):
+        raise InputError(
+            f"{package_name}@{version} extra_attributes must be a mapping in {path}"
+        )
+    unknown_extra = sorted(set(extra_attributes) - {"environment"})
+    if unknown_extra:
+        raise InputError(
+            f"unsupported {package_name}@{version} consumer extra_attributes in "
+            f"{path}: {', '.join(unknown_extra)}"
+        )
+    environment = extra_attributes.get("environment") or {}
+    if not isinstance(environment, dict):
+        raise InputError(
+            f"{package_name}@{version} consumer environment must be a mapping in {path}"
+        )
+    unknown_operations = sorted(set(environment) - {"prepend_path"})
+    if unknown_operations:
+        raise InputError(
+            f"unsupported {package_name}@{version} consumer environment operation(s) "
+            f"in {path}: {', '.join(unknown_operations)}"
+        )
+    prepend_path = environment.get("prepend_path") or {}
+    if not isinstance(prepend_path, dict):
+        raise InputError(
+            f"{package_name}@{version} prepend_path must be a mapping in {path}"
+        )
+    normalized_prepend: dict[str, list[str]] = {}
+    for variable, raw_paths in prepend_path.items():
+        variable_name = str(variable)
+        if variable_name not in MPI_CONSUMER_PREPEND_PATH_VARIABLES:
+            allowed = ", ".join(sorted(MPI_CONSUMER_PREPEND_PATH_VARIABLES))
+            raise InputError(
+                f"unsupported {package_name}@{version} consumer path variable "
+                f"{variable_name!r} in {path}; allowed: {allowed}"
+            )
+        paths = raw_paths if isinstance(raw_paths, list) else [raw_paths]
+        normalized: list[str] = []
+        for raw_path in paths:
+            value = str(raw_path or "").rstrip("/")
+            if not value or not Path(value).is_absolute():
+                raise InputError(
+                    f"{package_name}@{version} {variable_name} entry must be "
+                    f"absolute in {path}: {value!r}"
+                )
+            if value not in normalized:
+                normalized.append(value)
+        normalized_prepend[variable_name] = normalized
+
+    return {
+        "status": "multi-node-validation-required",
+        "interface": "vendor-wrapper",
+        "wrapper_provider": "cray-mpich-simple-wrapper",
+        "prefix": prefix_value,
+        "wrappers": {
+            "c": f"{prefix_value}/bin/mpicc",
+            "cxx": f"{prefix_value}/bin/mpicxx",
+            "fortran": f"{prefix_value}/bin/mpifort",
+            "fortran90": f"{prefix_value}/bin/mpif90",
+            "fortran77": f"{prefix_value}/bin/mpif77",
+        },
+        "runtime_environment": {"prepend_path": normalized_prepend},
+    }
 
 
 def selected_external_spec(
@@ -604,17 +789,25 @@ def mpi_values(
     else:
         spec = f"{package_name}@{provider_version}"
         provider_constraint = spec
-    return (
-        {
-            "name": package_name,
-            "version": provider_version,
-            "source": source,
-            "modules": modules,
-            "spec": spec,
-            "provider_constraint": provider_constraint,
-        },
-        scope_path,
-    )
+    values = {
+        "name": package_name,
+        "version": provider_version,
+        "source": source,
+        "modules": modules,
+        "spec": spec,
+        "provider_constraint": provider_constraint,
+        "commands": mpi_activation_commands(package_name),
+    }
+    if source == "external":
+        consumer = external_mpi_consumer(
+            catalog=catalog,
+            scope_path=str(scope_path),
+            package_name=package_name,
+            version=provider_version,
+        )
+        if consumer is not None:
+            values["consumer"] = consumer
+    return values, scope_path
 
 
 def main() -> int:
@@ -715,6 +908,7 @@ def main() -> int:
             required_absolute_path("CSE_TOOLS_ROOT") / "spack" / spack_version
         )
         initial_spack_root = required_absolute_path("SPACK_ROOT")
+        shared_public_name, platform_public_name = public_compiler_module_names()
         values = {
             "schema_version": 1,
             "workspace": {"role": "build"},
@@ -731,11 +925,12 @@ def main() -> int:
                 "compiler": {
                     "name": shared_compiler_name,
                     "version": shared_compiler_version,
-                    "public_name": os.environ.get(
-                        "CSE_SHARED_COMPILER_PUBLIC_NAME", "GCC"
-                    ),
+                    "public_name": shared_public_name,
                     "source": "build",
                     "modules": [],
+                    "commands": compiler_activation_commands(
+                        shared_compiler_name, []
+                    ),
                     "build_with": {
                         "name": shared_seed_name,
                         "version": shared_seed_version,
@@ -752,9 +947,13 @@ def main() -> int:
                 "compiler": {
                     "name": platform_package,
                     "version": platform_version,
-                    "public_name": required("CSE_PLATFORM_COMPILER_PUBLIC_NAME"),
+                    "public_name": platform_public_name,
                     "source": "external",
                     "modules": module_map.get(platform_scope_path, []),
+                    "commands": compiler_activation_commands(
+                        platform_provider,
+                        module_map.get(platform_scope_path, []),
+                    ),
                 },
                 "mpi": platform_mpi,
                 "catalog_scopes": {
