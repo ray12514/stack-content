@@ -518,6 +518,116 @@ zlib overlay or a configuration correction. The jobserver-token warning after
 the traceback is cleanup fallout from the Python exception and is not a
 separate build failure.
 
+#### Confirmed Blueback cause and workspace recovery
+
+Blueback confirmed that the concrete CCE zlib requested `+pic+shared`, but its
+installed prefix contained `libz.a` and no `libz.so`. The zlib 1.3.1 configure
+script tests shared linking with a small probe object while already passing the
+complete `zlib.map`. That probe object does not define the zlib symbols named
+by the map. CCE's LLVM linker rejects those absent version-map entries, and
+zlib configure silently changes the requested shared build into a static-only
+build.
+
+The same Linux shared-probe construction is present in zlib 1.2.13, 1.3,
+1.3.1, and 1.3.2, which are the versions carried by the trial's pinned package
+repository. The CSE trial overlay therefore adds `--undefined-version` to that
+version-map link for the verified range `zlib@1.2.13:1.3.2+shared %cce`.
+Blueback's current recovery remains specifically for its locked zlib 1.3.1.
+The completed library still uses `zlib.map` and retains its symbol versions.
+This is a zlib recipe correction; do not add a Perl workaround and do not
+change the approved `+shared` package policy. Do not extend the range to an
+uninspected older or future zlib release.
+
+This recovery is valid while the CCE lock set remains an unaccepted release
+candidate. If the lock set was accepted or pushed to a build cache, preserve
+it and create a new release. Exit any prepared compute shell, pull Stack
+Content, and enter the existing workspace's prepared login shell:
+
+```bash
+git -C "$CONTENT" status --short --branch
+# Stop here if the checkout contains unreviewed work.
+git -C "$CONTENT" pull --ff-only origin codex/simplified-render-plan
+
+cd "$BUILD_WORKSPACE"
+./cse-build login shell
+```
+
+Copy the complete tracked zlib overlay into the existing workspace package
+repository and retain CSE group access:
+
+```bash
+: "${CSE_BUILD_WORKSPACE:?Run this block inside ./cse-build login shell}"
+
+ZLIB_SOURCE="$CONTENT/pilots/cse-pilot/templates/package-repos/spack_repo/cse_trials/packages/zlib"
+ZLIB_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/spack_repo/cse_trials/packages/zlib"
+
+install -d -m 2770 -g "$CSE_GROUP" "$ZLIB_DESTINATION"
+install -m 0660 -g "$CSE_GROUP" \
+  "$ZLIB_SOURCE/package.py" \
+  "$ZLIB_SOURCE/cce-lld-version-map.patch" \
+  "$ZLIB_DESTINATION/"
+```
+
+Force reconcretization of all four CCE environments so every lock records the
+same corrected zlib recipe. The zlib hash and the hashes of packages that link
+against it, including Perl, must change. Already installed dependencies whose
+concrete identities are unchanged remain reusable. Keep the previous
+static-only zlib prefix for evidence until the replacement passes validation.
+
+```bash
+for environment in core common serial "mpi-$PLATFORM_MPI_NAME"; do
+  PLATFORM_ENV="$CSE_BUILD_WORKSPACE/environments/$PLATFORM_COMPILER_NAME/$environment"
+
+  spack -e "$PLATFORM_ENV" repo list
+  spack -e "$PLATFORM_ENV" spec -Il zlib@1.3.1
+  spack -e "$PLATFORM_ENV" concretize -f --reuse-deps -j 1
+  spack -e "$PLATFORM_ENV" spec -Il zlib@1.3.1
+done
+```
+
+The repository list must place `cse_trials` before `builtin`. Compare the old
+and new concrete hashes, exit the prepared login shell, verify all updated
+locks, and resume only the CCE surface from the approved compute allocation:
+
+```bash
+exit
+
+cd "$BUILD_WORKSPACE"
+./cse-build login verify
+./cse-build compute install --surface platform
+```
+
+After the platform install succeeds, enter the prepared login shell and locate
+the new CCE zlib prefix. Copy that new prefix from the final listing; do not
+reuse the static-only prefix captured during diagnosis:
+
+```bash
+cd "$BUILD_WORKSPACE"
+./cse-build login shell
+
+PLATFORM_CORE_ENV="$CSE_BUILD_WORKSPACE/environments/$PLATFORM_COMPILER_NAME/core"
+spack -e "$PLATFORM_CORE_ENV" find -clpv zlib@1.3.1 perl@5.42.0
+
+ZLIB_PREFIX="<new-CCE-zlib-prefix-from-the-listing>"
+
+test -f "$ZLIB_PREFIX/lib/libz.so.1.3.1"
+test -L "$ZLIB_PREFIX/lib/libz.so.1"
+test -L "$ZLIB_PREFIX/lib/libz.so"
+
+grep -nE \
+  'Checking for shared library support|Building shared library' \
+  "$ZLIB_PREFIX/.spack/spack-build-out.txt"
+
+readelf --version-info "$ZLIB_PREFIX/lib/libz.so.1.3.1" |
+  grep 'ZLIB_1.2.12'
+```
+
+All three file checks must pass, the build log must say that it built the
+shared library, and `readelf` must report the zlib version definitions. Perl
+must appear installed under the updated Core lock. Do not remove the prior
+static-only zlib prefix manually. Once every retained lock refers to the
+corrected hash, normal release cleanup can identify unreferenced prefixes.
+
 ### GNU LAPACK reports `-sinteger64`
 
 LAPACK 3.12.1 uses `PE_ENV=CRAY` to select the CCE `-sinteger64` flag for its

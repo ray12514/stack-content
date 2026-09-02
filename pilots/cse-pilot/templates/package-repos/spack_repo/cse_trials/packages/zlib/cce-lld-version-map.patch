@@ -1,0 +1,11 @@
+--- a/configure
++++ b/configure
+@@ -232,7 +232,7 @@ if test "$gcc" -eq 1 && ($cc -c $test.c) >> configure.log 2>&1; then
+         *sparc*)
+             LDFLAGS="${LDFLAGS} -Wl,--no-warn-rwx-segments" ;;
+         esac
+-        LDSHARED=${LDSHARED-"$cc -shared -Wl,-soname,libz.so.1,--version-script,${SRCDIR}zlib.map"} ;;
++        LDSHARED=${LDSHARED-"$cc -shared -Wl,-soname,libz.so.1,--undefined-version,--version-script,${SRCDIR}zlib.map"} ;;
+   *BSD | *bsd* | DragonFly)
+         LDSHARED=${LDSHARED-"$cc -shared -Wl,-soname,libz.so.1,--version-script,${SRCDIR}zlib.map"}
+         LDCONFIG="ldconfig -m" ;;

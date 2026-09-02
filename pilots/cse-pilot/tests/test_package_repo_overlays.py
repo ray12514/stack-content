@@ -40,6 +40,39 @@ class PackageRepoOverlayTests(unittest.TestCase):
         self.assertIn('"$ZLIB_PREFIX/.spack/spack-build-out.txt"', diagnosis)
         self.assertIn("Do not reconcretize", diagnosis)
 
+    def test_blueback_zlib_recovery_updates_every_cce_lock(self) -> None:
+        notes = BLUEBACK_NOTES.read_text(encoding="utf-8")
+        recovery = notes.split(
+            "#### Confirmed Blueback cause and workspace recovery", 1
+        )[1].split("### GNU LAPACK reports", 1)[0]
+
+        shell_entry = 'cd "$BUILD_WORKSPACE"\n./cse-build login shell'
+        workspace_guard = (
+            ': "${CSE_BUILD_WORKSPACE:?Run this block inside '
+            './cse-build login shell}"'
+        )
+        destination = (
+            'ZLIB_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/'
+            'spack_repo/cse_trials/packages/zlib"'
+        )
+
+        self.assertIn(shell_entry, recovery)
+        self.assertIn(workspace_guard, recovery)
+        self.assertIn(
+            'ZLIB_SOURCE="$CONTENT/pilots/cse-pilot/templates/'
+            'package-repos/spack_repo/cse_trials/packages/zlib"',
+            recovery,
+        )
+        self.assertIn(destination, recovery)
+        self.assertIn('"$ZLIB_SOURCE/cce-lld-version-map.patch"', recovery)
+        self.assertIn(
+            'for environment in core common serial "mpi-$PLATFORM_MPI_NAME"',
+            recovery,
+        )
+        self.assertIn("concretize -f --reuse-deps -j 1", recovery)
+        self.assertIn("./cse-build compute install --surface platform", recovery)
+        self.assertIn("libz.so.1.3.1", recovery)
+
     def test_blueback_recovery_installs_ncurses_overlay_before_reconcretizing(self) -> None:
         notes = BLUEBACK_NOTES.read_text(encoding="utf-8")
         recovery = notes.split("### CCE ncurses 6.6 LLD version-map failure", 1)[1].split(
@@ -166,6 +199,57 @@ class PackageRepoOverlayTests(unittest.TestCase):
         ast.parse(recipe)
         self.assertIn('self.spec.satisfies("@6.6 %cce")', recipe)
         self.assertIn('flags.append("-Wl,--undefined-version")', recipe)
+
+    def test_zlib_overlay_covers_verified_cce_shared_versions(self) -> None:
+        recipe = (PACKAGE_ROOT / "zlib" / "package.py").read_text(encoding="utf-8")
+        patch = (PACKAGE_ROOT / "zlib" / "cce-lld-version-map.patch").read_text(
+            encoding="utf-8"
+        )
+
+        ast.parse(recipe)
+        self.assertIn(
+            'patch("cce-lld-version-map.patch", '
+            'when="@1.2.13:1.3.2+shared %cce")',
+            recipe,
+        )
+        self.assertIn("--undefined-version,--version-script", patch)
+        self.assertEqual(patch.count("--undefined-version"), 1)
+
+    @unittest.skipUnless(shutil.which("patch"), "patch is not installed")
+    def test_zlib_patch_preserves_versioning_and_accepts_missing_probe_symbols(self) -> None:
+        configure_source = """\
+  case "$uname" in
+  Linux* | linux* | *-linux* | GNU | GNU/* | solaris*)
+        case "$mname" in
+        *sparc*)
+            LDFLAGS="${LDFLAGS} -Wl,--no-warn-rwx-segments" ;;
+        esac
+        LDSHARED=${LDSHARED-"$cc -shared -Wl,-soname,libz.so.1,--version-script,${SRCDIR}zlib.map"} ;;
+  *BSD | *bsd* | DragonFly)
+"""
+        patch_path = PACKAGE_ROOT / "zlib" / "cce-lld-version-map.patch"
+
+        with tempfile.TemporaryDirectory() as temporary:
+            configure_path = Path(temporary) / "configure"
+            configure_path.write_text(configure_source, encoding="utf-8")
+            result = subprocess.run(
+                ["patch", "-p1", "--input", str(patch_path)],
+                cwd=temporary,
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+            patched = configure_path.read_text(encoding="utf-8")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            "-Wl,-soname,libz.so.1,--undefined-version,--version-script,",
+            patched,
+        )
+        self.assertNotIn(
+            "-Wl,-soname,libz.so.1,--version-script,",
+            patched,
+        )
 
     @unittest.skipUnless(shutil.which("patch"), "patch is not installed")
     def test_hdf5_patch_adds_module_dir_to_both_high_level_targets(self) -> None:
