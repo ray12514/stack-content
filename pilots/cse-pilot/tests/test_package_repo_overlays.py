@@ -21,6 +21,25 @@ BLUEBACK_NOTES = Path(__file__).resolve().parents[3] / "systems" / "blueback" / 
 
 
 class PackageRepoOverlayTests(unittest.TestCase):
+    def test_blueback_perl_zlib_diagnosis_targets_the_cce_core_lock(self) -> None:
+        notes = BLUEBACK_NOTES.read_text(encoding="utf-8")
+        diagnosis = notes.split(
+            "### CCE Perl 5.42 zlib library-discovery failure", 1
+        )[1].split("### GNU LAPACK reports", 1)[0]
+
+        self.assertIn(
+            'PLATFORM_CORE_ENV="$CSE_BUILD_WORKSPACE/environments/'
+            '$PLATFORM_COMPILER_NAME/core"',
+            diagnosis,
+        )
+        self.assertIn('spec -Il perl@5.42.0', diagnosis)
+        self.assertIn('find -clpv zlib@1.3.1', diagnosis)
+        self.assertIn('ZLIB_PREFIX="<CCE-zlib-prefix-from-the-listing>"', diagnosis)
+        self.assertIn("-name 'libz.so*'", diagnosis)
+        self.assertIn("-name 'libz.a'", diagnosis)
+        self.assertIn('"$ZLIB_PREFIX/.spack/spack-build-out.txt"', diagnosis)
+        self.assertIn("Do not reconcretize", diagnosis)
+
     def test_blueback_recovery_installs_ncurses_overlay_before_reconcretizing(self) -> None:
         notes = BLUEBACK_NOTES.read_text(encoding="utf-8")
         recovery = notes.split("### CCE ncurses 6.6 LLD version-map failure", 1)[1].split(

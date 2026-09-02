@@ -415,6 +415,109 @@ The successful link command must contain `--undefined-version`, and the final
 entries that are absent from this library configuration; it does not permit
 unresolved object or library references.
 
+### CCE Perl 5.42 zlib library-discovery failure
+
+Use this diagnostic when the Blueback CCE Core install reports
+`perl@5.42.0 failed` before Perl configuration begins and the traceback ends
+with:
+
+```text
+env.set("ZLIB_LIB", spec["zlib-api"].libs.directories[0])
+IndexError: list index out of range
+```
+
+This exception means that the selected `zlib-api` provider returned no library
+directories to the Perl package recipe. It does not show that Perl source or
+CCE compilation failed. The CSE trial requires `zlib-api` to resolve to
+`zlib@1.3.1`; the remaining question is whether the CCE zlib prefix lacks the
+shared library requested by its concrete spec, contains an incomplete link
+set, or is not the provider represented by the current lock.
+
+Do not reconcretize, patch Perl, delete the installed zlib prefix, or retry the
+full platform surface until the following evidence is retained. Blueback also
+contains the completed GCC zlib build, so an unqualified store query can
+inspect the wrong prefix.
+
+Exit any prepared compute shell. Synchronize Stack Content and enter the
+existing workspace's prepared login shell:
+
+```bash
+git -C "$CONTENT" status --short --branch
+# Stop here if the checkout contains unreviewed work.
+git -C "$CONTENT" pull --ff-only origin codex/simplified-render-plan
+
+cd "$BUILD_WORKSPACE"
+./cse-build login shell
+```
+
+Inside that shell, query only the platform CCE Core environment and retain the
+concrete dependency and installed-prefix listings:
+
+```bash
+: "${CSE_BUILD_WORKSPACE:?Run this block inside ./cse-build login shell}"
+
+PLATFORM_CORE_ENV="$CSE_BUILD_WORKSPACE/environments/$PLATFORM_COMPILER_NAME/core"
+ZLIB_DIAG_DIR="$CSE_BUILD_STAGE/blueback-cce-perl-zlib-diagnostic"
+
+test -f "$PLATFORM_CORE_ENV/spack.lock"
+install -d -m 2770 -g "$CSE_GROUP" "$ZLIB_DIAG_DIR"
+
+spack -e "$PLATFORM_CORE_ENV" spec -Il perl@5.42.0 2>&1 |
+  tee "$ZLIB_DIAG_DIR/perl-concrete-spec.txt"
+
+spack -e "$PLATFORM_CORE_ENV" find -clpv zlib@1.3.1 2>&1 |
+  tee "$ZLIB_DIAG_DIR/zlib-installed-prefix.txt"
+```
+
+The concrete tree must show `perl@5.42.0` using `zlib@1.3.1`, and the installed
+listing must identify the CCE-built zlib row. Copy the exact CCE prefix from
+that row. Do not substitute the GCC zlib prefix:
+
+```bash
+ZLIB_PREFIX="<CCE-zlib-prefix-from-the-listing>"
+
+test -d "$ZLIB_PREFIX"
+
+find "$ZLIB_PREFIX" -maxdepth 3 \
+  \( -type f -o -type l \) \
+  \( -name 'libz.so*' -o -name 'libz.a' \) \
+  -ls 2>&1 |
+  tee "$ZLIB_DIAG_DIR/zlib-library-files.txt"
+
+if test -f "$ZLIB_PREFIX/.spack/spack-build-out.txt"; then
+  grep -nE \
+    'Checking for shared library support|Building shared library|No shared library support' \
+    "$ZLIB_PREFIX/.spack/spack-build-out.txt" 2>&1 |
+    tee "$ZLIB_DIAG_DIR/zlib-shared-probe.txt"
+else
+  printf 'missing retained build log: %s\n' \
+    "$ZLIB_PREFIX/.spack/spack-build-out.txt" |
+    tee "$ZLIB_DIAG_DIR/zlib-shared-probe.txt"
+fi
+```
+
+Interpret the result before adding an overlay:
+
+- A `+shared` concrete zlib with only `libz.a`, together with `No shared
+  library support`, confirms that zlib's configure probe silently downgraded
+  the CCE build. Correct the zlib recipe for `%cce`; do not hide that package
+  contract failure in Perl.
+- A versioned `libz.so.1.3.1` without the unversioned `libz.so` identifies an
+  incomplete zlib install or link set. Correct zlib installation before
+  rebuilding Perl.
+- A normal `libz.so` link set under the selected CCE prefix means the fault is
+  in Spack's library discovery or in the provider attached to Perl. Preserve
+  the concrete tree before changing package policy.
+- A provider or prefix other than the CCE `zlib@1.3.1` required by the trial
+  means the lock or a higher-precedence package configuration is stale. Fix
+  that selection rather than adding a compiler workaround.
+
+Retain the three files in `$ZLIB_DIAG_DIR` with the original Perl traceback.
+That evidence determines whether the next Stack Content change is a CCE-only
+zlib overlay or a configuration correction. The jobserver-token warning after
+the traceback is cleanup fallout from the Python exception and is not a
+separate build failure.
+
 ### GNU LAPACK reports `-sinteger64`
 
 LAPACK 3.12.1 uses `PE_ENV=CRAY` to select the CCE `-sinteger64` flag for its
