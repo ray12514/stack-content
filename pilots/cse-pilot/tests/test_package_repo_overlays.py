@@ -17,9 +17,38 @@ PACKAGE_ROOT = (
     / "packages"
 )
 RAIDER_NOTES = Path(__file__).resolve().parents[3] / "systems" / "raider" / "runbook-notes.md"
+BLUEBACK_NOTES = Path(__file__).resolve().parents[3] / "systems" / "blueback" / "runbook-notes.md"
 
 
 class PackageRepoOverlayTests(unittest.TestCase):
+    def test_blueback_recovery_installs_ncurses_overlay_before_reconcretizing(self) -> None:
+        notes = BLUEBACK_NOTES.read_text(encoding="utf-8")
+        recovery = notes.split("### CCE ncurses 6.6 LLD version-map failure", 1)[1].split(
+            "### GNU LAPACK reports", 1
+        )[0]
+
+        shell_entry = 'cd "$BUILD_WORKSPACE"\n./cse-build login shell'
+        workspace_guard = (
+            ': "${CSE_BUILD_WORKSPACE:?Run this block inside '
+            './cse-build login shell}"'
+        )
+        destination = (
+            'NCURSES_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/'
+            'spack_repo/cse_trials/packages/ncurses"'
+        )
+
+        self.assertIn(shell_entry, recovery)
+        self.assertIn(workspace_guard, recovery)
+        self.assertLess(recovery.index(workspace_guard), recovery.index(destination))
+        self.assertIn(
+            'NCURSES_SOURCE="$CONTENT/pilots/cse-pilot/templates/'
+            'package-repos/spack_repo/cse_trials/packages/ncurses"',
+            recovery,
+        )
+        self.assertIn(destination, recovery)
+        self.assertIn("concretize -f --reuse-deps -j 1", recovery)
+        self.assertIn("./cse-build compute install --surface platform", recovery)
+
     def test_raider_recovery_uses_rendered_dakota_overlay_paths(self) -> None:
         notes = RAIDER_NOTES.read_text(encoding="utf-8")
         recovery = notes.split(
@@ -111,6 +140,13 @@ class PackageRepoOverlayTests(unittest.TestCase):
             'when="@2.1.0+mpi+fortran+hl")',
             recipe,
         )
+
+    def test_ncurses_overlay_allows_lld_undefined_versions_only_for_cce_6_6(self) -> None:
+        recipe = (PACKAGE_ROOT / "ncurses" / "package.py").read_text(encoding="utf-8")
+
+        ast.parse(recipe)
+        self.assertIn('self.spec.satisfies("@6.6 %cce")', recipe)
+        self.assertIn('flags.append("-Wl,--undefined-version")', recipe)
 
     @unittest.skipUnless(shutil.which("patch"), "patch is not installed")
     def test_hdf5_patch_adds_module_dir_to_both_high_level_targets(self) -> None:

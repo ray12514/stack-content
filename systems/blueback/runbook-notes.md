@@ -334,6 +334,87 @@ the other.
 - The cache contains CSE-built packages only; it does not attempt to package or
   relocate the platform-owned CPE or Cray MPICH installations.
 
+### CCE ncurses 6.6 LLD version-map failure
+
+This recovery applies when ncurses 6.6 with `+termlib` reaches the shared
+`libtinfo` link and CCE reports repeated errors of this form:
+
+```text
+ld.lld: error: version script assignment of 'NCURSES6_5.0.19991023' to
+symbol 'COLORS' failed: symbol not defined
+```
+
+The ncurses version map intentionally covers symbols from several library and
+configuration combinations. The split `libtinfo` library does not define every
+symbol in that map. GNU `ld` permits those absent entries by default, while the
+LLVM linker used by current CCE releases rejects them. The trial ncurses
+overlay retains symbol versioning and adds `-Wl,--undefined-version` only to
+`ncurses@6.6 %cce` links.
+
+Do not export an ad hoc `LDFLAGS` value and retry the old lock. The linker input
+must be represented by the package recipe and concrete hash. This recovery is
+valid only while the CCE lock set is still an unaccepted release candidate. If
+that lock set was already accepted or pushed, create a new release instead.
+
+Exit any prepared compute shell. Pull Stack Content, then enter the workspace's
+prepared login shell:
+
+```bash
+git -C "$CONTENT" pull --ff-only
+
+cd "$BUILD_WORKSPACE"
+./cse-build login shell
+```
+
+Inside that shell, copy only the tracked ncurses overlay into the existing
+workspace package repository and retain CSE group access:
+
+```bash
+: "${CSE_BUILD_WORKSPACE:?Run this block inside ./cse-build login shell}"
+
+NCURSES_SOURCE="$CONTENT/pilots/cse-pilot/templates/package-repos/spack_repo/cse_trials/packages/ncurses"
+NCURSES_DESTINATION="$CSE_BUILD_WORKSPACE/package-repos/spack_repo/cse_trials/packages/ncurses"
+
+install -d -m 2770 -g "$CSE_GROUP" "$NCURSES_DESTINATION"
+install -m 0660 -g "$CSE_GROUP" \
+  "$NCURSES_SOURCE/package.py" \
+  "$NCURSES_DESTINATION/package.py"
+```
+
+Force reconcretization of all four CCE environments so every lock records the
+same corrected ncurses recipe. The failed ncurses hash and any dependent hashes
+must change; already installed dependencies whose concrete identities are
+unchanged remain reusable.
+
+```bash
+for environment in core common serial "mpi-$PLATFORM_MPI_NAME"; do
+  PLATFORM_ENV="$CSE_BUILD_WORKSPACE/environments/$PLATFORM_COMPILER_NAME/$environment"
+
+  spack -e "$PLATFORM_ENV" repo list
+  spack -e "$PLATFORM_ENV" find -cl ncurses
+  spack -e "$PLATFORM_ENV" concretize -f --reuse-deps -j 1
+  spack -e "$PLATFORM_ENV" find -cl ncurses
+done
+```
+
+The repository list must place `cse_trials` before `builtin`. Compare the
+before and after listings and retain them with the failed-link output. Exit the
+prepared login shell, verify all updated locks, then resume only the CCE
+surface from the approved compute allocation:
+
+```bash
+exit
+
+cd "$BUILD_WORKSPACE"
+./cse-build login verify
+./cse-build compute install --surface platform
+```
+
+The successful link command must contain `--undefined-version`, and the final
+`libtinfo.so.6.6` must retain its version definitions. This option permits map
+entries that are absent from this library configuration; it does not permit
+unresolved object or library references.
+
 ### GNU LAPACK reports `-sinteger64`
 
 LAPACK 3.12.1 uses `PE_ENV=CRAY` to select the CCE `-sinteger64` flag for its
