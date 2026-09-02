@@ -18,9 +18,21 @@ PACKAGE_ROOT = (
 )
 RAIDER_NOTES = Path(__file__).resolve().parents[3] / "systems" / "raider" / "runbook-notes.md"
 BLUEBACK_NOTES = Path(__file__).resolve().parents[3] / "systems" / "blueback" / "runbook-notes.md"
+OVERLAY_WORKFLOW = Path(__file__).resolve().parents[1] / "PACKAGE-OVERLAY-WORKFLOW.md"
 
 
 class PackageRepoOverlayTests(unittest.TestCase):
+    def test_overlay_workflow_preserves_trial_release_boundaries(self) -> None:
+        workflow = OVERLAY_WORKFLOW.read_text(encoding="utf-8")
+
+        self.assertIn("Do not edit Spack's cached `builtin` repository", workflow)
+        self.assertIn("cse_trials` repository must appear before `builtin", workflow)
+        self.assertIn("concretize -f --reuse-deps -j 1", workflow)
+        self.assertIn("./cse-build login verify", workflow)
+        self.assertIn("./cse-build compute install --surface platform", workflow)
+        self.assertIn("Return the correction to Stack Content", workflow)
+        self.assertIn("On-system agent task contract", workflow)
+
     def test_blueback_perl_zlib_diagnosis_targets_the_cce_core_lock(self) -> None:
         notes = BLUEBACK_NOTES.read_text(encoding="utf-8")
         diagnosis = notes.split(

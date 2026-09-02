@@ -318,6 +318,12 @@ module directory to the static and shared high-level Fortran targets. The
 workspace verifier rejects a missing, stale, or broadened overlay before
 concretization or installation.
 
+Use [CSE trial package overlay workflow](PACKAGE-OVERLAY-WORKFLOW.md) to
+diagnose a new package failure, develop and validate a correction inside an
+existing workspace, reconcretize affected unaccepted locks, and return the
+approved overlay to canonical Stack Content. The procedure also contains the
+task contract for an on-system agent.
+
 After all eight environments concretize, run:
 
 ```sh
