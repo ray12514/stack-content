@@ -8,6 +8,9 @@ catalog, values, eight-environment layout, Spack checkout, lockfiles, installed
 prefixes, build cache, and generated `cse-build` remain the trial of record.
 Do not rerun initialization over that workspace to adopt a tool safety fix.
 
+The [2026-09-04 checkpoint receipt](checkpoints/2026-09-04-composer-stabilization.md)
+records the matching implementation commits and candidate artifact checksums.
+
 ## Update and resume
 
 After the approved Stack Composer and Stack Content changes are synchronized,
