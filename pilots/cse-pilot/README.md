@@ -193,6 +193,11 @@ Hand the entire initialized workspace and its reviewed lockfiles to the builder.
 
 ## Builder-selected user module entrance
 
+To update Stack Composer while finishing an existing build, use
+[Stack Composer update during the current trial](STACK-COMPOSER-UPDATE.md).
+It covers rebuilding only Composer, comparing a temporary candidate, and
+testing an optional native executable without refreshing the active workspace.
+
 The release builder/operator chooses the trial's public compiler front-door
 suffixes in the reviewed provider selections before creating the build-values
 file. `CSE_SHARED_COMPILER_PUBLIC_NAME` and

@@ -314,6 +314,20 @@ cse_rebuild_cluster_inspector() {
     "${head:0:12}"
 }
 
+# Keep the recorded .pyz/Python paths intact. A native candidate is a separate,
+# explicit operator selection; it must be executed directly, never by Python.
+cse_stack_composer() {
+  if [[ -n "${CSE_STACK_COMPOSER_NATIVE:-}" ]]; then
+    if [[ ! -x "$CSE_STACK_COMPOSER_NATIVE" ]]; then
+      _cse_session_error "native Composer candidate is not executable: $CSE_STACK_COMPOSER_NATIVE"
+      return 2
+    fi
+    "$CSE_STACK_COMPOSER_NATIVE" "$@"
+  else
+    "$CSE_PYTHON" "$STACK_COMPOSER" "$@"
+  fi
+}
+
 cse_rebuild_stack_composer() {
   local head
   head="$(_cse_tool_head "$COMPOSER" "Stack Composer")" || return 1
