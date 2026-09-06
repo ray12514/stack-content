@@ -39,6 +39,13 @@ The native executable ran without a host Python command and with `/tmp`
 non-executable. The portable artifact ran on Python 3.9.25. Composer's 255
 tests passed on Python 3.9.25 and 3.14.7; all 85 CSE support tests passed.
 
+The outer archive also preserves sealed input modes, including the saved
+builder image's `0600`. An unpack-and-verify regression was added after this
+transport check caught permission normalization. The sealed inputs and the
+inner artifact hashes are unchanged by that outer packaging correction.
+The final unpacked delivery verified successfully, and the final Composer
+repository passed 256 tests on both Python versions.
+
 ## Operator action
 
 The candidate is in the Composer checkout under
