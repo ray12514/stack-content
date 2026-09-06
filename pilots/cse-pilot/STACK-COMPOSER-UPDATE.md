@@ -91,6 +91,44 @@ dependency-security, and complete runtime-license checks pass. The Click update
 also needs a Python-support decision; this update does not silently drop hosts
 running Python 3.9.
 
+## Offline delivery and copied-workspace checks
+
+The [2026-09-06 offline receipt](checkpoints/2026-09-06-offline-delivery.md)
+records the exact payload revisions, test results, and delivery checksum file.
+
+Use the matching source revisions and artifacts from the delivery's
+`RELEASE_INPUTS.json`. Do not mix a new `spack-build` helper with an unrelated
+Composer release or substitute a different blueprint checkout without review.
+Cluster Inspector is not included in this Composer delivery.
+
+Stack Composer's `docs/offline-delivery.md` provides the connected acquisition,
+offline rebuild, and two-container relocation commands. The delivery includes
+the exact Composer, Content, and Planning source exports, hash-locked native
+and portable Python dependency sets, and the saved builder image. Rebuilding
+the tools requires no access to the original repositories or package index.
+
+The relocation check uses new Linux and Cray-shaped model workspaces. Original
+source directories and catalogs are not mounted in the receiving container.
+The generated CSE helpers validate their relocated configuration with the
+pinned Spack runtime. Partial and complete lock fixtures check byte
+preservation only; they do not claim completed HPC builds.
+
+Spack, the approved builtin recipe mirror, installed prefixes, cache roots,
+views, modules, and compiler/MPI paths remain explicit site prerequisites.
+Moving a workspace does not relocate those resources. Do not run the model's
+build helper against an active trial's install or cache roots, and do not
+regenerate an existing trial workspace to adopt a packaging-only change.
+
+For a received artifact, use its supplied executable directly:
+
+```bash
+# Current portable default, with the host's supported Python.
+python3 /absolute/path/to/stack-composer.pyz --help
+
+# Optional Linux native candidate; retain the adjacent _internal directory.
+/absolute/path/to/native/stack-composer --help
+```
+
 ## Adding packages later
 
 Add normal Spack specs to the reviewed roster and create a new candidate with
