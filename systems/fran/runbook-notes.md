@@ -384,6 +384,28 @@ the restricted Spack install tree, views, modules, build stages, or build cache.
 
 ### B. Copy and unpack the Fran workspace on Blueback
 
+This step has three separate operations: **B1 sets the receiving paths, B2
+copies the three files, and B3 verifies and untars the workspace on Blueback.**
+Neither rsync nor scp untars anything. After a successful actual transfer,
+continue to [B3](#b3-verify-and-untar-on-blueback); the diagnostics and alternative
+routes in B2 are only needed for the selected route or a transfer failure.
+The diagnostic `rsync -avn` is a dry run and does not copy the archive.
+
+| Variable | Meaning while running B on Blueback |
+|---|---|
+| `FRAN_TRANSFER_ROOT` | The exact existing archive directory on **Fran**, copied from A's output. Keep the older duplicated-username path if that is where A wrote the files. Do not derive this remote path from Blueback's `WORKDIR`. |
+| `CONNECTED_TRANSFER_ROOT` | The receiving directory on **Blueback**. If files were already transferred, keep the directory used for that transfer. It need not match Fran's path. |
+| `FRAN_WORKSPACE` | The temporary copied Fran workspace **on Blueback**, created by B3 under `CONNECTED_TRANSFER_ROOT`. It is not Fran's original `BUILD_WORKSPACE`. |
+
+A's tar command stores the workspace under its relative directory name, and
+the archive checksum file names the transferred files by basename. B3 selects
+the receiving parent directory with `tar -C`. A different Blueback receiving
+root therefore does not require repackaging the archive on Fran. The copied
+workspace's configuration requirements still apply as described at the end of
+A and in C, including the overrides for absolute Fran cache paths.
+
+#### B1. Set Blueback's receiving paths
+
 First create the receiving directory on Blueback. Its path
 is temporary per-user work space; it is not a CSE tools root, package install
 tree, or build cache.
@@ -405,10 +427,14 @@ export FRAN_WORKSPACE="$CONNECTED_TRANSFER_ROOT/$TRIAL_RELEASE"
   umask 0077
   install -d -m 0700 "$CONNECTED_TRANSFER_ROOT"
   printf 'CONNECTED_TRANSFER_ROOT=%s\n' "$CONNECTED_TRANSFER_ROOT"
+  printf 'CONNECTED_WORKSPACE_ARCHIVE=%s\n' "$CONNECTED_WORKSPACE_ARCHIVE"
+  printf 'FRAN_WORKSPACE (created by B3)=%s\n' "$FRAN_WORKSPACE"
 )
 transfer_status=$?
 printf 'step status: %s (continue only if 0)\n' "$transfer_status"
 ```
+
+#### B2. Transfer the archive and checksum files
 
 Use one transfer route, not both.
 
@@ -557,9 +583,20 @@ transfer_status=$?
 printf 'step status: %s (continue only if 0)\n' "$transfer_status"
 ```
 
-After either route, return to the connected system. Restore the variables from
-the first block in this subsection if this is a new shell, then verify and
-unpack the transferred workspace:
+#### B3. Verify and untar on Blueback
+
+Run this block on Blueback after B2's actual transfer succeeds. This is where
+the workspace is untarred. If this is a new shell, restore B1's variables using
+the exact Blueback directory that received the files. Keep Fran's original
+archive where it is; there is no need to rerun A solely because the two hosts
+use different transfer roots.
+
+The block verifies the archive and lock-digest manifest before extracting, then
+checks the extracted workspace and all eight lockfiles. On success it prints
+`Workspace verified and unpacked` with the resulting Blueback path. If that
+directory already exists, the block stops before tar; follow
+[F's extraction recovery](#f-resume-after-a-disconnect-or-interrupted-command)
+instead of overwriting it or assuming a partial extraction is complete.
 
 ```bash
 set +e
@@ -592,6 +629,7 @@ set +o pipefail
       tr -d '[:space:]'
   )"
   test "$FRAN_LOCK_COUNT" -eq 8
+  printf 'Workspace verified and unpacked on Blueback: %s\n' "$FRAN_WORKSPACE"
 )
 transfer_status=$?
 printf 'step status: %s (continue only if 0)\n' "$transfer_status"
