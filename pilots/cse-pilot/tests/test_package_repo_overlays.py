@@ -31,7 +31,7 @@ class PackageRepoOverlayTests(unittest.TestCase):
         self.assertIn("./cse-build login verify", workflow)
         self.assertIn("./cse-build compute install --surface platform", workflow)
         self.assertIn("Return the correction to Stack Content", workflow)
-        self.assertIn("On-system agent task contract", workflow)
+        self.assertIn("Recipe correction request", workflow)
 
     def test_blueback_perl_zlib_diagnosis_targets_the_cce_core_lock(self) -> None:
         notes = BLUEBACK_NOTES.read_text(encoding="utf-8")

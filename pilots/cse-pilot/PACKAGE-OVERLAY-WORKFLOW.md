@@ -1,8 +1,9 @@
-# CSE trial package overlay workflow
+# Manual CSE package overlay workflow
 
-This procedure defines how a CSE package manager or an on-system agent
-diagnoses a package failure, develops a trial overlay in an existing workspace,
-validates the correction, and returns the approved files to Stack Content.
+This procedure explains how to obtain a corrected package recipe, review its
+scope, place its files manually in an existing CSE workspace, and validate the
+result. The files may be prepared by any authoring method; the installation and
+review steps are the same.
 
 The generated workspace package repository is the working location for
 system-local diagnosis:
@@ -22,7 +23,50 @@ Do not edit Spack's cached `builtin` repository. A change made only in the
 generated workspace is temporary and must not be treated as part of an
 accepted release.
 
+## What an overlay actually does
+
+Spack searches the configured repositories in precedence order. For an
+unqualified package name, it selects one recipe from the first repository that
+provides that package. It does not merge two `package.py` files or splice the
+changed lines into the builtin recipe automatically.
+
+Our usual overlay imports and subclasses the pinned builtin package class.
+Python inheritance preserves its existing behavior, while the subclass adds
+patch directives or narrowly overrides behavior. Packages absent from
+`cse_trials` continue to resolve from `builtin`. The repository is already
+registered by the workspace; adding a package does not require `spack repo add`
+or editing user configuration.
+
+The package recipe is named `package.py`, inside the package's own directory:
+
+```text
+<workspace>/package-repos/spack_repo/cse_trials/
+  repo.yaml                      namespace: cse_trials; api: v2.0
+  packages/
+    zlib/
+      package.py
+      cce-lld-version-map.patch
+```
+
+A patch file alone is not an overlay: `package.py` must reference it. A new
+`package.py` alone is incomplete if it references patch files that were not
+supplied. If the package already has an overlay, produce an updated complete
+local recipe that preserves the existing corrections. Do not overwrite it with
+a new one-fix skeleton. The current zlib directory already has an overlay.
+
+The manual sequence is: capture the failure and exact inputs; prepare a complete
+candidate against the pinned builtin and current local recipe; review its scope;
+back up and copy the reviewed files; confirm recipe selection; recover only the
+affected candidate locks and check source availability; build and validate; then
+commit the correction to the canonical template repository. The sections below
+provide the commands and a reusable request for obtaining the candidate files.
+
 ## Release boundary
+
+Coordinate with the other builder before changing a shared recipe or lock;
+stop processes that use the affected workspace inputs. A CCE-only condition
+does not make an edit to the shared recipe repository invisible to GCC builds.
+Inspect the affected locks and their hashes rather than assuming isolation.
 
 Develop an overlay in place only while the affected lock set is an unaccepted
 release candidate. If the lock set was accepted or its binaries were pushed to
@@ -50,7 +94,9 @@ Before changing a recipe or environment, record:
 5. Concrete hash.
 6. Complete build log.
 7. Exact failing command and its standard error.
-8. Relevant generated files such as `link.txt`, `CMakeCache.txt`,
+8. Exact Spack version/commit, builtin repository pin/commit, the pinned
+   builtin recipe, and any existing local recipe and patch files.
+9. Relevant generated files such as `link.txt`, `CMakeCache.txt`,
    `config.log`, or the generated Makefile.
 
 Sanitization may replace private directory prefixes, but it must preserve
@@ -80,112 +126,240 @@ For example, zlib requesting `+shared` but silently installing only `libz.a`
 is a zlib package contract failure. It must not be hidden by changing Perl or
 by exporting a global linker flag.
 
-## 3. Inspect the builtin recipe without modifying it
+## 3. Inspect the exact recipe and repository pin
 
-Enter the existing workspace's prepared login shell and confirm the selected
-repository order:
+Enter the existing workspace's prepared login shell:
 
 ```bash
-cd "$BUILD_WORKSPACE"
+cd "<absolute-shared-workspace-path>"
 ./cse-build login shell
-
-spack repo list
-spack location --package-dir "builtin.<package>"
 ```
 
-The `cse_trials` repository must appear before `builtin`. Use the builtin
-package directory only as a reference. Do not edit files below it.
-
-Spack repository API v2 uses Python module names for package directories and
-imports. Replace hyphens with underscores when needed. For example,
-`netlib-lapack` is imported through `netlib_lapack`.
-
-## 4. Create a narrow overlay
-
-Create the package directory with the trial's collaboration permissions:
+Inside that shell, select the actual affected environment and package. The
+example below selects CCE Core and zlib; choose the GCC name or another lane
+when that is where the recorded failure occurred:
 
 ```bash
-: "${CSE_BUILD_WORKSPACE:?Run this block inside ./cse-build login shell}"
+export ENVIRONMENT="$PLATFORM_COMPILER_NAME/core"
+export TARGET_ENV="$CSE_BUILD_WORKSPACE/environments/$ENVIRONMENT"
+export PACKAGE_NAME="zlib"
+export PACKAGE_MODULE="zlib"
+export OVERLAY_REPO="$CSE_BUILD_WORKSPACE/package-repos/spack_repo/cse_trials"
+export PACKAGE_DIR="$OVERLAY_REPO/packages/$PACKAGE_MODULE"
 
-OVERLAY_REPO="$CSE_BUILD_WORKSPACE/package-repos/spack_repo/cse_trials"
-PACKAGE_MODULE="<package-module-name>"
-PACKAGE_DIR="$OVERLAY_REPO/packages/$PACKAGE_MODULE"
-
-install -d -m 2770 -g "$CSE_GROUP" "$PACKAGE_DIR"
+spack --version
+spack -e "$TARGET_ENV" config get repos
+spack -e "$TARGET_ENV" repo list
+spack -e "$TARGET_ENV" find -c -d -L -N -v "$PACKAGE_NAME"
 ```
 
-Subclass the builtin recipe instead of copying the complete builtin
-`package.py`. A source-patch overlay has this form:
+The `cse_trials` repository must appear before `builtin`, resolving inside this
+workspace. Current generated workspaces use Spack 1.2.2 and the builtin
+`spack-packages` tag `v2026.06.0`; confirm the effective configuration rather
+than assuming that a different workspace has those same pins.
+
+Resolve the builtin repository explicitly, then inspect its recipe and commit:
+
+```bash
+BUILTIN_REPO="$(spack -e "$TARGET_ENV" location --repo builtin)"
+BUILTIN_RECIPE="$BUILTIN_REPO/packages/$PACKAGE_MODULE/package.py"
+printf 'Pinned builtin recipe: %s\n' "$BUILTIN_RECIPE"
+git -C "$BUILTIN_REPO" rev-parse HEAD
+sed -n '1,300p' "$BUILTIN_RECIPE"
+```
+
+Read the rest of the file when needed, including builder classes, callbacks,
+and referenced patches. Also read the existing local `$PACKAGE_DIR/package.py`
+and its patch files if that directory exists. Do not edit Spack's cached `builtin` repository.
+
+Spack repository API v2 uses Python module names for directories and imports.
+For example, `netlib-lapack` uses `netlib_lapack`, and a name beginning with a
+digit requires the appropriate underscore prefix. Keep the package name,
+module directory, import path, and class name consistent with the pinned recipe.
+
+A newer upstream fix can be useful evidence. Record its exact source revision
+and adapt the specific change to the pinned recipe and package source. Do not
+replace the pin with a moving branch or copy a newer complete recipe without
+checking its dependencies, build-system API, variants, and other assumptions.
+The exact package source version and Spack recipe repository revision are
+separate inputs.
+
+## 4. Prepare and manually install the correction
+
+First obtain a reviewable candidate containing:
+
+1. A complete replacement **local overlay** `package.py`, including existing
+   local corrections that still apply.
+2. Every referenced local patch/support file and an explicit file list.
+3. A diff against the current local overlay, or a clear statement that this is
+   a new package in `cse_trials`.
+4. The failure cause, supported version/compiler/variant scope, pinned upstream
+   source references, expected affected environments, and validation commands.
+
+The [recipe correction request](#recipe-correction-request) below is a reusable
+way to request those deliverables without prescribing how they are authored.
+
+### Source patch example
+
+The existing zlib overlay illustrates the inheritance pattern:
 
 ```python
-from spack_repo.builtin.packages.netlib_lapack.package import (
-    NetlibLapack as BuiltinNetlibLapack,
-)
+from spack_repo.builtin.packages.zlib.package import Zlib as BuiltinZlib
 
 from spack.package import *
 
 
-class NetlibLapack(BuiltinNetlibLapack):
-    """CSE trial corrections for netlib LAPACK."""
+class Zlib(BuiltinZlib):
+    """Zlib linker compatibility required by the CCE trial surface."""
 
-    patch(
-        "descriptive-fix-name.patch",
-        when="@3.12.1+shared %cce",
-    )
+    patch("cce-lld-version-map.patch", when="@1.2.13:1.3.2+shared %cce")
 ```
 
-Use the exact builtin class name and import path for the selected package. The
-`when` constraint must describe only the verified failure surface. Include the
-affected version or inspected version range, compiler, variants, and
-architecture when each dimension is material to the defect.
+This selects the local Zlib class, inherits the builtin recipe, and adds the
+patch only for the stated source versions, `+shared`, and CCE. It is an example
+of the current correction, not a generic fix to apply to a new error.
 
-Use a recipe method override when the defect is in Spack behavior rather than
-upstream source. Call the builtin implementation with `super()` and change only
-the required result. Do not duplicate an entire build phase when a flag
-handler, argument method, or callback is sufficient.
+Choose a `when` condition from evidence. Include the package version/range,
+compiler/version, variants, platform, or target only where they explain the
+failure. If only one compiler version was tested, do not claim a compiler-wide
+range without support. A package-specific defect normally belongs in that
+package's overlay; change compiler metadata only when evidence establishes a
+compiler-wide cause.
 
-Install the overlay files with group write access:
+For recipe behavior, override the smallest appropriate method or callback and
+preserve its expected return type. For example, the current ncurses overlay
+calls the inherited `flag_handler`, then adjusts flags only when its spec
+matches the affected version and CCE. Some build systems implement behavior in
+separate builder classes. Inspect the pinned recipe's builder class and method
+before deciding where to override; adding a same-named method to the package
+class is not universally sufficient. Zlib, for example, has its own builtin
+`MakefileBuilder`. If overriding that builder, inherit the recipe-specific
+builder rather than replacing it with the generic Makefile builder and losing
+the existing zlib build logic. A reviewed full replacement such as the
+external-only CCE compiler recipe is a separate case, not the usual template
+for a library patch.
+
+### Copy the reviewed files
+
+Stage the candidate outside the live package directory first. For the zlib
+example, set the candidate directory and the exact patch list below. Use an
+empty list `OVERLAY_PATCH_FILES=()` for a recipe-only correction, and list any
+additional reviewed support filenames explicitly when needed. All files in the
+list must be supplied in the candidate directory.
 
 ```bash
-install -m 0660 -g "$CSE_GROUP" \
-  package.py \
-  descriptive-fix-name.patch \
-  "$PACKAGE_DIR/"
+export OVERLAY_CANDIDATE_DIR="<absolute-directory-containing-reviewed-files>"
+export OVERLAY_RECORD="<absolute-new-change-record-directory-outside-package-repo>"
+OVERLAY_PATCH_FILES=("cce-lld-version-map.patch")
 ```
 
-## 5. Prove that the overlay is selected
-
-Check the affected environment before changing its lock:
+Run this only after coordinating the affected build work and confirming the
+release is eligible for a correction. The record directory must be new so a
+repeat does not overwrite the original evidence. This block backs up an
+existing overlay and the selected lock, then copies the explicitly listed
+files with the CSE collaboration permissions:
 
 ```bash
-TARGET_ENV="$CSE_BUILD_WORKSPACE/environments/<compiler>/<lane>"
+set +e
+set +o pipefail
+(
+  set -e
+  set -o pipefail
+  : "${CSE_BUILD_WORKSPACE:?Enter through cse-build login shell first}"
+  : "${PACKAGE_DIR:?Select the affected package first}"
+  : "${OVERLAY_CANDIDATE_DIR:?Set the candidate directory}"
+  : "${OVERLAY_RECORD:?Set a new record directory}"
+  test -f "$TARGET_ENV/spack.lock"
+  test -f "$OVERLAY_CANDIDATE_DIR/package.py"
+  for patch_file in "${OVERLAY_PATCH_FILES[@]}"; do
+    test -f "$OVERLAY_CANDIDATE_DIR/$patch_file"
+  done
+  test ! -e "$OVERLAY_RECORD"
+  install -d -m 2770 -g "$CSE_GROUP" "$OVERLAY_RECORD"
+  if test -d "$PACKAGE_DIR"; then
+    cp -a "$PACKAGE_DIR" "$OVERLAY_RECORD/recipe-before"
+  fi
+  cp -p "$TARGET_ENV/spack.lock" "$OVERLAY_RECORD/spack.lock.before"
+  spack -e "$TARGET_ENV" find -c -d -L -N -v > "$OVERLAY_RECORD/graph.before.txt"
+  spack python -c 'import ast, os; ast.parse(open(os.path.join(os.environ["OVERLAY_CANDIDATE_DIR"], "package.py")).read())'
 
+  install -d -m 2770 -g "$CSE_GROUP" "$PACKAGE_DIR"
+  for patch_file in "${OVERLAY_PATCH_FILES[@]}"; do
+    install -m 0660 -g "$CSE_GROUP" "$OVERLAY_CANDIDATE_DIR/$patch_file" "$PACKAGE_DIR/"
+  done
+  install -m 0660 -g "$CSE_GROUP" "$OVERLAY_CANDIDATE_DIR/package.py" "$PACKAGE_DIR/package.py"
+)
+overlay_copy_status=$?
+printf 'Overlay copy status: %s (continue only if 0)\n' "$overlay_copy_status"
+```
+
+Back up every additional affected environment's lock and concrete graph before
+its recovery in Step 7, using separate named files. Keep the record outside the
+package repository so backup recipes are not mistaken for new packages. If a
+copy fails partway through, stop; inspect the live package directory and either
+finish the reviewed file set or restore the saved original while builds remain
+paused. Do not start an install from a mixed or incomplete file set.
+
+Syntax parsing does not validate Spack inheritance, patch applicability, or the
+build correction. Complete the following checks before building.
+
+## 5. Prove which recipe is selected, without solving
+
+Use the affected environment's effective repository order and package path:
+
+```bash
 spack -e "$TARGET_ENV" repo list
-spack -e "$TARGET_ENV" spec -N "<package>@<version>"
-spack -e "$TARGET_ENV" spec -Il "<package>@<version>"
+spack -e "$TARGET_ENV" location --package-dir "$PACKAGE_NAME"
 ```
 
-The repository list must place `cse_trials` before `builtin`. The namespace
-display must show that the trial recipe is selected. Record the existing
-concrete hash before reconcretization.
+The path must be `$PACKAGE_DIR`. If it is the cached builtin recipe, fix the
+repository configuration or package/module spelling before continuing. Do not
+add a user-level repository as a workaround; the workspace already owns its
+repository selection.
 
-For a source patch, verify that it applies to the exact source carried by the
-locked package:
+Load the selected class with the pinned Spack runtime to catch import or
+inheritance errors and print its actual definition file:
 
 ```bash
-cd "<exact-staged-source-directory>"
-patch --dry-run -p1 < "$PACKAGE_DIR/descriptive-fix-name.patch"
+spack -e "$TARGET_ENV" python -c 'import inspect, os, spack.repo; cls = spack.repo.PATH.get_pkg_class(os.environ["PACKAGE_NAME"]); print(cls.__module__, cls.__name__); print(inspect.getfile(cls))'
 ```
 
-A patch that applies to a convenient upstream branch but not the pinned source
-is not acceptable evidence.
+These checks do not concretize. Do not use `spack spec <abstract-spec>` as a
+read-only recipe-location check; it can invoke the solver. For builtin lookup,
+use Step 3's explicit `location --repo builtin`; in Spack 1.2.2,
+`location --package-dir builtin.<package>` does not reliably preserve the
+namespace when resolving the recipe directory.
+
+There are two different things to inspect: the recipe that a new solve would
+select, and the namespace/hash already stored in an old lock. A successful
+location/class check does not rewrite that lock or prove the old package will
+be rebuilt. Inspect the recorded graph with `find -c -d -L -N -v`, then follow
+the affected-lock recovery below.
+
+For a source patch, verify it against a pristine copy of the exact pinned
+source, before that patch has been applied:
+
+```bash
+cd "<pristine-exact-package-source-directory>"
+patch --dry-run -p1 < "$PACKAGE_DIR/cce-lld-version-map.patch"
+```
+
+Use the candidate's actual patch filename and required strip level. A patch
+that applies to a convenient upstream branch but not the pinned source is not
+sufficient. Run the dry check for each patch in its intended application order;
+when patches depend on earlier patches, use a disposable source copy and apply
+each successfully checked patch there before checking the next. Do not alter the
+live build stage for this check. An already-patched or manually altered stage
+can give misleading results.
 
 ## 6. Run a red and green package test
 
-Run the minimal reproducer before applying the correction and retain its
-failure. Apply or activate the overlay, then run the same command again. The
-command, inputs, and validation must remain unchanged so the result proves the
-correction addresses the reported defect.
+Retain the minimal reproducer failure from before the correction. For a
+source-level check, apply the correction in a disposable source copy and rerun
+the same reproducer. For a Spack rebuild, first recover the affected locks in
+Step 7 and install in Step 8; do not rebuild a modified recipe against its old
+locked identity. Keep the reproducer and acceptance checks the same so the
+comparison tests the reported defect.
 
 Examples of useful validation include:
 
@@ -200,45 +374,109 @@ Numerical and MPI packages also require a small compile, link, and execution
 test. An install command returning zero does not by itself validate the
 resulting interface.
 
-## 7. Reconcretize affected unaccepted locks
+## 7. Recover the affected unaccepted locks
 
-The package recipe and patch content contribute to the concrete package
-identity. Do not retry an unchanged lock as the released correction.
+Build-affecting recipe and applied patch content contribute to package identity.
+An existing concrete node retains the package identity stored in its lock.
+Changing the file on disk does not update that identity. Do not present a
+retry of the old lock as the accepted correction.
 
-For a foundational dependency used by every environment on the compiler
-surface, reconcretize all four locks:
+First identify every affected environment and dependent graph. A foundational
+package may affect multiple locks; a compiler condition alone is not proof
+that other locks need no review. Keep the change within the reviewed candidate
+release and coordinate all affected builders. Process one environment at a
+time, preserving its original lock and full concrete listing before solving.
+
+The selected `$TARGET_ENV` is still the affected environment from Step 3. If
+changing environments, update `ENVIRONMENT` and derive `TARGET_ENV` again.
+Create a separate recovery record for that environment before changing its lock:
 
 ```bash
-for environment in core common serial "mpi-$PLATFORM_MPI_NAME"; do
-  TARGET_ENV="$CSE_BUILD_WORKSPACE/environments/$PLATFORM_COMPILER_NAME/$environment"
-
-  spack -e "$TARGET_ENV" spec -Il "<package>@<version>"
-  spack -e "$TARGET_ENV" concretize -f --reuse-deps -j 1
-  spack -e "$TARGET_ENV" spec -Il "<package>@<version>"
-done
+export LOCK_RECORD="$OVERLAY_RECORD/locks/${ENVIRONMENT//\//-}"
+set +e
+set +o pipefail
+(
+  set -e
+  set -o pipefail
+  test -d "$OVERLAY_RECORD"
+  test ! -e "$LOCK_RECORD"
+  install -d -m 2770 -g "$CSE_GROUP" "$LOCK_RECORD"
+  cp -p "$TARGET_ENV/spack.lock" "$LOCK_RECORD/spack.lock.before"
+  spack -e "$TARGET_ENV" find -c -d -L -N -v > "$LOCK_RECORD/graph.before.txt"
+)
+lock_record_status=$?
+printf 'Lock record status: %s (continue only if 0)\n' "$lock_record_status"
 ```
 
-For a lane-specific package, reconcretize only the locks containing that
-package. The corrected package and affected dependents may receive new hashes.
-Unchanged dependencies should remain reusable. Stop if the package hash does
-not change or if unrelated parts of the dependency graph change without an
-explanation.
+Choose the solve based on the reviewed dependency graph:
+
+- **Fresh roots with reusable dependencies:** the existing correction command
+  below is appropriate when the changed package is a root and reusing unchanged
+  dependencies is intended. It permits dependency reuse; it does not promise
+  that a corrected dependency or an ancestor containing it will be replaced.
+
+```bash
+spack -e "$TARGET_ENV" concretize -f --reuse-deps -j 1
+```
+
+- **A corrected dependency could otherwise be reused:** after impact review,
+  the alternative below disables installed/build-cache reuse for this one
+  environment's solve. It can change other nodes too, so compare the whole
+  graph and stop on unexplained changes. Do not run it automatically over all
+  eight environments. Explicit reuse exclusions for the changed dependency
+  and reusable ancestors are another option, but require a reviewed exclusion
+  set; do not assume excluding only the leaf removes every old dependent DAG.
+
+```bash
+spack -e "$TARGET_ENV" concretize -f --fresh -j 1
+```
+
+Run only the chosen recovery command and require success before continuing.
+`-f` permits replacing existing concrete entries. `--fresh` disables reuse for
+the solve; it does not mean that installation must compile from source. Neither
+plain `./cse-build concretize` (which keeps existing locks) nor `--fresh` without
+`-f` is a replacement procedure for an existing locked graph. Accepted releases
+remain outside this in-place recovery procedure.
+
+After the selected solve succeeds, record and inspect the complete result:
+
+```bash
+spack -e "$TARGET_ENV" find -c -d -L -N -v > "$LOCK_RECORD/graph.after.txt"
+spack -e "$TARGET_ENV" find -c -d -L -N -v "$PACKAGE_NAME"
+```
+
+Confirm the intended namespace, changed package/hash where build behavior
+changed, and the affected dependent hashes. Recipe path selection alone is not
+proof. Explain every unrelated change; if the defective package was reused,
+stop and revise the recovery instead of proceeding to installation. Repeat
+only for the other affected environments, then verify the complete set.
+Preserve old prefixes and binaries as evidence; do not delete shared packages
+to coerce the solver.
 
 ## 8. Verify and resume installation
 
-Exit the prepared login shell, verify the updated locks, and resume the
-affected surface from its approved compute allocation:
+In the prepared login shell, verify the updated locks:
 
 ```bash
-exit
-
 cd "$CSE_BUILD_WORKSPACE"
 ./cse-build login verify
+```
+
+After that succeeds, enter the approved compute allocation and return to the
+same absolute workspace path. Then run:
+
+```bash
+cd "<absolute-shared-workspace-path>"
 ./cse-build compute install --surface platform
 ```
 
 Use `--surface shared` instead when the correction belongs to the CSE-built
 GCC surface. Do not run two installers for the same surface concurrently.
+
+A new lock can require different source versions/resources/patches. On a
+restricted system, check source availability before building and arrange only
+any missing acquisitions; a recipe edit does not automatically create new
+source-mirror contents.
 
 After installation, rerun the minimal reproducer and the package-specific
 binary or runtime validation. Keep the old failed or incomplete prefix until
@@ -271,55 +509,56 @@ Review the staged diff, commit with the package and cause in the message, and
 push the reviewed branch. Future workspace renders must receive the same
 overlay without depending on changes retained only in an earlier workspace.
 
-## On-system agent task contract
+## Recipe correction request
 
-Use the following task text when assigning a package failure to an on-system
-agent:
+Use this tool-neutral request to obtain the candidate files. Supply the actual
+inputs or mark what is unavailable; a package name and a final error line alone
+are usually insufficient to scope a reliable correction.
 
 ```text
-Diagnose this Spack package failure inside the existing CSE trial workspace.
+Prepare a narrow CSE Spack package overlay for the recorded failure.
 
-Constraints:
+Inputs:
+- Spack version and commit; builtin spack-packages tag and resolved commit.
+- Exact package version, concrete spec/hash, compiler/version, variants,
+  dependencies, target, and failing environment.
+- Original build log, exact failing command, and relevant generated build files.
+- The actual pinned builtin package.py and referenced source/patch context.
+- Existing cse_trials package.py and local patches, if any.
 
-1. Do not modify Spack's builtin or cached package repository.
-2. Do not alter an accepted or published release.
-3. Preserve the original build log, concrete spec, hash, compiler, variants,
-   environment, and failing command.
-4. Create a deterministic command that reproduces the exact failure.
-5. Generate three to five falsifiable hypotheses only after obtaining that
-   reproducer. Test one variable at a time.
-6. Place any package correction under
-   $CSE_BUILD_WORKSPACE/package-repos/spack_repo/cse_trials/packages/<package-module>.
-7. Subclass the builtin API v2 package recipe. Do not copy the complete builtin
-   package.py.
-8. Scope the correction to the verified package versions, variants, compiler,
-   and architecture.
-9. Do not use global compiler or linker flags as the final solution unless
-   evidence from unrelated packages proves the behavior is compiler-wide.
-10. Confirm that cse_trials precedes builtin with spack repo list.
-11. Show the failing command before the correction and the same command passing
-    afterward.
-12. Reconcretize only affected, unaccepted locks with the trial's established
-    -f --reuse-deps process.
-13. Compare old and new hashes and verify that unrelated dependencies remain
-    reusable.
-14. Run ./cse-build login verify, install from the approved compute allocation,
-    and perform package-specific binary or runtime validation.
-15. Return package.py, patch files, test evidence, affected locks, hash changes,
-    and exact recovery commands for inclusion in Stack Content.
+Deliverables:
+1. Explain the demonstrated cause and whether it belongs in package source,
+   recipe/builder behavior, environment policy, or compiler metadata.
+2. Provide a complete updated local package.py, preserving existing fixes.
+   Normally subclass the pinned builtin class; do not copy an unrelated newer
+   complete recipe. Use the correct API v2 package module and class names.
+3. Provide every referenced local patch/support file, its exact filename, and
+   a diff against the current local files. For a new overlay, say so explicitly.
+4. Scope the correction to the evidenced versions, compiler/versions, variants,
+   and platform/target conditions. Explain any wider applicability.
+5. Cite the exact upstream revision if adapting an upstream fix. Do not invent
+   source checksums, versions, method names, or patch context.
+6. State which environment locks and dependents need review, how to prove the
+   selected recipe and resulting concrete identity, and how to detect unwanted
+   reuse of the old package.
+7. Give manual copy, source/patch checks, build, and package-specific validation
+   steps. Include a meaningful check that unaffected cases still behave as
+   intended.
 
-Stop and request more evidence instead of guessing when the actual compiler or
-linker diagnostic is absent.
+The receiving operator will review and place the files under:
+$CSE_BUILD_WORKSPACE/package-repos/spack_repo/cse_trials/packages/<module>/
+
+Do not edit the cached builtin repository, remove installed prefixes, alter an
+accepted release, or assume that changing package.py updates existing locks.
+If the evidence or pinned recipe is missing, identify the missing input instead
+of guessing a deployable correction. Distinguish proposed checks from checks
+actually run.
 ```
 
 ## References
 
-Spack's package repository documentation defines repository precedence,
-namespace-qualified packages, API v2 imports, and subclassing builtin recipes:
-
-<https://spack.readthedocs.io/en/latest/repositories.html>
-
-Spack's environment documentation describes forced reconcretization of an
-existing environment:
-
-<https://spack.readthedocs.io/en/latest/environments.html>
+- [Spack 1.2.2 repositories, precedence, API v2, and recipe inheritance](https://github.com/spack/spack/blob/v1.2.2/lib/spack/docs/repositories.rst)
+- [Spack 1.2.2 environment locks and concretization](https://github.com/spack/spack/blob/v1.2.2/lib/spack/docs/environments.rst)
+- [Spack 1.2.2 location command](https://github.com/spack/spack/blob/v1.2.2/lib/spack/spack/cmd/location.py)
+- [Spack 1.2.2 concretizer reuse options](https://github.com/spack/spack/blob/v1.2.2/lib/spack/spack/cmd/common/arguments.py)
+- [Pinned builtin package repository](https://github.com/spack/spack-packages/tree/v2026.06.0/repos/spack_repo/builtin)
