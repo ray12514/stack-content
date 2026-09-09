@@ -146,6 +146,15 @@ per-user `WORKDIR`, direct SSH reachability to Fran, and availability of
 Check them in the live shell and fill the explicit placeholders rather than
 deriving them from Blueback's platform or module facts.
 
+Use `WORKDIR` directly as the per-user path; do not append `$USER` to the
+transfer root. For a transfer already started under an older path, keep that
+exact existing path when restoring the exports. The Fran procedure now includes
+[interactive-shell safety and transfer diagnostics](../fran/runbook-notes.md#interactive-shell-setup-and-transfer-errors),
+explicit SSH transport and scp alternatives in step B/D, and
+[reconnect/resume instructions](../fran/runbook-notes.md#f-resume-after-a-disconnect-or-interrupted-command).
+Run one block at a time and require status 0 before continuing. A transfer
+failure must stop that step without exiting the interactive shell.
+
 ### Refresh `cse-build` without replacing the workspace
 
 Use this shortcut when Blueback already has a valid initialized workspace and

@@ -270,6 +270,44 @@ Throughout this procedure, `CONNECTED_*` paths and `CONNECTED_SSH` refer to
 Blueback. Fran is the restricted-network build system. Blueback supplies the
 network access for source acquisition; no Fran package build runs on Blueback.
 
+### Interactive-shell setup and transfer errors
+
+Run these blocks in Bash, one block at a time. Check the printed status before
+continuing: a nonzero status means stop at that step. The commands deliberately
+disable `errexit` and `pipefail` in the interactive shell; `set -e` and `pipefail` belong only inside
+the parenthesized step. A failed step stops its remaining commands and prints
+its status while leaving the terminal open. Do not paste the whole procedure
+at once or enable `set -e` in the parent shell.
+
+If you used an earlier version of these instructions, run this now, before
+retrying a transfer:
+
+```bash
+set +e
+set +o pipefail
+```
+
+The earlier instructions enabled `set -e` in the interactive shell. An rsync
+error could therefore exit that shell and close its terminal/session. That
+explains a shell exit, but does not by itself establish the cause of an entire
+remote desktop disconnect. A failing transfer still needs diagnosis from its
+error output; being outside `tmux` is not an rsync authentication error.
+
+`WORKDIR` is already the site's per-user absolute path. Do not append `$USER`.
+For an in-progress transfer made with the older instructions, keep its exact
+existing transfer roots, including any duplicated username component. Substitute
+those paths before deriving the archive paths. The setup blocks preserve an
+already-set transfer root and use the new default only when it is unset. When
+starting a different release, explicitly set its intended transfer root before
+running the setup block. Changing a default does not move existing files.
+Record both roots for reconnects.
+
+Use the same SSH host alias and connection options that work for `scp` on the
+same route and from the same initiating host. A host alias may already set the
+login user; add `user@` only if that connection requires it. The examples use
+`-e ssh` to explicitly select SSH. This does not supply credentials or enable a
+remote command that the account is not permitted to run.
+
 ### A. Package the locked workspace on Fran
 
 Source Fran's saved operator session, then create a private transfer area under
@@ -277,42 +315,57 @@ the site-provided work filesystem. `FRAN_TRANSFER_ROOT` is the one path that
 must be carried into the transfer commands on the other system.
 
 ```bash
+set +e
+set +o pipefail
 source "$HOME/STACK_TESTING/operator-sessions/fran/fran-trial-001/activate.sh"
-set -e
-set -o pipefail
+session_status=$?
+printf 'session activation status: %s (continue only if 0)\n' "$session_status"
+```
 
-cd "$BUILD_WORKSPACE"
-./cse-build login verify
+Continue only if activation succeeded. Then run:
 
-export FRAN_TRANSFER_ROOT="$WORKDIR/$USER/cse-fran-transfer/$TRIAL_RELEASE"
+```bash
+set +e
+set +o pipefail
+export FRAN_TRANSFER_ROOT="${FRAN_TRANSFER_ROOT:-$WORKDIR/cse-fran-transfer/$TRIAL_RELEASE}"
 export FRAN_WORKSPACE_ARCHIVE="$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz"
 export FRAN_WORKSPACE_DIGEST="$FRAN_WORKSPACE_ARCHIVE.sha256"
 export FRAN_LOCK_DIGESTS="$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-locks.sha256"
 
-umask 0077
-install -d -m 0700 "$FRAN_TRANSFER_ROOT"
 (
+  set -e
+  set -o pipefail
+  : "${WORKDIR:?WORKDIR must be set on Fran}"
   cd "$BUILD_WORKSPACE"
-  find environments -mindepth 3 -maxdepth 3 -type f -name spack.lock -print0 |
-    sort -z |
-    xargs -0 sha256sum > "$FRAN_LOCK_DIGESTS"
-)
-test "$(wc -l < "$FRAN_LOCK_DIGESTS" | tr -d '[:space:]')" -eq 8
-tar -C "$(dirname "$BUILD_WORKSPACE")" -czf "$FRAN_WORKSPACE_ARCHIVE" \
-  "$(basename "$BUILD_WORKSPACE")"
-(
-  cd "$FRAN_TRANSFER_ROOT"
-  sha256sum \
-    "$(basename "$FRAN_WORKSPACE_ARCHIVE")" \
-    "$(basename "$FRAN_LOCK_DIGESTS")" \
-    > "$(basename "$FRAN_WORKSPACE_DIGEST")"
-  sha256sum -c "$(basename "$FRAN_WORKSPACE_DIGEST")"
-)
+  ./cse-build login verify
 
-printf 'FRAN_TRANSFER_ROOT=%s\n' "$FRAN_TRANSFER_ROOT"
-printf 'FRAN_WORKSPACE_ARCHIVE=%s\n' "$FRAN_WORKSPACE_ARCHIVE"
-printf 'FRAN_WORKSPACE_DIGEST=%s\n' "$FRAN_WORKSPACE_DIGEST"
-printf 'FRAN_LOCK_DIGESTS=%s\n' "$FRAN_LOCK_DIGESTS"
+  umask 0077
+  install -d -m 0700 "$FRAN_TRANSFER_ROOT"
+  (
+    cd "$BUILD_WORKSPACE"
+    find environments -mindepth 3 -maxdepth 3 -type f -name spack.lock -print0 |
+      sort -z |
+      xargs -0 sha256sum > "$FRAN_LOCK_DIGESTS"
+  )
+  test "$(wc -l < "$FRAN_LOCK_DIGESTS" | tr -d '[:space:]')" -eq 8
+  tar -C "$(dirname "$BUILD_WORKSPACE")" -czf "$FRAN_WORKSPACE_ARCHIVE" \
+    "$(basename "$BUILD_WORKSPACE")"
+  (
+    cd "$FRAN_TRANSFER_ROOT"
+    sha256sum \
+      "$(basename "$FRAN_WORKSPACE_ARCHIVE")" \
+      "$(basename "$FRAN_LOCK_DIGESTS")" \
+      > "$(basename "$FRAN_WORKSPACE_DIGEST")"
+    sha256sum -c "$(basename "$FRAN_WORKSPACE_DIGEST")"
+  )
+
+  printf 'FRAN_TRANSFER_ROOT=%s\n' "$FRAN_TRANSFER_ROOT"
+  printf 'FRAN_WORKSPACE_ARCHIVE=%s\n' "$FRAN_WORKSPACE_ARCHIVE"
+  printf 'FRAN_WORKSPACE_DIGEST=%s\n' "$FRAN_WORKSPACE_DIGEST"
+  printf 'FRAN_LOCK_DIGESTS=%s\n' "$FRAN_LOCK_DIGESTS"
+)
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
 ```
 
 The archive contains the complete workspace so relative `include::` paths from
@@ -336,21 +389,25 @@ is temporary per-user work space; it is not a CSE tools root, package install
 tree, or build cache.
 
 ```bash
-: "${WORKDIR:?WORKDIR must be set on the connected system}"
-: "${USER:?USER must be set on the connected system}"
-set -e
-set -o pipefail
-
+set +e
+set +o pipefail
 export TRIAL_RELEASE="fran-trial-001"
-export CONNECTED_TRANSFER_ROOT="$WORKDIR/$USER/cse-fran-transfer/$TRIAL_RELEASE"
+export CONNECTED_TRANSFER_ROOT="${CONNECTED_TRANSFER_ROOT:-$WORKDIR/cse-fran-transfer/$TRIAL_RELEASE}"
 export CONNECTED_WORKSPACE_ARCHIVE="$CONNECTED_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz"
 export CONNECTED_WORKSPACE_DIGEST="$CONNECTED_WORKSPACE_ARCHIVE.sha256"
 export CONNECTED_LOCK_DIGESTS="$CONNECTED_TRANSFER_ROOT/${TRIAL_RELEASE}-locks.sha256"
 export FRAN_WORKSPACE="$CONNECTED_TRANSFER_ROOT/$TRIAL_RELEASE"
 
-umask 0077
-install -d -m 0700 "$CONNECTED_TRANSFER_ROOT"
-printf 'CONNECTED_TRANSFER_ROOT=%s\n' "$CONNECTED_TRANSFER_ROOT"
+(
+  set -e
+  set -o pipefail
+  : "${WORKDIR:?WORKDIR must be set on Blueback}"
+  umask 0077
+  install -d -m 0700 "$CONNECTED_TRANSFER_ROOT"
+  printf 'CONNECTED_TRANSFER_ROOT=%s\n' "$CONNECTED_TRANSFER_ROOT"
+)
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
 ```
 
 Use one transfer route, not both.
@@ -360,18 +417,93 @@ endpoint, paste the exact `FRAN_TRANSFER_ROOT` printed on Fran, and pull the
 workspace archive, its checksum file, and the lock-digest manifest:
 
 ```bash
-export FRAN_SSH="<fran-user>@<fran-login-host>"
+set +e
+set +o pipefail
+export FRAN_SSH="<fran-host-or-SSH-alias>"
 export FRAN_TRANSFER_ROOT="<exact-FRAN_TRANSFER_ROOT-printed-on-fran>"
 
-rsync -av --partial --progress \
+(
+  set -e
+  set -o pipefail
+  rsync -av --partial --progress -e ssh \
+    "$FRAN_SSH:$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz" \
+    "$CONNECTED_WORKSPACE_ARCHIVE"
+  rsync -av --partial --progress -e ssh \
+    "$FRAN_SSH:$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz.sha256" \
+    "$CONNECTED_WORKSPACE_DIGEST"
+  rsync -av --partial --progress -e ssh \
+    "$FRAN_SSH:$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-locks.sha256" \
+    "$CONNECTED_LOCK_DIGESTS"
+)
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
+```
+
+If rsync fails, stay on Blueback and diagnose that same pull before retrying.
+Run each diagnostic separately and read its status. These checks use the
+`FRAN_SSH`, `FRAN_TRANSFER_ROOT`, and receiving paths just set above:
+
+```bash
+set +e
+set +o pipefail
+command -v rsync
+printf 'local rsync lookup status: %s\n' "$?"
+ssh -v -T "$FRAN_SSH" 'command -v rsync && rsync --version'
+printf 'remote rsync check status: %s\n' "$?"
+```
+
+```bash
+set +e
+set +o pipefail
+rsync -avn --progress -e 'ssh -v' \
   "$FRAN_SSH:$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz" \
   "$CONNECTED_WORKSPACE_ARCHIVE"
-rsync -av --partial --progress \
-  "$FRAN_SSH:$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz.sha256" \
-  "$CONNECTED_WORKSPACE_DIGEST"
-rsync -av --partial --progress \
-  "$FRAN_SSH:$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-locks.sha256" \
-  "$CONNECTED_LOCK_DIGESTS"
+transfer_status=$?
+printf 'rsync dry-run status: %s\n' "$transfer_status"
+```
+
+The dry run transfers no file data. Interpret the error before changing options:
+
+| Result | Next action |
+|---|---|
+| Authentication, hostname, or connection error | Check the same host alias, identity, port, and any jump host used by the working scp command. A successful transfer in the opposite direction does not verify this route. |
+| Remote `rsync` is not found | Confirm its installed location on Fran. If available outside the remote command's PATH, use `--rsync-path=/confirmed/absolute/path/to/rsync`; otherwise use scp. |
+| Remote commands are refused while scp works | Use the permitted scp/SFTP route; rsync needs permission to execute its remote process. |
+| Protocol error or unexpected remote output | Inspect the first error and remote shell startup output; do not assume it is an authentication problem. |
+| File not found or permission denied on an archive/directory | Check the exact printed transfer root, archive filename, and access on that endpoint. |
+| Dry run succeeds | Retry the actual transfer block above and require status 0 before verification. |
+
+Rsync requires its executable at both ends of a remote-shell transfer. Modern
+OpenSSH scp uses SFTP by default, so a working scp connection does not prove
+that the remote rsync command is installed or allowed. The `-e` option selects
+the remote shell; `-e ssh` alone does not fix either issue. See the
+[rsync manual](https://download.samba.org/pub/rsync/rsync.1),
+[OpenSSH scp manual](https://man.openbsd.org/scp.1), and
+[OpenSSH ssh manual](https://man.openbsd.org/ssh.1).
+
+For the direct route, this scp alternative runs on Blueback and pulls the same
+three files from Fran. Use it instead of the rsync pull, then continue to the
+same checksum and unpack step below. A failed scp copy must be recopied; do not
+use an incomplete archive.
+
+```bash
+set +e
+set +o pipefail
+(
+  set -e
+  set -o pipefail
+  scp -p \
+    "$FRAN_SSH:$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz" \
+    "$CONNECTED_WORKSPACE_ARCHIVE"
+  scp -p \
+    "$FRAN_SSH:$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz.sha256" \
+    "$CONNECTED_WORKSPACE_DIGEST"
+  scp -p \
+    "$FRAN_SSH:$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-locks.sha256" \
+    "$CONNECTED_LOCK_DIGESTS"
+)
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
 ```
 
 When the connected system cannot reach Fran directly, run the following on an
@@ -380,43 +512,49 @@ and connected transfer roots printed by the earlier blocks, and keep the relay
 directory private:
 
 ```bash
+set +e
+set +o pipefail
 export TRIAL_RELEASE="fran-trial-001"
-export FRAN_SSH="<fran-user>@<fran-login-host>"
-export CONNECTED_SSH="<blueback-user>@<blueback-login-host>"
+export FRAN_SSH="<fran-host-or-SSH-alias>"
+export CONNECTED_SSH="<blueback-host-or-SSH-alias>"
 export FRAN_TRANSFER_ROOT="<exact-FRAN_TRANSFER_ROOT-printed-on-fran>"
 export CONNECTED_TRANSFER_ROOT="<exact-CONNECTED_TRANSFER_ROOT-printed-on-connected-system>"
 export RELAY_TRANSFER_ROOT="$HOME/cse-fran-relay/$TRIAL_RELEASE"
-set -e
-set -o pipefail
-
-umask 0077
-install -d -m 0700 "$RELAY_TRANSFER_ROOT"
-rsync -av --partial --progress \
-  "$FRAN_SSH:$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz" \
-  "$RELAY_TRANSFER_ROOT/"
-rsync -av --partial --progress \
-  "$FRAN_SSH:$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz.sha256" \
-  "$RELAY_TRANSFER_ROOT/"
-rsync -av --partial --progress \
-  "$FRAN_SSH:$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-locks.sha256" \
-  "$RELAY_TRANSFER_ROOT/"
 
 (
-  cd "$RELAY_TRANSFER_ROOT"
-  sha256sum -c "${TRIAL_RELEASE}-workspace.tar.gz.sha256"
-)
+  set -e
+  set -o pipefail
+  umask 0077
+  install -d -m 0700 "$RELAY_TRANSFER_ROOT"
+  rsync -av --partial --progress -e ssh \
+    "$FRAN_SSH:$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz" \
+    "$RELAY_TRANSFER_ROOT/"
+  rsync -av --partial --progress -e ssh \
+    "$FRAN_SSH:$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz.sha256" \
+    "$RELAY_TRANSFER_ROOT/"
+  rsync -av --partial --progress -e ssh \
+    "$FRAN_SSH:$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-locks.sha256" \
+    "$RELAY_TRANSFER_ROOT/"
 
-ssh "$CONNECTED_SSH" \
-  "umask 0077 && install -d -m 0700 '$CONNECTED_TRANSFER_ROOT'"
-rsync -av --partial --progress \
-  "$RELAY_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz" \
-  "$CONNECTED_SSH:$CONNECTED_TRANSFER_ROOT/"
-rsync -av --partial --progress \
-  "$RELAY_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz.sha256" \
-  "$CONNECTED_SSH:$CONNECTED_TRANSFER_ROOT/"
-rsync -av --partial --progress \
-  "$RELAY_TRANSFER_ROOT/${TRIAL_RELEASE}-locks.sha256" \
-  "$CONNECTED_SSH:$CONNECTED_TRANSFER_ROOT/"
+  (
+    cd "$RELAY_TRANSFER_ROOT"
+    sha256sum -c "${TRIAL_RELEASE}-workspace.tar.gz.sha256"
+  )
+
+  ssh "$CONNECTED_SSH" \
+    "umask 0077 && install -d -m 0700 '$CONNECTED_TRANSFER_ROOT'"
+  rsync -av --partial --progress -e ssh \
+    "$RELAY_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz" \
+    "$CONNECTED_SSH:$CONNECTED_TRANSFER_ROOT/"
+  rsync -av --partial --progress -e ssh \
+    "$RELAY_TRANSFER_ROOT/${TRIAL_RELEASE}-workspace.tar.gz.sha256" \
+    "$CONNECTED_SSH:$CONNECTED_TRANSFER_ROOT/"
+  rsync -av --partial --progress -e ssh \
+    "$RELAY_TRANSFER_ROOT/${TRIAL_RELEASE}-locks.sha256" \
+    "$CONNECTED_SSH:$CONNECTED_TRANSFER_ROOT/"
+)
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
 ```
 
 After either route, return to the connected system. Restore the variables from
@@ -424,31 +562,39 @@ the first block in this subsection if this is a new shell, then verify and
 unpack the transferred workspace:
 
 ```bash
-test -f "$CONNECTED_WORKSPACE_ARCHIVE"
-test -f "$CONNECTED_WORKSPACE_DIGEST"
-test -f "$CONNECTED_LOCK_DIGESTS"
-
+set +e
+set +o pipefail
 (
-  cd "$CONNECTED_TRANSFER_ROOT"
-  sha256sum -c "$(basename "$CONNECTED_WORKSPACE_DIGEST")"
-)
-test ! -e "$FRAN_WORKSPACE"
-tar -C "$CONNECTED_TRANSFER_ROOT" -xzf "$CONNECTED_WORKSPACE_ARCHIVE"
-test -f "$FRAN_WORKSPACE/workspace-manifest.yaml"
-test -x "$FRAN_WORKSPACE/cse-build"
-(
-  cd "$FRAN_WORKSPACE"
-  sha256sum -c "$CONNECTED_LOCK_DIGESTS"
-)
+  set -e
+  set -o pipefail
+  test -f "$CONNECTED_WORKSPACE_ARCHIVE"
+  test -f "$CONNECTED_WORKSPACE_DIGEST"
+  test -f "$CONNECTED_LOCK_DIGESTS"
 
-FRAN_LOCK_COUNT="$(
-  find "$FRAN_WORKSPACE/environments" \
-    -mindepth 3 -maxdepth 3 -type f -name spack.lock -print |
-    tee /dev/stderr |
-    wc -l |
-    tr -d '[:space:]'
-)"
-test "$FRAN_LOCK_COUNT" -eq 8
+  (
+    cd "$CONNECTED_TRANSFER_ROOT"
+    sha256sum -c "$(basename "$CONNECTED_WORKSPACE_DIGEST")"
+  )
+  test ! -e "$FRAN_WORKSPACE"
+  tar -C "$CONNECTED_TRANSFER_ROOT" -xzf "$CONNECTED_WORKSPACE_ARCHIVE"
+  test -f "$FRAN_WORKSPACE/workspace-manifest.yaml"
+  test -x "$FRAN_WORKSPACE/cse-build"
+  (
+    cd "$FRAN_WORKSPACE"
+    sha256sum -c "$CONNECTED_LOCK_DIGESTS"
+  )
+
+  FRAN_LOCK_COUNT="$(
+    find "$FRAN_WORKSPACE/environments" \
+      -mindepth 3 -maxdepth 3 -type f -name spack.lock -print |
+      tee /dev/stderr |
+      wc -l |
+      tr -d '[:space:]'
+  )"
+  test "$FRAN_LOCK_COUNT" -eq 8
+)
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
 ```
 
 ### C. Fetch the Fran sources on Blueback
@@ -458,6 +604,8 @@ used for the trial. A matching CPU is not required because this operation reads
 the locks and fetches source artifacts; it does not concretize or build them.
 
 ```bash
+set +e
+set +o pipefail
 export FRAN_SOURCE_BUNDLE="$CONNECTED_TRANSFER_ROOT/${TRIAL_RELEASE}-source-mirror"
 export CONNECTED_FETCH_STAGE="$CONNECTED_TRANSFER_ROOT/fetch-stage"
 export CONNECTED_FETCH_CACHE="$CONNECTED_TRANSFER_ROOT/download-cache"
@@ -467,16 +615,16 @@ export SPACK_TAG="v$SPACK_VERSION"
 export SPACK_COMMIT="3e19345b6e12f5ff1b874f4059622fc6a1fd804a"
 export CONNECTED_SPACK_ROOT="<absolute-Blueback-path-to-matching-pinned-spack-checkout>"
 
-mkdir -p \
-  "$FRAN_SOURCE_BUNDLE" \
-  "$CONNECTED_FETCH_STAGE" \
-  "$CONNECTED_FETCH_CACHE" \
-  "$CONNECTED_FETCH_MISC" \
-  "$CONNECTED_TRANSFER_ROOT/spack-user-cache"
-
 (
   set -e
   set -o pipefail
+  mkdir -p \
+    "$FRAN_SOURCE_BUNDLE" \
+    "$CONNECTED_FETCH_STAGE" \
+    "$CONNECTED_FETCH_CACHE" \
+    "$CONNECTED_FETCH_MISC" \
+    "$CONNECTED_TRANSFER_ROOT/spack-user-cache"
+
   export SPACK_ROOT="$CONNECTED_SPACK_ROOT"
   export SPACK_USER_CACHE_PATH="$CONNECTED_TRANSFER_ROOT/spack-user-cache"
   export SPACK_DISABLE_LOCAL_CONFIG=true
@@ -509,6 +657,8 @@ mkdir -p \
   done
   test "$FRAN_ENVIRONMENT_COUNT" -eq 8
 )
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
 ```
 
 The subshell keeps the connected host's previous Spack activation, user cache,
@@ -526,6 +676,8 @@ sources for every copied Fran lockfile. This block does not concretize or
 install packages:
 
 ```bash
+set +e
+set +o pipefail
 (
   set -e
   set -o pipefail
@@ -550,6 +702,8 @@ install packages:
   test "$FRAN_ENVIRONMENT_COUNT" -eq 8
   sha256sum -c "$CONNECTED_LOCK_DIGESTS"
 )
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
 ```
 
 The command may be rerun against the same bundle; Spack retains existing
@@ -562,20 +716,28 @@ of those sources has been explicitly approved.
 On Blueback, package the completed source bundle and record its digest:
 
 ```bash
+set +e
+set +o pipefail
 export FRAN_BUNDLE_ARCHIVE="$CONNECTED_TRANSFER_ROOT/${TRIAL_RELEASE}-source-mirror.tar"
 export FRAN_BUNDLE_DIGEST="$FRAN_BUNDLE_ARCHIVE.sha256"
 
-tar -C "$CONNECTED_TRANSFER_ROOT" -cf "$FRAN_BUNDLE_ARCHIVE" \
-  "$(basename "$FRAN_SOURCE_BUNDLE")"
 (
-  cd "$CONNECTED_TRANSFER_ROOT"
-  sha256sum "$(basename "$FRAN_BUNDLE_ARCHIVE")" \
-    > "$(basename "$FRAN_BUNDLE_DIGEST")"
-  sha256sum -c "$(basename "$FRAN_BUNDLE_DIGEST")"
-)
+  set -e
+  set -o pipefail
+  tar -C "$CONNECTED_TRANSFER_ROOT" -cf "$FRAN_BUNDLE_ARCHIVE" \
+    "$(basename "$FRAN_SOURCE_BUNDLE")"
+  (
+    cd "$CONNECTED_TRANSFER_ROOT"
+    sha256sum "$(basename "$FRAN_BUNDLE_ARCHIVE")" \
+      > "$(basename "$FRAN_BUNDLE_DIGEST")"
+    sha256sum -c "$(basename "$FRAN_BUNDLE_DIGEST")"
+  )
 
-printf 'FRAN_BUNDLE_ARCHIVE=%s\n' "$FRAN_BUNDLE_ARCHIVE"
-printf 'FRAN_BUNDLE_DIGEST=%s\n' "$FRAN_BUNDLE_DIGEST"
+  printf 'FRAN_BUNDLE_ARCHIVE=%s\n' "$FRAN_BUNDLE_ARCHIVE"
+  printf 'FRAN_BUNDLE_DIGEST=%s\n' "$FRAN_BUNDLE_DIGEST"
+)
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
 ```
 
 Source archives are normally already compressed, so the returned bundle uses
@@ -585,15 +747,39 @@ For a direct connection, stay on the connected system, restore the Fran
 endpoint and exact Fran transfer root if necessary, and push both files:
 
 ```bash
-export FRAN_SSH="<fran-user>@<fran-login-host>"
+set +e
+set +o pipefail
+export FRAN_SSH="<fran-host-or-SSH-alias>"
 export FRAN_TRANSFER_ROOT="<exact-FRAN_TRANSFER_ROOT-printed-on-fran>"
 
-rsync -av --partial --progress \
-  "$FRAN_BUNDLE_ARCHIVE" \
-  "$FRAN_SSH:$FRAN_TRANSFER_ROOT/"
-rsync -av --partial --progress \
-  "$FRAN_BUNDLE_DIGEST" \
-  "$FRAN_SSH:$FRAN_TRANSFER_ROOT/"
+(
+  set -e
+  set -o pipefail
+  rsync -av --partial --progress -e ssh \
+    "$FRAN_BUNDLE_ARCHIVE" \
+    "$FRAN_SSH:$FRAN_TRANSFER_ROOT/"
+  rsync -av --partial --progress -e ssh \
+    "$FRAN_BUNDLE_DIGEST" \
+    "$FRAN_SSH:$FRAN_TRANSFER_ROOT/"
+)
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
+```
+
+For the same direct return using scp, run this on Blueback instead of the
+rsync push, then verify the returned digest on Fran in step E:
+
+```bash
+set +e
+set +o pipefail
+(
+  set -e
+  set -o pipefail
+  scp -p "$FRAN_BUNDLE_ARCHIVE" "$FRAN_SSH:$FRAN_TRANSFER_ROOT/"
+  scp -p "$FRAN_BUNDLE_DIGEST" "$FRAN_SSH:$FRAN_TRANSFER_ROOT/"
+)
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
 ```
 
 When a relay is required, run the following on the approved relay workstation.
@@ -601,35 +787,41 @@ It pulls the finished bundle from the connected system, verifies it, and then
 pushes the same two files to Fran:
 
 ```bash
+set +e
+set +o pipefail
 export TRIAL_RELEASE="fran-trial-001"
-export CONNECTED_SSH="<blueback-user>@<blueback-login-host>"
-export FRAN_SSH="<fran-user>@<fran-login-host>"
+export CONNECTED_SSH="<blueback-host-or-SSH-alias>"
+export FRAN_SSH="<fran-host-or-SSH-alias>"
 export CONNECTED_TRANSFER_ROOT="<exact-CONNECTED_TRANSFER_ROOT-printed-on-connected-system>"
 export FRAN_TRANSFER_ROOT="<exact-FRAN_TRANSFER_ROOT-printed-on-fran>"
 export RELAY_TRANSFER_ROOT="$HOME/cse-fran-relay/$TRIAL_RELEASE"
-set -e
-set -o pipefail
-
-umask 0077
-install -d -m 0700 "$RELAY_TRANSFER_ROOT"
-rsync -av --partial --progress \
-  "$CONNECTED_SSH:$CONNECTED_TRANSFER_ROOT/${TRIAL_RELEASE}-source-mirror.tar" \
-  "$RELAY_TRANSFER_ROOT/"
-rsync -av --partial --progress \
-  "$CONNECTED_SSH:$CONNECTED_TRANSFER_ROOT/${TRIAL_RELEASE}-source-mirror.tar.sha256" \
-  "$RELAY_TRANSFER_ROOT/"
 
 (
-  cd "$RELAY_TRANSFER_ROOT"
-  sha256sum -c "${TRIAL_RELEASE}-source-mirror.tar.sha256"
-)
+  set -e
+  set -o pipefail
+  umask 0077
+  install -d -m 0700 "$RELAY_TRANSFER_ROOT"
+  rsync -av --partial --progress -e ssh \
+    "$CONNECTED_SSH:$CONNECTED_TRANSFER_ROOT/${TRIAL_RELEASE}-source-mirror.tar" \
+    "$RELAY_TRANSFER_ROOT/"
+  rsync -av --partial --progress -e ssh \
+    "$CONNECTED_SSH:$CONNECTED_TRANSFER_ROOT/${TRIAL_RELEASE}-source-mirror.tar.sha256" \
+    "$RELAY_TRANSFER_ROOT/"
 
-rsync -av --partial --progress \
-  "$RELAY_TRANSFER_ROOT/${TRIAL_RELEASE}-source-mirror.tar" \
-  "$FRAN_SSH:$FRAN_TRANSFER_ROOT/"
-rsync -av --partial --progress \
-  "$RELAY_TRANSFER_ROOT/${TRIAL_RELEASE}-source-mirror.tar.sha256" \
-  "$FRAN_SSH:$FRAN_TRANSFER_ROOT/"
+  (
+    cd "$RELAY_TRANSFER_ROOT"
+    sha256sum -c "${TRIAL_RELEASE}-source-mirror.tar.sha256"
+  )
+
+  rsync -av --partial --progress -e ssh \
+    "$RELAY_TRANSFER_ROOT/${TRIAL_RELEASE}-source-mirror.tar" \
+    "$FRAN_SSH:$FRAN_TRANSFER_ROOT/"
+  rsync -av --partial --progress -e ssh \
+    "$RELAY_TRANSFER_ROOT/${TRIAL_RELEASE}-source-mirror.tar.sha256" \
+    "$FRAN_SSH:$FRAN_TRANSFER_ROOT/"
+)
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
 ```
 
 If `rsync` is unavailable on one approved transfer leg, use `scp -p` for that
@@ -643,66 +835,87 @@ Back on Fran, source the saved operator session again and verify the returned
 bundle before extracting it:
 
 ```bash
+set +e
+set +o pipefail
 source "$HOME/STACK_TESTING/operator-sessions/fran/fran-trial-001/activate.sh"
-set -e
-set -o pipefail
+session_status=$?
+printf 'session activation status: %s (continue only if 0)\n' "$session_status"
+```
 
-export FRAN_TRANSFER_ROOT="$WORKDIR/$USER/cse-fran-transfer/$TRIAL_RELEASE"
+Continue only if activation succeeded. Then run:
+
+```bash
+set +e
+set +o pipefail
+export FRAN_TRANSFER_ROOT="${FRAN_TRANSFER_ROOT:-$WORKDIR/cse-fran-transfer/$TRIAL_RELEASE}"
 export FRAN_BUNDLE_ARCHIVE="$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-source-mirror.tar"
 export FRAN_BUNDLE_DIGEST="$FRAN_BUNDLE_ARCHIVE.sha256"
 export FRAN_SOURCE_BUNDLE="$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-source-mirror"
 
 (
-  cd "$FRAN_TRANSFER_ROOT"
-  sha256sum -c "$(basename "$FRAN_BUNDLE_DIGEST")"
+  set -e
+  set -o pipefail
+  (
+    cd "$FRAN_TRANSFER_ROOT"
+    sha256sum -c "$(basename "$FRAN_BUNDLE_DIGEST")"
+  )
+  test ! -e "$FRAN_SOURCE_BUNDLE"
+  tar -C "$FRAN_TRANSFER_ROOT" -xf "$FRAN_BUNDLE_ARCHIVE"
+  test -d "$FRAN_SOURCE_BUNDLE"
+  (
+    cd "$BUILD_WORKSPACE"
+    sha256sum -c "$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-locks.sha256"
+  )
 )
-test ! -e "$FRAN_SOURCE_BUNDLE"
-tar -C "$FRAN_TRANSFER_ROOT" -xf "$FRAN_BUNDLE_ARCHIVE"
-test -d "$FRAN_SOURCE_BUNDLE"
-(
-  cd "$BUILD_WORKSPACE"
-  sha256sum -c "$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-locks.sha256"
-)
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
 ```
 
 Read the source-cache destination through an actual generated environment and
 confirm that it is the restricted cache selected for this operator session.
-Do not type or infer the destination path independently:
-
-```bash
-verify_spack_tool_root
-source "$SPACK_ROOT/share/spack/setup-env.sh"
-source "$BUILD_WORKSPACE/env/select-build-context.sh"
-cse_select_build_context login
-source "$BUILD_WORKSPACE/env/setup-build-env.sh"
-
-export FRAN_REFERENCE_ENV="$BUILD_WORKSPACE/environments/$SHARED_COMPILER_NAME/core"
-export FRAN_SOURCE_CACHE="$(
-  spack -e "$FRAN_REFERENCE_ENV" python -c \
-    'import spack.config; print(spack.config.get("config:source_cache"))'
-)"
-
-test -n "$FRAN_SOURCE_CACHE"
-test "$FRAN_SOURCE_CACHE" = "$CSE_RESTRICTED_ROOT/cache/source"
-printf 'FRAN_SOURCE_CACHE=%s\n' "$FRAN_SOURCE_CACHE"
-```
+Do not type or infer the destination path independently. Cache discovery and
+the merge run together so a failed check stops before any copy.
 
 Merge only the source mirror's contents into that generated cache while
 preserving the CSE group/setgid policy. Spack's mirror and `source_cache` use
 the same cache-relative archive layout, so the trailing slashes below are
 intentional. This is an additive merge without `--delete`: existing cache
 entries remain in place, and the generated `source_cache` setting is never
-edited or temporarily replaced.
+edited or temporarily replaced. This rsync is local to Fran; it does not use SSH.
 
 ```bash
-umask 0007
-install -d -m 2770 -g "$CSE_GROUP" "$FRAN_SOURCE_CACHE"
-rsync -a --no-owner --no-group --checksum \
-  "$FRAN_SOURCE_BUNDLE/" "$FRAN_SOURCE_CACHE/"
+set +e
+set +o pipefail
+(
+  set -e
+  set -o pipefail
+  verify_spack_tool_root
+  source "$SPACK_ROOT/share/spack/setup-env.sh"
+  source "$BUILD_WORKSPACE/env/select-build-context.sh"
+  cse_select_build_context login
+  source "$BUILD_WORKSPACE/env/setup-build-env.sh"
 
-chgrp -R "$CSE_GROUP" "$FRAN_SOURCE_CACHE"
-find "$FRAN_SOURCE_CACHE" -type d -exec chmod g+rws,o-rwx {} +
-find "$FRAN_SOURCE_CACHE" -type f -exec chmod g+rw,o-rwx {} +
+  export FRAN_REFERENCE_ENV="$BUILD_WORKSPACE/environments/$SHARED_COMPILER_NAME/core"
+  FRAN_SOURCE_CACHE="$(
+    spack -e "$FRAN_REFERENCE_ENV" python -c \
+      'import spack.config; print(spack.config.get("config:source_cache"))'
+  )"
+
+  test -n "$FRAN_SOURCE_CACHE"
+  test "$FRAN_SOURCE_CACHE" = "$CSE_RESTRICTED_ROOT/cache/source"
+  printf 'FRAN_SOURCE_CACHE=%s\n' "$FRAN_SOURCE_CACHE"
+
+  umask 0007
+  install -d -m 2770 -g "$CSE_GROUP" "$FRAN_SOURCE_CACHE"
+  rsync -a --no-owner --no-group --checksum \
+    "$FRAN_SOURCE_BUNDLE/" "$FRAN_SOURCE_CACHE/"
+
+  chgrp -R "$CSE_GROUP" "$FRAN_SOURCE_CACHE"
+  find "$FRAN_SOURCE_CACHE" -type d -exec chmod g+rws,o-rwx {} +
+  find "$FRAN_SOURCE_CACHE" -type f -exec chmod g+rw,o-rwx {} +
+)
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
 ```
 
 Finally, use the original Fran workspace and its existing lockfiles to fetch
@@ -715,10 +928,18 @@ success is therefore not proof that the cache is complete; retain the connected
 gate and review the destination fetch transcript for unexpected upstream use.
 
 ```bash
-cd "$BUILD_WORKSPACE"
-./cse-build login verify
-./cse-build login fetch
-sha256sum -c "$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-locks.sha256"
+set +e
+set +o pipefail
+(
+  set -e
+  set -o pipefail
+  cd "$BUILD_WORKSPACE"
+  ./cse-build login verify
+  ./cse-build login fetch
+  sha256sum -c "$FRAN_TRANSFER_ROOT/${TRIAL_RELEASE}-locks.sha256"
+)
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
 ```
 
 Gate: `./cse-build login fetch` succeeds for all eight original Fran
@@ -729,6 +950,95 @@ The source bundle is not the signed CSE binary build cache and does not change
 any `spack.lock`. If the Spack runtime itself must be bootstrapped without
 network access, prepare a separate Spack bootstrap mirror; do not mix bootstrap
 artifacts into this source bundle.
+
+### F. Resume after a disconnect or interrupted command
+
+A new shell loses exports, shell functions, the current directory, and Spack
+activation. It does not require regenerating files that remain on disk. Restore
+the same release and paths first. A lost connection also does not prove that
+the old command stopped: check for an existing transfer/fetch process or
+reattach to its session before starting another writer on the same bundle.
+
+| Resume on | Restore in the new Bash shell |
+|---|---|
+| Fran | Run `set +e` and `set +o pipefail`, then source the existing `activate.sh` from step A/E and require activation status 0. Restore the exports for the needed step, using the exact existing `FRAN_TRANSFER_ROOT`. The saved session restores `BUILD_WORKSPACE` and the Fran build settings. |
+| Blueback | Rerun the first setup block in B with the existing `CONNECTED_TRANSFER_ROOT`; it restores the release, receiving paths, and copied-workspace path. Restore `FRAN_SSH` and the exact Fran transfer root for a direct transfer. |
+| Blueback, before resuming source acquisition | After B's setup, rerun C's first block with the same `CONNECTED_SPACK_ROOT`. It restores the mirror/cache paths and checks the pinned runtime and effective repositories. Review those checks, then rerun C's fetch block. |
+| Blueback, only returning a completed mirror archive | After B's setup, restore the two `FRAN_BUNDLE_ARCHIVE`/`FRAN_BUNDLE_DIGEST` exports at the start of D and the transfer endpoint exports. Skip D's tar creation when the existing archive and digest are complete and valid. |
+| Approved relay | Restore the exports in the selected B or D relay block, including both exact remote transfer roots and the existing local relay directory. Retry only the needed transfer leg, retaining the receiving checksum check. |
+
+On Blueback, source acquisition uses C's isolated Spack activation. Do not
+source Fran's operator session there or substitute Blueback build settings for
+the copied Fran locks. Temporary `SPACK_ROOT`, cache overrides, and
+`SPACK_DISABLE_LOCAL_CONFIG` settings are reapplied inside C's subshell each
+run. Step E similarly restores its Fran cache-selection settings inside the
+merge block, so they do not need to persist between shells.
+
+Resume from the last completed, verified step:
+
+| Interrupted operation | Repeat | Keep; do not regenerate for a disconnect |
+|---|---|---|
+| Workspace packaging on Fran (A) | If tar/checksum generation did not finish, repeat A only after confirming the original workspace is unchanged and no writer is active. | Original manifests, recipes, and eight lockfiles. A completed archive and matching digests can be reused. |
+| Any rsync transfer (B/D) | Repeat that same command against the same unchanged archive. `--partial` retains interrupted data for reuse; require completion and the receiving SHA-256 check. | The source archive and digest. Do not re-tar solely to retry a transfer. |
+| Any scp transfer (B/D) | Recopy the affected file, then run the receiving SHA-256 check. | The completed source archive and digest. |
+| Workspace extraction on Blueback (B) | If extraction finished, rerun the checks below and skip tar. If interrupted or uncertain, set aside the temporary extracted directory and repeat B's checksum/unpack block. | Original Fran workspace and verified workspace archive/digests. |
+| Source fetch on Blueback (C) | Rerun C's setup/repository checks, then its eight-environment fetch loop against the same mirror. Review every failed/skipped fetch. | Copied workspace, locks, existing source mirror, download cache, and Spack user cache. Do not concretize again. |
+| Source-mirror packaging on Blueback (D) | Recreate the return tar and its digest only if packaging was interrupted or the mirror changed after packaging. Stop transfers first. | An unchanged, completed return archive/digest pair can be verified and retransferred directly. |
+| Source-mirror extraction on Fran (E) | If extraction was interrupted or its completion is uncertain, set aside only the extracted source-mirror directory, then repeat E's checksum/extraction block. | The verified return archive and original Fran workspace. |
+| Merge into Fran's source cache (E) | Rerun the complete cache-discovery/merge block, including group/permission normalization. | Existing shared cache entries; the merge is additive. |
+| Final Fran fetch (E) | Rerun the final verify/fetch/lock-digest block. | The original locks and populated source cache. |
+
+To recheck a previously completed Blueback extraction after restoring B's
+exports, run:
+
+```bash
+set +e
+set +o pipefail
+(
+  set -e
+  set -o pipefail
+  cd "$CONNECTED_TRANSFER_ROOT"
+  sha256sum -c "$(basename "$CONNECTED_WORKSPACE_DIGEST")"
+  test -f "$FRAN_WORKSPACE/workspace-manifest.yaml"
+  test -x "$FRAN_WORKSPACE/cse-build"
+  cd "$FRAN_WORKSPACE"
+  sha256sum -c "$CONNECTED_LOCK_DIGESTS"
+  test "$(find environments -mindepth 3 -maxdepth 3 -type f -name spack.lock |
+    wc -l | tr -d '[:space:]')" -eq 8
+)
+transfer_status=$?
+printf 'step status: %s (continue only if 0)\n' "$transfer_status"
+```
+
+These checks validate the archive and lockfiles; they do not prove an
+interrupted extraction wrote every other file. If extraction completion is
+uncertain, preserve that temporary directory under a new name before repeating
+the corresponding B/E unpack block. Run only the command for the current host,
+and require status 0. Never apply these moves to `BUILD_WORKSPACE` or the shared
+source cache:
+
+```bash
+# Blueback only: set aside an incomplete temporary workspace extraction.
+set +e
+set +o pipefail
+mv -T -- "$FRAN_WORKSPACE" "$FRAN_WORKSPACE.incomplete.$(date +%Y%m%dT%H%M%S)"
+printf 'set-aside status: %s (continue only if 0)\n' "$?"
+```
+
+```bash
+# Fran only: set aside an incomplete source-mirror extraction.
+set +e
+set +o pipefail
+mv -T -- "$FRAN_SOURCE_BUNDLE" "$FRAN_SOURCE_BUNDLE.incomplete.$(date +%Y%m%dT%H%M%S)"
+printf 'set-aside status: %s (continue only if 0)\n' "$?"
+```
+
+There is no need to regenerate the operator session, probes, profile, static
+catalog, build values, rendered workspace, or `spack.lock` files solely because
+a shell or connection was lost. Those belong to changes in build inputs, not
+transfer recovery. An optional site-supported `tmux` session can retain a
+long-running fetch across a client disconnect, but it does not fix SSH access,
+a missing rsync executable, or a host/session being terminated.
 
 ## Phase Zero restricted module review after both surfaces finish
 
