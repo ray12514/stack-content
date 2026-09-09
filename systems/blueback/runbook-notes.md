@@ -133,6 +133,19 @@ installation has started, preserve that release and create a new one.
 
 ## Restricted build and cache gates
 
+### Connected source-acquisition role
+
+Blueback is the designated connected acquisition system for the Fran locked
+source-mirror round trip. Follow the complete
+[Fran transfer procedure](../fran/runbook-notes.md#restricted-network-source-transfer-through-blueback);
+Blueback is the connected system
+in those commands, subject to the site's approval for each transfer route. This
+role is recorded, but the Blueback login endpoint,
+per-user `WORKDIR`, direct SSH reachability to Fran, and availability of
+`rsync` on each transfer leg have not been captured as durable system facts.
+Check them in the live shell and fill the explicit placeholders rather than
+deriving them from Blueback's platform or module facts.
+
 ### Refresh `cse-build` without replacing the workspace
 
 Use this shortcut when Blueback already has a valid initialized workspace and
