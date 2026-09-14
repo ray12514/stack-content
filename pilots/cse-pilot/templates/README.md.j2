@@ -169,6 +169,11 @@ The trial is CPU-only. No GPU environment is rendered.
 {% if values.workspace.role == 'build' %}
 ## Resume handoff
 
+For a single failing package, follow the local
+[offline package fix quickstart](PACKAGE-OVERLAY-QUICKSTART.md). It identifies
+the original recipe and active overlay, runs a direct Spack retry, and packages
+the validated files for transfer to another workspace without Git.
+
 This complete workspace may be handed to another CSE builder. The receiving
 builder does not need the tools that generated it and does not reconstruct the
 render inputs. `cse-build` is executable Bash, so a builder whose login shell is

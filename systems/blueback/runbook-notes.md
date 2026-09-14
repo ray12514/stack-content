@@ -671,6 +671,25 @@ shared store. The workspace-template automation is tracked separately; until
 it is released and the workspace is regenerated, repeat this cleanup in each
 new prepared shell that inherited the wrong marker.
 
+### CCE netlib-lapack BLAS link failure (2026-09-14, evidence pending)
+
+The supplied photograph shows CMake configuration/generation completing and
+then a `multiple definition` diagnostic while linking the BLAS shared library;
+the final package line appears to identify `netlib-lapack@3.12.1`. The exact
+duplicate symbol, complete link command, compiler version, and concrete hash
+have not yet been captured as text. No cause, overlay, or successful CCE retry
+has been established for this report. The GNU `-sinteger64` recovery above is
+for a different symptom and is not a correction for this photograph.
+
+Use the [offline package fix quickstart](../../pilots/cse-pilot/templates/PACKAGE-OVERLAY-QUICKSTART.md)
+with `PACKAGE_NAME=netlib-lapack`, `PACKAGE_MODULE=netlib_lapack`, and the actual
+failed CCE environment. The roster places the standalone LAPACK roots in
+`$PLATFORM_COMPILER_NAME/common`; review MPI locks containing LAPACK as a
+dependency too. Capture the full `spack-build-out.txt`, original builtin recipe,
+any existing overlay, `CMakeCache.txt`, and the failing BLAS `link.txt` before
+preparing a candidate. The guide supplies the offline copy and direct Spack
+retry procedure; a deployable correction still requires that failure evidence.
+
 ### GNU FFTW cannot link `MPI_Init` with Cray MPICH
 
 This recovery applies when the GCC MPI environment selects the reviewed

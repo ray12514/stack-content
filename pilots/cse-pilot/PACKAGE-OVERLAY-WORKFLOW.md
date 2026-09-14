@@ -1,5 +1,47 @@
 # Manual CSE package overlay workflow
 
+Start with the [offline package fix quickstart](templates/PACKAGE-OVERLAY-QUICKSTART.md)
+for workspace navigation, a reusable agent handoff, a direct one-package Spack
+retry, and archive/copy transfer between systems without Git. That guide is
+also included in generated workspaces as `PACKAGE-OVERLAY-QUICKSTART.md`.
+This document provides the detailed recipe, lock, and release background.
+
+## Bring the guide into an existing workspace
+
+The operational guide lives with the recipes in Stack Content so generated
+workspaces can carry it offline. Stack Planning's common runbook points here
+and remains the source for the overall trial/release process.
+
+For a healthy existing workspace, copy just the guide. In a machine with an
+existing authenticated Stack Content checkout, fetch the documentation branch
+and extract the file without switching branches or updating workspace controls:
+
+```bash
+export CONTENT="<absolute-existing-stack-content-checkout>"
+export BUILD_WORKSPACE="<absolute-existing-trial-workspace>"
+git -C "$CONTENT" fetch origin codex/simplified-render-plan
+git -C "$CONTENT" show FETCH_HEAD:pilots/cse-pilot/templates/PACKAGE-OVERLAY-QUICKSTART.md \
+  > "$CONTENT/PACKAGE-OVERLAY-QUICKSTART.download.md"
+less "$CONTENT/PACKAGE-OVERLAY-QUICKSTART.download.md"
+# After a successful fetch/show, copy the reviewed documentation file:
+cp "$CONTENT/PACKAGE-OVERLAY-QUICKSTART.download.md" \
+  "$BUILD_WORKSPACE/PACKAGE-OVERLAY-QUICKSTART.md"
+```
+
+Use the branch containing the reviewed documentation; the commands above name
+the current trial documentation branch. If no checkout exists, clone that
+branch from the approved Stack Content origin first. Private GitHub repos work
+with authenticated HTTPS or SSH; public visibility is not required for Git
+access. On a disconnected target, copy this Markdown file over the approved
+transfer route instead. Stack Planning is optional for this package-fix loop.
+
+Only the Markdown file is copied into the workspace. No recipe, environment,
+lock, compiler setting, or installed package is changed by this delivery step.
+The quickstart distinguishes manual edit/copy/retry commands from existing
+optional shell and control-refresh helpers.
+
+## Detailed workflow
+
 This procedure explains how to obtain a corrected package recipe, review its
 scope, place its files manually in an existing CSE workspace, and validate the
 result. The files may be prepared by any authoring method; the installation and
@@ -58,7 +100,8 @@ The manual sequence is: capture the failure and exact inputs; prepare a complete
 candidate against the pinned builtin and current local recipe; review its scope;
 back up and copy the reviewed files; confirm recipe selection; recover only the
 affected candidate locks and check source availability; build and validate; then
-commit the correction to the canonical template repository. The sections below
+retain a transferable correction and copy it back to the canonical template
+repository. A Git commit/push can follow later. The sections below
 provide the commands and a reusable request for obtaining the candidate files.
 
 ## Release boundary
@@ -81,7 +124,8 @@ An overlay is complete only when all of the following are retained together:
 5. The successful rerun of the original failing command.
 6. Package-specific binary or runtime validation.
 7. The recovery commands used on the system.
-8. The canonical Stack Content commit containing the correction.
+8. The complete transfer archive, checksum, and change record; the matching
+   canonical Stack Content files, and their commit when Git integration resumes.
 
 ## 1. Capture the failure
 
@@ -455,6 +499,12 @@ to coerce the solver.
 
 ## 8. Verify and resume installation
 
+For a focused manual retry, use
+[quickstart Step 6](templates/PACKAGE-OVERLAY-QUICKSTART.md#6-retry-only-this-package-directly-with-spack):
+enter the prepared compute shell, then run `spack -e ... install --only-concrete`
+with the corrected concrete hash. The commands below are the alternative for
+resuming installation of the full compiler surface.
+
 In the prepared login shell, verify the updated locks:
 
 ```bash
@@ -485,6 +535,13 @@ prefix manually merely because its replacement installed successfully.
 
 ## 9. Return the correction to Stack Content
 
+For offline workspace-to-workspace transfer, follow
+[quickstart Step 7](templates/PACKAGE-OVERLAY-QUICKSTART.md#7-carry-the-overlay-to-another-workspace-without-git).
+It packages the validated deployed recipe and its support files with a change
+record and checksum, then repeats selection, lock recovery, and validation in
+the destination workspace. Git/GitLab is not required. Do not transfer a source
+system's lockfiles or compiler configuration as part of a portable recipe fix.
+
 The workspace overlay is not the canonical source. Copy the validated package
 directory into the matching Stack Content tree:
 
@@ -505,9 +562,11 @@ Run the pilot test suite before committing:
 python3 -m unittest discover -s pilots/cse-pilot/tests
 ```
 
-Review the staged diff, commit with the package and cause in the message, and
-push the reviewed branch. Future workspace renders must receive the same
-overlay without depending on changes retained only in an earlier workspace.
+When ready to integrate through Git, review the staged diff, commit with the
+package and cause in the message, and push the reviewed branch. Retain the
+archive and change record while that step is deferred. Future workspace renders
+must receive the same overlay without depending on changes retained only in an
+earlier workspace.
 
 ## Recipe correction request
 
@@ -520,6 +579,9 @@ Prepare a narrow CSE Spack package overlay for the recorded failure.
 
 Inputs:
 - Spack version and commit; builtin spack-packages tag and resolved commit.
+- Absolute generated workspace, affected environment, builtin recipe, and
+  deployed overlay package-directory paths; how the prepared shell was entered.
+- Workspace setup/handoff files and the local offline inputs available.
 - Exact package version, concrete spec/hash, compiler/version, variants,
   dependencies, target, and failing environment.
 - Original build log, exact failing command, and relevant generated build files.

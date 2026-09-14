@@ -323,6 +323,12 @@ module directory to the static and shared high-level Fortran targets. The
 workspace verifier rejects a missing, stale, or broadened overlay before
 concretization or installation.
 
+Start with the [offline package fix quickstart](templates/PACKAGE-OVERLAY-QUICKSTART.md)
+to locate the pinned original recipe and deployed overlay, retry one package
+with direct Spack commands, and transfer its files to another workspace without
+Git. The guide is copied into generated workspaces for offline use; an existing
+workspace can receive this Markdown file directly.
+
 Use [CSE trial package overlay workflow](PACKAGE-OVERLAY-WORKFLOW.md) to
 diagnose a new package failure, develop and validate a correction inside an
 existing workspace, reconcretize affected unaccepted locks, and return the

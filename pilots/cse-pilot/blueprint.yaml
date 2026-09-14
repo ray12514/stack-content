@@ -17,6 +17,7 @@ control_files:
   - env/workspace-shell.rc
   - scripts/verify-lockfiles.py
   - BUILDER-HANDOFF.md
+  - PACKAGE-OVERLAY-QUICKSTART.md
 control_trees:
   # Presentation-only controls. Package modulefiles are generated directly
   # below values.paths.modules_root and are never part of this workspace tree.
