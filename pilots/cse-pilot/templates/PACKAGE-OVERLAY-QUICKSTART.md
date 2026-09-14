@@ -6,6 +6,10 @@ Git, GitLab, Stack Composer, and a new workspace render are not needed for
 this loop. Keep this file with the workspace when working offline.
 Commands target the current Spack 1.2.2 / repository API v2 workspace; verify
 the version and effective configuration on the receiving system.
+Steps 1–7 are the common process for every trial system and package. Set the
+system's workspace, environment, package name, and package module each time.
+The [Blueback netlib-lapack example](#worked-example-blueback-cce-netlib-lapack)
+at the end supplies one set of those inputs and the evidence for that report.
 
 An **overlay** is our higher-priority `cse_trials` Spack recipe repository.
 Spack selects a whole recipe from it; it does not merge two `package.py` files.
@@ -16,6 +20,24 @@ including every patch/support file, while preserving any existing local fixes.
 This procedure is for an unfinished, unaccepted build trial. Coordinate edits
 with anyone using the same package repository or locks. For an accepted
 release, make a new candidate instead of changing its recorded inputs.
+
+## Updating an existing workspace
+
+Copy the reviewed files into the **existing absolute workspace path** supplied
+to that system's builder. Choose the destination according to the update:
+
+| Update | Destination and next step |
+| --- | --- |
+| This process guide | `<workspace>/PACKAGE-OVERLAY-QUICKSTART.md`; documentation is ready to use immediately |
+| One package correction | `<workspace>/package-repos/spack_repo/cse_trials/packages/<package-module>/`; follow Steps 2–6 for backup, complete file copy, recipe selection, lock recovery, and testing |
+| Generated shell/verifier controls | Use the reviewed control-refresh procedure in `STACK-COMPOSER-UPDATE.md` from Stack Content; its declared control files do not include package overlays |
+
+A source-checkout pull and a deployed-workspace update are separate operations.
+After obtaining a guide or fix, explicitly copy it to each receiving workspace.
+Keep each system's own workspace path, compiler/catalog configuration, and
+locks. There is no automatic propagation to other systems, and this process
+does not reinitialize or replace their workspace trees. Record which file
+revision was delivered and which package correction was tested on each system.
 
 ## Manual steps and optional helpers
 
@@ -29,7 +51,7 @@ below are commands to run step by step, not a new updater to install.
 | Text editor, `install`/`cp`, `spack`, `tar`, `sha256sum` | Manual edit, apply, test, and transfer steps below |
 | `./cse-build login shell` / `./cse-build compute shell` | Existing generated shell setup; selects this workspace's runtime and node context |
 | `./cse-build login verify` | Existing lock check after recovering affected locks; does not prove a new package fix works |
-| `./cse-build compute install --surface platform` | Optional full CCE-surface resume after the focused package retry |
+| `./cse-build compute install --surface platform` (or `shared`) | Optional full compiler-surface resume after the focused package retry |
 | `refresh-workspace-controls.py` | Optional generated-control update, documented in Stack Content's `pilots/cse-pilot/STACK-COMPOSER-UPDATE.md`; does not copy package overlays |
 
 There is no separate package-overlay apply/export helper attached to this
@@ -68,15 +90,16 @@ available locally. Shell entry can otherwise try to provision Spack, and a
 solve/build can try to acquire missing inputs. `--no-cache` below disables
 binary reuse for installation; it is not an offline/network switch.
 
-The example is netlib-lapack on the CCE surface. The roster places LAPACK roots
-in **Common**; it also appears under MPI dependents. Select the environment
-that actually failed, rather than assuming every failure is in Core.
+Select the environment and package that actually failed. Use the environment
+directory name from this workspace, such as `cce/common` or `gcc/serial`;
+do not infer the lane from the package name. The package's Spack name and API
+v2 Python module directory are separate inputs:
 
 ```bash
-export ENVIRONMENT="$PLATFORM_COMPILER_NAME/common"
+export ENVIRONMENT="<compiler-environment-name>/<lane>"
+export PACKAGE_NAME="<spack-package-name>"
+export PACKAGE_MODULE="<python-package-module>"
 export TARGET_ENV="$CSE_BUILD_WORKSPACE/environments/$ENVIRONMENT"
-export PACKAGE_NAME="netlib-lapack"
-export PACKAGE_MODULE="netlib_lapack"
 export OVERLAY_REPO="$CSE_BUILD_WORKSPACE/package-repos/spack_repo/cse_trials"
 export PACKAGE_DIR="$OVERLAY_REPO/packages/$PACKAGE_MODULE"
 
@@ -97,19 +120,21 @@ printf 'Workspace: %s\nEnvironment: %s\nBuiltin recipe: %s\nOverlay recipe: %s\n
 | Current local corrections | `$PACKAGE_DIR/package.py` and neighboring patch/support files, if present |
 | Repository selection | `$CSE_BUILD_WORKSPACE/configs/common/repos.yaml` and effective `repo list` |
 | Requested inputs and resolved build | `$TARGET_ENV/spack.yaml` and `$TARGET_ENV/spack.lock` |
-| Source for future renders | `<stack-content>/pilots/cse-pilot/templates/package-repos/spack_repo/cse_trials/packages/netlib_lapack/` |
+| Source for future renders | `<stack-content>/pilots/cse-pilot/templates/package-repos/spack_repo/cse_trials/packages/<package-module>/` |
 
 `cse_trials` must precede `builtin` and resolve inside this workspace. Do not
-edit the cached builtin recipe or add a user-level repo. Spack API v2 uses
-`netlib_lapack` for the directory/import and `netlib-lapack` for the spec name.
+edit the cached builtin recipe or add a user-level repo. For example, Spack
+API v2 uses `netlib_lapack` for the directory/import and `netlib-lapack` for the
+spec name, while `zlib` uses `zlib` for both. Confirm the exact module directory
+against the pinned repository; names starting with digits need a prefix too.
 Read the original file with `less "$BUILTIN_RECIPE"`. Read any existing local
 recipe before preparing a replacement.
 
 ## 2. Save the evidence before editing
 
-Choose the full failed hash from the listing, including the correct version
-and CCE dependency. Do not select the first match if several appear. The photo
-suggests 3.12.1; confirm that from the lock/log.
+Choose the full failed hash from the listing, including the correct version,
+compiler, variants, and dependencies. Do not select the first match if several
+appear. Confirm the selection from the lock and original build log.
 Choose a new record directory on shared storage writable from both login and
 compute nodes; a node-local record will not follow you into the allocation.
 
@@ -158,16 +183,12 @@ spack -e "$TARGET_ENV" location --stage-dir "/$FAILED_HASH"
 ```
 
 Copy the complete `spack-build-out.txt` and, when present,
-`spack-build-env.txt` from that stage into the record. For this LAPACK link
-failure also retain the failing build directory's `CMakeCache.txt` and
-`BLAS/SRC/CMakeFiles/blas.dir/link.txt`. Use the actual paths found in the log;
-the recipe can have separate static and shared build directories.
-
-The Blueback photo shows configuration finishing, followed by a BLAS shared
-library link failure with a `multiple definition` diagnostic. It does not
-establish the cause or exact duplicate symbol. Retain the first diagnostic,
-both object names, and the complete link command. Do not apply the separate
-GNU `-sinteger64` workaround to this CCE failure based on the photo.
+`spack-build-env.txt` from that stage into the record. Retain the first failing
+command and its full diagnostic, plus generated files needed to reproduce it:
+for example, a CMake cache/link command for a link failure or `config.log` for
+a configure failure. Use the actual paths found in the log; a recipe can have
+several build directories. Choose evidence from the failure, not from a
+different package's example or an earlier nonfatal warning.
 
 ## 3. Prepare one reviewable candidate
 
@@ -190,11 +211,10 @@ package validation. Distinguish checks actually run from proposed checks.
 ```
 
 Stage those files in `$OVERLAY_RECORD/candidate/`. A typical source correction
-imports `NetlibLapack` from
-`spack_repo.builtin.packages.netlib_lapack.package`, subclasses it as
-`NetlibLapack`, and adds a local `patch(...)` with an evidenced `when` condition.
-That is the overlay structure, **not a proposed fix for the photographed error**.
-Inspect the pinned builder before overriding recipe methods.
+imports and subclasses the selected package's pinned builtin class, then adds
+a local `patch(...)` with an evidenced `when` condition. Take the exact class
+and import path from that recipe. Inspect the pinned builder before overriding
+recipe methods, and preserve any existing overlay corrections.
 
 Review the complete candidate, parse its Python, and dry-run source patches
 against a disposable pristine copy of the exact package source. Existing
@@ -206,7 +226,8 @@ which systems/compiler versions were actually tested.
 
 Set the explicit list to the candidate's actual filenames. A recipe-only
 correction uses just `package.py`. Do not run this block until the candidate
-has been prepared and reviewed.
+has been prepared and reviewed. List files relative to the candidate root,
+including subdirectories such as `patches/fix.patch` when present.
 
 ```bash
 export OVERLAY_CANDIDATE_DIR="$OVERLAY_RECORD/candidate"
@@ -220,6 +241,7 @@ OVERLAY_FILES=(package.py)  # Add each reviewed local patch/support filename.
   spack python -c 'import ast, os; ast.parse(open(os.path.join(os.environ["OVERLAY_CANDIDATE_DIR"], "package.py")).read())'
   install -d -m 2770 -g "$CSE_GROUP" "$PACKAGE_DIR"
   for overlay_file in "${OVERLAY_FILES[@]}"; do
+    install -d -m 2770 -g "$CSE_GROUP" "$(dirname "$PACKAGE_DIR/$overlay_file")"
     install -m 0660 -g "$CSE_GROUP" "$OVERLAY_CANDIDATE_DIR/$overlay_file" "$PACKAGE_DIR/$overlay_file"
   done
 )
@@ -231,6 +253,9 @@ Require successful copying and both paths to identify
 `$PACKAGE_DIR/package.py` (or its enclosing directory for `location`). If a
 copy fails, restore or finish the complete file set before building. Review
 any superseded files explicitly; backups belong outside `packages/`.
+The block uses ordinary-file mode `0660` for recipes and patches. If a reviewed
+support file must be executable, install that specific file with mode `0770`
+and record that requirement for the receiving system.
 
 ## 5. Update the affected candidate lock
 
@@ -248,8 +273,8 @@ spack -e "$TARGET_ENV" concretize -f --reuse-deps -j 1
 
 The alternative can change other nodes; neither command promises only one
 hash will change. Inspect the entire graph and explain unrelated changes.
-For LAPACK, review Common and MPI locks containing it and any dependent Dakota
-nodes. Do not automatically run either command over all eight environments.
+Review every environment containing the corrected package and its affected
+dependents. Do not automatically run either command over all eight environments.
 
 ```bash
 spack -e "$TARGET_ENV" find -c -d -L -N -v > "$OVERLAY_RECORD/graph.after.txt"
@@ -261,7 +286,7 @@ spack -e "$TARGET_ENV" find -c -d -L -N -v "$PACKAGE_NAME"
 recipe/patch identity, and affected dependent hashes. Record the new hash.
 Once all affected locks have been recovered, run the existing workspace lock
 check (`./cse-build login verify`) before resuming the trial. This guide does
-not expand the full release or CMake validation procedures.
+not expand the full release validation procedures.
 
 ## 6. Retry only this package, directly with Spack
 
@@ -292,11 +317,13 @@ does not guarantee that a retry keeps previous partial build artifacts.
 
 Rerun the same minimal failing operation against the corrected stage/new
 prefix, preserving the relevant flags and failure check; do not replay paths
-that still point at the old hash. Run the small validation supplied with
-the fix. For LAPACK, require the BLAS link to succeed and a small BLAS/LAPACK
-compile, link, and numerical execution check with the same compiler. Installation
-success alone does not establish numerical correctness. Record results in
-`CHANGE.md`; do not mark an unrun Blueback/CCE check as passed.
+that still point at the old hash. Run the small validation supplied with the
+fix: for a library, compile/link a tiny consumer and execute its result check;
+for a tool, exercise the affected command and check its output. Numerical or
+MPI packages need an appropriate numerical or MPI check. Installation success
+alone does not prove the reported defect is fixed. Record results in
+`CHANGE.md`, naming the system and compiler tested; do not mark unrun checks
+as passed.
 
 ## 7. Carry the overlay to another workspace without Git
 
@@ -312,7 +339,8 @@ OVERLAY_FILES=(package.py)  # Add the same reviewed patch/support filenames.
   test ! -e "$OVERLAY_RECORD/outgoing"
   mkdir -p "$OVERLAY_RECORD/outgoing/$PACKAGE_MODULE"
   for overlay_file in "${OVERLAY_FILES[@]}"; do
-    cp -p "$PACKAGE_DIR/$overlay_file" "$OVERLAY_RECORD/outgoing/$PACKAGE_MODULE/"
+    mkdir -p "$(dirname "$OVERLAY_RECORD/outgoing/$PACKAGE_MODULE/$overlay_file")"
+    cp -p "$PACKAGE_DIR/$overlay_file" "$OVERLAY_RECORD/outgoing/$PACKAGE_MODULE/$overlay_file"
   done
   cp -p "$OVERLAY_RECORD/CHANGE.md" "$OVERLAY_RECORD/outgoing/CHANGE.md"
   tar -czf "$OVERLAY_RECORD/$PACKAGE_MODULE-overlay.tar.gz" \
@@ -323,15 +351,18 @@ OVERLAY_FILES=(package.py)  # Add the same reviewed patch/support filenames.
 
 Copy the archive and checksum with the site's approved file-transfer method,
 removable media, or `scp` when a connection is available. On the receiving
-system, place them outside its package repo. For this LAPACK example:
+system, place them outside its package repo. Set the module from the reviewed
+transfer record and extract into a new staging directory:
 
 ```bash
 cd "<directory-containing-received-archive-and-checksum>"
-sha256sum -c netlib_lapack-overlay.tar.gz.sha256
-tar -tzf netlib_lapack-overlay.tar.gz
-# After checksum success and checking the listed CHANGE.md/netlib_lapack files:
-mkdir received-netlib-lapack
-tar -xzf netlib_lapack-overlay.tar.gz -C received-netlib-lapack
+export PACKAGE_MODULE="<python-package-module>"
+export RECEIVED_DIR="<absolute-new-extraction-directory>"
+sha256sum -c "$PACKAGE_MODULE-overlay.tar.gz.sha256"
+tar -tzf "$PACKAGE_MODULE-overlay.tar.gz"
+# After checksum success and checking the listed CHANGE.md/package files:
+mkdir "$RECEIVED_DIR"
+tar -xzf "$PACKAGE_MODULE-overlay.tar.gz" -C "$RECEIVED_DIR"
 ```
 
 Use a new extraction directory and require each command to succeed. Review
@@ -341,8 +372,8 @@ compiler/version before applying. A different builtin pin requires adaptation
 and review, not an assumption that the subclass is compatible.
 
 Repeat Steps 1–6 using the **receiving** workspace's paths and a new record;
-in Step 4 set `OVERLAY_CANDIDATE_DIR` to the absolute path
-`<received-archive-directory>/received-netlib-lapack/netlib_lapack` and set
+in Step 4 set `OVERLAY_CANDIDATE_DIR="$RECEIVED_DIR/$PACKAGE_MODULE"` (restore
+the recorded absolute `RECEIVED_DIR` path after changing shells) and set
 `OVERLAY_FILES` from its reviewed file list. Preserve
 any destination-only corrections. Transfer recipes/patches, then solve and
 test locally; do not transplant another system's locks, compiler configuration,
@@ -355,6 +386,45 @@ template changes first. A commit/push can be done later; retain the archive,
 checksum, and change record until then. The existing
 `refresh-workspace-controls.py` helper updates generated controls, not package
 overlays: a control refresh alone does not deliver this fix.
+
+## Worked example: Blueback CCE netlib-lapack
+
+This is one application of Steps 1–7. After entering Blueback's prepared
+workspace shell, use these three selections in Step 1:
+
+```bash
+export ENVIRONMENT="$PLATFORM_COMPILER_NAME/common"
+export PACKAGE_NAME="netlib-lapack"
+export PACKAGE_MODULE="netlib_lapack"
+```
+
+The current roster places standalone LAPACK roots in Common and uses LAPACK
+under MPI dependents, including Dakota. Confirm the actual failed environment;
+review Common and affected MPI locks when a LAPACK recipe changes. Derive all
+remaining paths with Step 1's generic commands. The deployed destination is
+`<Blueback-workspace>/package-repos/spack_repo/cse_trials/packages/netlib_lapack/`.
+
+The 2026-09-14 photo appears to identify `netlib-lapack@3.12.1`. It shows CMake
+configuration/generation finishing, followed by a `multiple definition`
+diagnostic while linking the BLAS shared library in a CCE/Fortran build. The
+exact duplicate symbol and cause are not established from the photo. Capture
+the full build log, both object names, the complete failing link command,
+`CMakeCache.txt`, and the failing build directory's
+`BLAS/SRC/CMakeFiles/blas.dir/link.txt`. The recipe may have separate static and
+shared build directories; use the actual failed one. The GNU `-sinteger64`
+workaround in Blueback's other notes addresses a different symptom.
+
+For an eventual source fix, the overlay structure would import `NetlibLapack`
+from `spack_repo.builtin.packages.netlib_lapack.package` and subclass it as
+`NetlibLapack`. The actual change and `when` condition still require diagnosis.
+No deployable fix or successful Blueback CCE retry is claimed here. Acceptance
+should include the formerly failing BLAS link and a tiny BLAS/LAPACK numerical
+consumer compiled, linked, and run with the same compiler.
+
+After that correction is validated, Step 7 creates
+`netlib_lapack-overlay.tar.gz`; the receiving system sets
+`PACKAGE_MODULE=netlib_lapack` and applies the same general import/retest steps.
+Other packages use their own names, recipes, evidence, and acceptance checks.
 
 ## Command references
 

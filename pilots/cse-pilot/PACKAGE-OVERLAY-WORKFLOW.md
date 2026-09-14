@@ -13,13 +13,14 @@ workspaces can carry it offline. Stack Planning's common runbook points here
 and remains the source for the overall trial/release process.
 
 For a healthy existing workspace, copy just the guide. In a machine with an
-existing authenticated Stack Content checkout, fetch the documentation branch
+existing Stack Content checkout, fetch the reviewed documentation ref
 and extract the file without switching branches or updating workspace controls:
 
 ```bash
 export CONTENT="<absolute-existing-stack-content-checkout>"
 export BUILD_WORKSPACE="<absolute-existing-trial-workspace>"
-git -C "$CONTENT" fetch origin codex/simplified-render-plan
+export DOC_REF="codex/simplified-render-plan"  # Current published trial-doc branch.
+git -C "$CONTENT" fetch origin "$DOC_REF"
 git -C "$CONTENT" show FETCH_HEAD:pilots/cse-pilot/templates/PACKAGE-OVERLAY-QUICKSTART.md \
   > "$CONTENT/PACKAGE-OVERLAY-QUICKSTART.download.md"
 less "$CONTENT/PACKAGE-OVERLAY-QUICKSTART.download.md"
@@ -28,17 +29,34 @@ cp "$CONTENT/PACKAGE-OVERLAY-QUICKSTART.download.md" \
   "$BUILD_WORKSPACE/PACKAGE-OVERLAY-QUICKSTART.md"
 ```
 
-Use the branch containing the reviewed documentation; the commands above name
-the current trial documentation branch. If no checkout exists, clone that
-branch from the approved Stack Content origin first. Private GitHub repos work
-with authenticated HTTPS or SSH; public visibility is not required for Git
-access. On a disconnected target, copy this Markdown file over the approved
-transfer route instead. Stack Planning is optional for this package-fix loop.
+Set `DOC_REF` to the reviewed branch/tag/commit; the default above identifies
+the current trial documentation branch. If no checkout exists, clone the
+approved Stack Content origin first. Its current public GitHub publication is
+available without authentication:
+
+```bash
+git clone --single-branch --branch codex/simplified-render-plan \
+  https://github.com/ray12514/stack-content.git
+```
+
+Then set `CONTENT` to that checkout's absolute path and use the delivery block
+above. A private origin instead requires authenticated HTTPS or SSH. On a
+disconnected target, copy this Markdown file over the approved transfer route
+instead. Stack Planning is optional for this package-fix loop.
 
 Only the Markdown file is copied into the workspace. No recipe, environment,
 lock, compiler setting, or installed package is changed by this delivery step.
 The quickstart distinguishes manual edit/copy/retry commands from existing
 optional shell and control-refresh helpers.
+
+For a package update, copy the reviewed complete local recipe and its support
+files to `<workspace>/package-repos/spack_repo/cse_trials/packages/<package-module>/`
+using quickstart Steps 2–6, or receive a transfer archive using Step 7. That
+copy must be followed by recipe selection, affected-lock recovery, and a local
+package test. Repeat with each receiving system's own workspace and inputs.
+A repository pull alone does not update any generated workspace. Neither a
+guide copy nor an overlay copy requires workspace regeneration; the
+control-refresh helper is for a separate generated-control update.
 
 ## Detailed workflow
 

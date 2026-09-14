@@ -328,6 +328,9 @@ to locate the pinned original recipe and deployed overlay, retry one package
 with direct Spack commands, and transfer its files to another workspace without
 Git. The guide is copied into generated workspaces for offline use; an existing
 workspace can receive this Markdown file directly.
+Its core steps apply to any package/system; Blueback CCE netlib-lapack is a
+separate worked example. The opening update table distinguishes copying the
+guide, applying one package overlay, and refreshing generated controls.
 
 Use [CSE trial package overlay workflow](PACKAGE-OVERLAY-WORKFLOW.md) to
 diagnose a new package failure, develop and validate a correction inside an
