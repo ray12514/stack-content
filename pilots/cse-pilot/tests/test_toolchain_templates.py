@@ -187,24 +187,15 @@ def write_shared_surface_controls(workspace: Path) -> Path:
 
 
 def copy_trial_package_overlay(workspace: Path, package: str) -> Path:
-    source = (
-        TEMPLATE_ROOT
-        / "package-repos"
-        / "spack_repo"
-        / "cse_trials"
-        / "packages"
-        / package
+    shutil.copytree(
+        TEMPLATE_ROOT / "package-repos", workspace / "package-repos", dirs_exist_ok=True
     )
-    destination = (
-        workspace
-        / "package-repos"
-        / "spack_repo"
-        / "cse_trials"
-        / "packages"
-        / package
+    shutil.copyfile(
+        TEMPLATE_ROOT / "scripts" / "verify-overlay-inputs.py",
+        workspace / "scripts" / "verify-overlay-inputs.py",
     )
-    shutil.copytree(source, destination)
-    return destination
+    return workspace / "package-repos" / "spack_repo" / "cse_trials" / "packages" / package
+
 
 
 class ToolchainTemplateTests(unittest.TestCase):
@@ -744,12 +735,6 @@ class ToolchainTemplateTests(unittest.TestCase):
             workspace.mkdir()
             builder_home.mkdir()
             workdir.mkdir()
-            provider_cache = misc_cache / builder_user / "providers"
-            provider_cache.mkdir(parents=True)
-            provider_cache.chmod(0o700)
-            provider_index = provider_cache / "providers.json"
-            provider_index.write_text("{}\n", encoding="utf-8")
-            provider_index.chmod(0o600)
 
             (spack_root / "bin").mkdir(parents=True)
             (spack_root / "share" / "spack").mkdir(parents=True)
@@ -885,6 +870,17 @@ class ToolchainTemplateTests(unittest.TestCase):
                 "# fake verifier\n",
                 encoding="utf-8",
             )
+            copy_trial_package_overlay(workspace, "cce")
+            cache_key = subprocess.check_output(
+                [sys.executable, str(workspace / "scripts" / "verify-overlay-inputs.py"), "--cache-key"],
+                text=True,
+            ).strip()
+            provider_cache = misc_cache / (builder_user + "-overlay-" + cache_key) / "providers"
+            provider_cache.mkdir(parents=True)
+            provider_cache.chmod(0o700)
+            provider_index = provider_cache / "providers.json"
+            provider_index.write_text("{}\n", encoding="utf-8")
+            provider_index.chmod(0o600)
             env_dir = workspace / "env"
             env_dir.mkdir()
             (env_dir / "share-generated-permissions.sh").write_text(
@@ -952,7 +948,7 @@ class ToolchainTemplateTests(unittest.TestCase):
             )
             home_entries = list(builder_home.iterdir())
             self.assertEqual(result.returncode, 0, result.stderr)
-            concretization_cache = misc_cache / builder_user / "concretization"
+            concretization_cache = provider_cache.parent / "concretization"
             concretization_index = concretization_cache / "new.json"
             provider_cache_mode = stat.S_IMODE(provider_cache.stat().st_mode)
             provider_index_mode = stat.S_IMODE(provider_index.stat().st_mode)
@@ -1478,9 +1474,9 @@ class ToolchainTemplateTests(unittest.TestCase):
         self.assertEqual(current.returncode, 0, current.stderr)
         self.assertIn("Workspace input verification passed", current.stdout)
         self.assertNotEqual(stale.returncode, 0)
-        self.assertIn("Dakota overlay is incomplete", stale.stderr)
+        self.assertIn("overlay input changed: spack_repo/cse_trials/packages/dakota/", stale.stderr)
         self.assertNotEqual(stale_hdf5.returncode, 0)
-        self.assertIn("HDF5 overlay is incomplete", stale_hdf5.stderr)
+        self.assertIn("overlay input changed: spack_repo/cse_trials/packages/hdf5/", stale_hdf5.stderr)
 
     def test_workspace_gate_rejects_a_stale_gcc_producer_spec(self) -> None:
         script = render_text(
@@ -1788,7 +1784,7 @@ class ToolchainTemplateTests(unittest.TestCase):
             script,
         )
         self.assertIn(
-            'SPACK_MISC_CACHE_PATH="$CSE_SHARED_MISC_CACHE_ROOT/$USER"',
+            'SPACK_MISC_CACHE_PATH="$CSE_SHARED_MISC_CACHE_ROOT/$USER-overlay-$CSE_OVERLAY_CACHE_KEY"',
             script,
         )
         self.assertIn(

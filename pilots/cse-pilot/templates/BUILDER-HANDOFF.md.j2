@@ -156,8 +156,10 @@ Both commands use the same locked workspace and restricted install tree.
 Spack's prefix/database locks coordinate identical concrete hashes; the
 surface split keeps view, module refresh, and mutable per-user cache roots
 disjoint. The source cache and package store remain shared. Spack's mutable
-misc/concretization cache is partitioned by builder below the shared restricted
-cache root. On entry and exit, `cse-build` enforces the restricted handoff
+misc/concretization cache is partitioned by builder, resolved overlay repository
+paths, and reviewed overlay inventory bytes below the shared restricted cache
+root. A changed candidate gets a separate partition; old cache partitions are
+retained. On entry and exit, `cse-build` enforces the restricted handoff
 contract on owner-created workspace files, source and misc cache content,
 views, modules, and file-backed build-cache content: directories are `2770`,
 ordinary files are `0660`, executable files are `0770`, the recorded CSE group
@@ -204,6 +206,10 @@ spack -e "$CSE_BUILD_WORKSPACE/environments/$environment" \
   env view regenerate
 spack -e "$CSE_BUILD_WORKSPACE/environments/$environment" \
   module tcl refresh --delete-tree -y
+{% if values.shared.mpi.source == 'build' %}
+spack -e "$CSE_BUILD_WORKSPACE/environments/$environment" \
+  module tcl --name mpi_producer refresh --delete-tree -y
+{% endif %}
 ```
 
 Change `environment` for each process. The four GCC environments may run on
@@ -216,6 +222,22 @@ root are owned by that environment process. `BUILD_JOBS` is per process, so
 size the sum of all process budgets on a node for its CPU and memory allocation.
 
 ## Commands used by the wrapper
+
+To regenerate package modules for already installed, locked environments:
+
+```bash
+./cse-build compute modules
+# Or select one compiler surface:
+./cse-build compute modules --surface shared
+./cse-build compute modules --surface platform
+```
+
+This action verifies the existing locks and checks that every non-external
+locked spec in the selected environments is installed with an existing prefix.
+All selected environments pass that check before any view or module tree is
+refreshed. It runs no fetch, install, or concretization. Stop other writers to
+the selected views and module directories first. The separate `publish-modules`
+action copies the CSE presentation front doors and lane selectors afterward.
 
 `cse-build` is a thin Bash wrapper. For each applicable generated environment,
 its actions run these Spack commands:
@@ -240,6 +262,30 @@ spack -e <environment> install --only-concrete -j "$BUILD_JOBS" --fail-fast
 spack -e <environment> env view regenerate
 spack -e <environment> module tcl refresh --delete-tree -y
 ```
+
+The `modules` action runs only the view and module commands above after its
+installation checks. Operators using bare Spack can run the same commands in
+the prepared shell. The unqualified refresh selects only the `default` module
+set in Spack 1.2.2. After that refresh, run the additional commands for the
+selected environment:
+
+| Environment | Additional package-module refresh |
+|---|---|
+| Every `*/core` | `spack -e <environment> module tcl --name core_independent refresh -y` |
+{% for surface in [values.shared, values.platform] -%}
+{% if surface.compiler.source == 'build' -%}
+| `{{ surface.compiler.name }}/core` | `spack -e <environment> module tcl --name compiler_producer refresh --delete-tree -y` |
+{% endif -%}
+{% if surface.mpi.source == 'build' -%}
+| `{{ surface.compiler.name }}/mpi-{{ surface.mpi.name }}` | `spack -e <environment> module tcl --name mpi_producer refresh --delete-tree -y` |
+{% endif -%}
+{% endfor %}
+
+`core_independent` shares the Core module directory with `default`, so its
+refresh deliberately omits `--delete-tree` to preserve the Core modules just
+regenerated. The compiler and MPI producer sets each own a separate directory.
+The wrapper's `install` and `modules` actions perform all applicable refreshes
+automatically.
 
 Those Spack commands own package modules only. After every required package
 module and view exists, publish the separate CSE presentation files with:

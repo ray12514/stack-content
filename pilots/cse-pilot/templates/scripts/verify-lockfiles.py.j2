@@ -2,6 +2,7 @@
 """Verify the concrete DAG invariants for the CSE Initial Conversion Trials."""
 
 import json
+import runpy
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -9,22 +10,6 @@ from typing import Dict, List, Set, Tuple
 
 
 WORKSPACE = Path(__file__).resolve().parents[1]
-DAKOTA_OVERLAY = (
-    WORKSPACE
-    / "package-repos"
-    / "spack_repo"
-    / "cse_trials"
-    / "packages"
-    / "dakota"
-)
-HDF5_OVERLAY = (
-    WORKSPACE
-    / "package-repos"
-    / "spack_repo"
-    / "cse_trials"
-    / "packages"
-    / "hdf5"
-)
 BUILD_CMAKE = {{ data.roster.cmake.build_default | tojson }}
 PUBLIC_CMAKE = {{ data.roster.cmake.current | tojson }}
 EXPECTED_PYTHON_VERSIONS = {"3.8.20", "3.10.20", "3.12.13"}
@@ -95,87 +80,18 @@ NETCDF_CXX_CHAINS = {("4.9.2", "1.10.6"), ("4.10.0", "2.1.0")}
 
 def workspace_input_errors() -> List[str]:
     errors: List[str] = []
-    recipe_path = DAKOTA_OVERLAY / "package.py"
-    patch_path = DAKOTA_OVERLAY / "boost-system-header-only.patch"
-    try:
-        recipe = recipe_path.read_text(encoding="utf-8")
-    except OSError as error:
-        errors.append(f"Dakota overlay recipe is unavailable: {error}")
-        recipe = ""
-    try:
-        patch = patch_path.read_text(encoding="utf-8")
-    except OSError as error:
-        errors.append(f"Dakota overlay patch is unavailable: {error}")
-        patch = ""
-
-    declaration = 'patch("boost-system-header-only.patch", when="@6.23.0:6.24.0")'
-    if recipe and declaration not in recipe:
+    helper = WORKSPACE / "scripts" / "verify-overlay-inputs.py"
+    if not helper.is_file():
         errors.append(
-            "Dakota overlay recipe does not apply the Boost.System patch to "
-            "Dakota 6.23.0 and 6.24.0"
+            "unsupported overlay identity: missing verify-overlay-inputs.py; "
+            "explicit candidate preparation and inventory review required"
         )
-
-    required_patch_fragments = (
-        "diff --git a/cmake/DakotaFindSystemTPLs.cmake",
-        "diff --git a/src/plugins/CMakeLists.txt",
-        "diff --git a/src/surrogates/unit/CMakeLists.txt",
-        "-  set(dakota_boost_libs program_options regex serialization system)",
-        "+  set(dakota_boost_libs program_options regex serialization)",
-        "-find_package(Boost 1.70 REQUIRED COMPONENTS system)",
-        "-    PUBLIC Boost::system stdc++fs",
-        "-      PUBLIC Boost::system",
-        "-  LINK_LIBS dakota_surrogates Boost::system )",
-        "-    LINK_LIBS dakota_surrogates Boost::system )",
-    )
-    missing_fragments = [
-        fragment for fragment in required_patch_fragments if fragment not in patch
-    ]
-    if patch and missing_fragments:
-        errors.append(
-            "Dakota overlay is incomplete; refresh the workspace package repository "
-            "before concretizing or building. Missing patch fragments: "
-            + ", ".join(repr(fragment) for fragment in missing_fragments)
-        )
-
-    hdf5_recipe_path = HDF5_OVERLAY / "package.py"
-    hdf5_patch_path = HDF5_OVERLAY / "parallel-fortran-module-dir.patch"
-    try:
-        hdf5_recipe = hdf5_recipe_path.read_text(encoding="utf-8")
-    except OSError as error:
-        errors.append(f"HDF5 overlay recipe is unavailable: {error}")
-        hdf5_recipe = ""
-    try:
-        hdf5_patch = hdf5_patch_path.read_text(encoding="utf-8")
-    except OSError as error:
-        errors.append(f"HDF5 overlay patch is unavailable: {error}")
-        hdf5_patch = ""
-
-    hdf5_declaration = (
-        'patch("parallel-fortran-module-dir.patch", '
-        'when="@2.1.0+mpi+fortran+hl")'
-    )
-    if hdf5_recipe and hdf5_declaration not in hdf5_recipe:
-        errors.append(
-            "HDF5 overlay recipe does not limit the MPI Fortran module-directory "
-            "patch to HDF5 2.1.0 +mpi+fortran+hl"
-        )
-
-    required_hdf5_patch_fragments = (
-        "diff --git a/hl/fortran/src/CMakeLists.txt",
-        "/static;${MPI_Fortran_MODULE_DIR};$<$<BOOL:${HDF5_ENABLE_PARALLEL}>",
-        "/shared;${MPI_Fortran_MODULE_DIR};$<$<BOOL:${HDF5_ENABLE_PARALLEL}>",
-    )
-    missing_hdf5_fragments = [
-        fragment
-        for fragment in required_hdf5_patch_fragments
-        if fragment not in hdf5_patch
-    ]
-    if hdf5_patch and missing_hdf5_fragments:
-        errors.append(
-            "HDF5 overlay is incomplete; refresh the workspace package repository "
-            "before concretizing or building. Missing patch fragments: "
-            + ", ".join(repr(fragment) for fragment in missing_hdf5_fragments)
-        )
+    else:
+        try:
+            overlay = runpy.run_path(str(helper))
+            errors.extend(overlay["check"](WORKSPACE / "package-repos"))
+        except (OSError, ValueError) as error:
+            errors.append("overlay input verification failed: {}".format(error))
 
     for environment in sorted(GCC_ENVIRONMENTS):
         spack_yaml = WORKSPACE / "environments" / environment / "spack.yaml"
@@ -413,7 +329,8 @@ def main(workspace_only: bool = False) -> int:
                 print(f"ERROR: {error}", file=sys.stderr)
             return 1
         print(
-            "Workspace input verification passed: current CSE package overlays and "
+            "Workspace input verification passed: reviewed local-overlay bytes "
+            "(Spack selection/import checked separately) and "
             "GCC producer/needs/toolchain inputs."
         )
         return 0

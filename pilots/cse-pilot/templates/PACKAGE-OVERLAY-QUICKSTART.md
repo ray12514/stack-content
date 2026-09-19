@@ -76,6 +76,77 @@ guide. The copy and archive steps are shown explicitly. Healthy existing
 workspaces only need a copy of this Markdown guide; they do not need a render
 or control refresh to read it or follow the manual overlay procedure.
 
+## Reviewed byte inventories in newly prepared candidates
+
+New candidates include `scripts/verify-overlay-inputs.py` and a reviewed
+`package-repos/overlay-inventory.json`. The workspace verifier checks this
+inventory before its existing compiler and concrete-graph checks. It covers
+`repo.yaml`, all six shipped recipes (`cce`, `cmake`, `dakota`, `hdf5`,
+`ncurses`, `zlib`), and their patch/helper files. New packages use the same
+inventory; no package-specific verifier code is needed.
+
+Older trials without these files remain unsupported by the new gate. Do not
+install this gate, change their builtin pin, or inventory their current files
+as an incidental control refresh. Adoption requires a separately prepared
+candidate, reviewed complete files, and explicit review of the inventory.
+The control refresh does not deploy either prerequisite. A presentation-only
+refresh can leave the existing gate in place.
+
+After preparing the complete correction in the **unaccepted candidate**, run
+the shipped helper directly; it needs Python 3.6+ and no Spack imports:
+
+```bash
+cd /absolute/path/to/unaccepted-candidate
+python3 scripts/verify-overlay-inputs.py --check
+# After editing candidate recipe/patch files, choose a new review file outside
+# package-repos. The helper refuses to overwrite any existing candidate file.
+python3 scripts/verify-overlay-inputs.py \
+  --candidate /absolute/path/to/review/overlay-inventory.candidate.json
+diff -u package-repos/overlay-inventory.json \
+  /absolute/path/to/review/overlay-inventory.candidate.json
+```
+
+A nonzero check after intentional edits is expected until review. Review the
+actual recipe/patch diff as well as the inventory diff and retain both in the
+change record. After the candidate's complete inputs are approved, explicitly
+adopt the reviewed inventory and check again:
+
+```bash
+cp /absolute/path/to/review/overlay-inventory.candidate.json \
+  package-repos/overlay-inventory.json
+python3 scripts/verify-overlay-inputs.py --check
+python3 scripts/verify-lockfiles.py --workspace-only
+```
+
+After adopting an inventory, reopen the prepared builder shell with
+`./cse-build login shell` (or the selected compute context) before invoking
+Spack again. In an already prepared candidate shell, sourcing
+`env/setup-build-env.sh` also recomputes its cache selection. New launchers
+scope `SPACK_MISC_CACHE_PATH` by builder, resolved local-repository paths and
+reviewed inventory digest. Moving a candidate or admitting changed bytes gets
+a separate cache, avoiding stale Spack patch indexes under a reused namespace.
+`python3 scripts/verify-overlay-inputs.py --cache-key` displays the identity
+used for this purpose. No old cache is deleted. Existing trials only adopt
+these controls through their explicit reviewed preparation procedure.
+
+Checking never updates expected digests. Missing, changed, unrecorded,
+non-regular, or symlinked files fail; unsafe paths fail. Keep logs, backups,
+candidate inventories and Python bytecode outside `package-repos`. Set
+`PYTHONDONTWRITEBYTECODE=1` when importing local recipes for inspection.
+The helper validates simple API-v2 `repo.yaml` identity and literal local
+`patch(...)` references without executing recipes. Dynamic patch filenames
+need an explicit extension of this static contract before admission. All
+other support files are covered by their recorded bytes; arbitrary Python
+file accesses, inherited directives, remote resource availability, effective
+Spack repository order, imported classes and patch applicability still require
+the real Spack selection/build checks below. A passed inventory is a byte
+identity check, not package correctness or release approval.
+
+The expected inventory is itself a reviewed release input, not a signature or
+an independent trust authority. Retain the admitted source revision/archive
+and review record. Return both the complete corrected files and the reviewed
+inventory to authored Stack Content before preparing the releasable candidate.
+
 ## 1. Open the existing workspace and find the paths
 
 Use the absolute workspace path given to the builder. It contains

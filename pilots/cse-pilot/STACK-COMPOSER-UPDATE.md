@@ -8,6 +8,10 @@ catalog, values, eight-environment layout, Spack checkout, lockfiles, installed
 prefixes, build cache, and generated `cse-build` remain the trial of record.
 Do not rerun initialization over that workspace to adopt a tool safety fix.
 
+For deliberate adoption of module presentation or workspace controls, use the
+[scoped refresh and recovery procedure](CONTROL-REFRESH.md). Updating this
+source branch and refreshing a generated cluster workspace are separate steps.
+
 The [2026-09-04 checkpoint receipt](checkpoints/2026-09-04-composer-stabilization.md)
 records the matching implementation commits and candidate artifact checksums.
 

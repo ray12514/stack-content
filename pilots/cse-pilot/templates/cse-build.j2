@@ -49,6 +49,7 @@ Actions:
   verify      Verify configuration scopes and all existing lockfiles.
   fetch       Fetch all sources for the locked environments.
   install     Install, regenerate views, and refresh package modules in order.
+  modules     Regenerate views and package modules for installed locked specs.
   publish-modules
               Copy only the generated CSE front doors and lane selectors into
               the module root recorded by the current values. With restricted
@@ -67,7 +68,7 @@ Environment selection:
   shared      Process only the shared GCC surface.
   platform    Process only the selected platform-compiler surface.
 
-The surface selector applies to status, fetch, and install. Concretize and
+The surface selector applies to status, fetch, install, and modules. Concretize and
 verify remain whole-workspace gates. Concurrent shared/platform installs are
 allowed only after the real shared install tree passes the prefix-lock test.
 
@@ -91,7 +92,7 @@ while [ "$#" -gt 0 ]; do
       CSE_NODE_CONTEXT="$1"
       CONTEXT_SET=1
       ;;
-    tmux|shell|status|concretize|verify|fetch|install|publish-modules)
+    tmux|shell|status|concretize|verify|fetch|install|modules|publish-modules)
       [ "$ACTION_SET" -eq 0 ] || fail "only one action may be selected"
       ACTION="$1"
       ACTION_SET=1
@@ -141,8 +142,8 @@ esac
 
 if [ "$REQUESTED_SURFACE" != all ]; then
   case "$ACTION" in
-    status|fetch|install) ;;
-    *) fail "--surface applies only to status, fetch, and install" ;;
+    status|fetch|install|modules) ;;
+    *) fail "--surface applies only to status, fetch, install, and modules" ;;
   esac
 fi
 
@@ -321,7 +322,10 @@ export CSE_BUILD_WORKSPACE="$CSE_WORKSPACE_ROOT"
 export CSE_INSTALL_TREE_ROOT={{ values.paths.install_tree | yaml_scalar }}
 export CSE_SHARED_SOURCE_CACHE_ROOT={{ values.paths.source_cache | yaml_scalar }}
 export CSE_SHARED_MISC_CACHE_ROOT={{ values.paths.misc_cache | yaml_scalar }}
-export SPACK_MISC_CACHE_PATH="$CSE_SHARED_MISC_CACHE_ROOT/$USER"
+CSE_OVERLAY_CACHE_KEY="$(python3 \
+  "$CSE_BUILD_WORKSPACE/scripts/verify-overlay-inputs.py" --cache-key)" || fail \
+  "could not select a cache for the reviewed overlay inputs"
+export SPACK_MISC_CACHE_PATH="$CSE_SHARED_MISC_CACHE_ROOT/$USER-overlay-$CSE_OVERLAY_CACHE_KEY"
 export CSE_VIEWS_ROOT={{ values.paths.views_root | yaml_scalar }}
 export CSE_MODULES_ROOT={{ values.paths.modules_root | yaml_scalar }}
 export CSE_BUILDCACHE_URL={{ values.buildcache.url | yaml_scalar }}
@@ -517,10 +521,56 @@ install_selected() {
     spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" fetch -D
     spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" \
       install --only-concrete -j "$BUILD_JOBS" --fail-fast
+    refresh_environment_modules "$environment"
+  done
+}
+
+refresh_environment_modules() {
+  local environment="$1"
+  spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" env view regenerate
+  spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" \
+    module tcl refresh --delete-tree -y
+  case "$environment" in
+    */core)
+      # This set shares the default Core root; retain its refreshed modules.
+      spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" \
+        module tcl --name core_independent refresh -y
+      ;;
+  esac
+{% for surface in [values.shared, values.platform] %}
+{% if surface.compiler.source == 'build' %}
+  if [ "$environment" = {{ (surface.compiler.name ~ '/core') | yaml_scalar }} ]; then
     spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" \
-      env view regenerate
+      module tcl --name compiler_producer refresh --delete-tree -y
+  fi
+{% endif %}
+{% if surface.mpi.source == 'build' %}
+  if [ "$environment" = {{ (surface.compiler.name ~ '/mpi-' ~ surface.mpi.name) | yaml_scalar }} ]; then
     spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" \
-      module tcl refresh --delete-tree -y
+      module tcl --name mpi_producer refresh --delete-tree -y
+  fi
+{% endif %}
+{% endfor %}
+}
+
+refresh_selected_modules() {
+  local environment
+  verify_locks
+  note "module refresh surface: $REQUESTED_SURFACE"
+  for environment in "${CSE_ACTION_ENVIRONMENTS[@]}"; do
+    spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" python -c '
+import sys
+import os
+import spack.environment as ev
+missing = [spec for spec in ev.active_environment().all_specs()
+           if not spec.external and (not spec.installed or not os.path.isdir(str(spec.prefix)))]
+if missing:
+    sys.stderr.write("Missing installed specs: " + ", ".join(str(spec) for spec in missing) + "\n")
+    sys.exit(1)
+' || fail "finish installing $environment before refreshing package modules"
+  done
+  for environment in "${CSE_ACTION_ENVIRONMENTS[@]}"; do
+    refresh_environment_modules "$environment"
   done
 }
 
@@ -650,5 +700,6 @@ case "$ACTION" in
   verify) verify_locks ;;
   fetch) fetch_selected ;;
   install) install_selected ;;
+  modules) refresh_selected_modules ;;
   publish-modules) publish_presentation_modules ;;
 esac

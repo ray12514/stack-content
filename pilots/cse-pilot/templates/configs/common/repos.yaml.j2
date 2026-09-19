@@ -2,4 +2,5 @@ repos:
   cse_trials: ../../package-repos/spack_repo/cse_trials
   builtin:
     git: {{ values.package_repo.git | yaml_scalar }}
-    tag: {{ values.package_repo.tag | yaml_scalar }}
+    # Admission release evidence: {{ values.package_repo.tag }}
+    commit: {{ values.package_repo.commit | yaml_scalar }}

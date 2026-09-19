@@ -1,0 +1,22 @@
+{
+  "repositories": [
+    {
+      "api": "v2.0",
+      "files": {
+        "packages/cce/package.py": "f8528997a4afbdc970d34e22d981ecc4e21cb2b2bc56a35b4f63c8149f22d354",
+        "packages/cmake/package.py": "c31c93eb044d1ad47d2dc6545ebe83c389c3405934ffcc2dadf9a75f73c610d0",
+        "packages/dakota/boost-system-header-only.patch": "f97726317e75a081aa8bf48965d97e1d530ce7d96af1e4dcd117e9012267b59a",
+        "packages/dakota/package.py": "cf346ea2e0e20b10cc37127db610af75b6f5c71276aff5c54339bc8b7283b5d5",
+        "packages/hdf5/package.py": "5c226cbedc1127ec4b5f9d1ee0de9f6059ca73bcb355dc15df01230afa02882d",
+        "packages/hdf5/parallel-fortran-module-dir.patch": "0fc599895fa8c32872540d22701d994d91d98f7b8a54515683f8b5f583b98ec2",
+        "packages/ncurses/package.py": "74470cca38915d92396170492f9008da4ab98bf59b41d7dfdbc145420509fafa",
+        "packages/zlib/cce-lld-version-map.patch": "efffb89974d3b907276efe4e4091d5b57d5447a6e36d53ad425cf02028dc2dda",
+        "packages/zlib/package.py": "409e57d36bfab6f06a8fd6182954366663b66e854ef5cd54fdb83d7758fcbc46",
+        "repo.yaml": "6c4070320e6b2b012e8b1e85549815de961c4cbd0a71fc91bde900eed053ab00"
+      },
+      "namespace": "cse_trials",
+      "path": "spack_repo/cse_trials"
+    }
+  ],
+  "schema_version": 1
+}

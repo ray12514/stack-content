@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -57,9 +58,22 @@ def prepare_values(
     spack_mode: str,
     shared_spack_root: str,
     initial_spack_root: str,
+    builtin_commit: str | None = None,
 ) -> dict[str, Any]:
     """Return current control-render values without changing recorded values."""
     prepared = copy.deepcopy(_mapping(values, "values"))
+
+    package_repo = _mapping(prepared.get("package_repo"), "package_repo")
+    recorded_commit = package_repo.get("commit")
+    if recorded_commit and builtin_commit and recorded_commit != builtin_commit:
+        raise InputError("--builtin-commit conflicts with the recorded package_repo.commit")
+    selected_commit = recorded_commit or builtin_commit
+    if not isinstance(selected_commit, str) or not re.fullmatch(r"[0-9a-f]{40}", selected_commit):
+        raise InputError(
+            "builtin identity requires a full 40-character commit; provide "
+            "--builtin-commit explicitly when recorded package_repo.commit is missing"
+        )
+    package_repo["commit"] = selected_commit
 
     architecture = _mapping(prepared.get("architecture"), "architecture")
     binary_target = architecture.get("binary_target")
@@ -159,6 +173,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--spack-mode", choices=("shared", "local"), required=True)
     parser.add_argument("--shared-spack-root", required=True)
     parser.add_argument("--initial-spack-root", required=True)
+    parser.add_argument(
+        "--builtin-commit",
+        help="reviewed full commit for render-only values when the source lacks one; does not update the workspace pin",
+    )
     return parser
 
 
@@ -182,6 +200,7 @@ def main(argv: list[str] | None = None) -> int:
             spack_mode=args.spack_mode,
             shared_spack_root=args.shared_spack_root,
             initial_spack_root=args.initial_spack_root,
+            builtin_commit=args.builtin_commit,
         )
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(

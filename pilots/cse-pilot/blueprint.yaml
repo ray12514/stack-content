@@ -18,6 +18,16 @@ control_files:
   - scripts/verify-lockfiles.py
   - BUILDER-HANDOFF.md
   - PACKAGE-OVERLAY-QUICKSTART.md
+control_file_dependencies:
+  cse-build:
+    - scripts/verify-overlay-inputs.py
+    - package-repos/overlay-inventory.json
+  env/setup-build-env.sh:
+    - scripts/verify-overlay-inputs.py
+    - package-repos/overlay-inventory.json
+  scripts/verify-lockfiles.py:
+    - scripts/verify-overlay-inputs.py
+    - package-repos/overlay-inventory.json
 control_trees:
   # Presentation-only controls. Package modulefiles are generated directly
   # below values.paths.modules_root and are never part of this workspace tree.
@@ -95,6 +105,7 @@ required_values:
   - spack.initial_root
   - package_repo.git
   - package_repo.tag
+  - package_repo.commit
 data_files:
   roster: roster.yaml
 allowed_values:

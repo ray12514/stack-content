@@ -19,6 +19,13 @@ export CSE_GROUP={{ values.permissions.group | yaml_scalar }}
 export CSE_INSTALL_TREE_ROOT={{ values.paths.install_tree | yaml_scalar }}
 export CSE_SHARED_SOURCE_CACHE_ROOT={{ values.paths.source_cache | yaml_scalar }}
 export CSE_SHARED_MISC_CACHE_ROOT={{ values.paths.misc_cache | yaml_scalar }}
+: "${CSE_BUILD_WORKSPACE:?cse-build must select the workspace}"
+CSE_OVERLAY_CACHE_KEY="$(python3 \
+  "$CSE_BUILD_WORKSPACE/scripts/verify-overlay-inputs.py" --cache-key)" || {
+  echo "could not select a cache for the reviewed overlay inputs" >&2
+  return 2 2>/dev/null || exit 2
+}
+export SPACK_MISC_CACHE_PATH="$CSE_SHARED_MISC_CACHE_ROOT/$USER-overlay-$CSE_OVERLAY_CACHE_KEY"
 export CSE_VIEWS_ROOT={{ values.paths.views_root | yaml_scalar }}
 export CSE_MODULES_ROOT={{ values.paths.modules_root | yaml_scalar }}
 export CSE_BUILDCACHE_URL={{ values.buildcache.url | yaml_scalar }}

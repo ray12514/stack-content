@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
+import yaml
 
 
 SCRIPT_PATH = (
@@ -17,8 +22,48 @@ assert SPEC.loader is not None
 SPEC.loader.exec_module(PREPARE_CONTROL_REFRESH_VALUES)
 
 
+@pytest.mark.parametrize("existing,explicit,success", [
+    (None, None, False),
+    (None, "d4f7c711a6a42f1c4d551c8fd10fce9a11340a81", True),
+    ("0e093dad700a9be836b0d4aefc4bb5183e4990bd", None, True),
+    (None, "v2026.06.0", False),
+    ("0e093dad700a9be836b0d4aefc4bb5183e4990bd", "d4f7c711a6a42f1c4d551c8fd10fce9a11340a81", False),
+])
+def test_control_render_values_require_an_explicit_builtin_identity(tmp_path, existing, explicit, success):
+    values = yaml.safe_load((SCRIPT_PATH.parents[1] / "site-values.example.yaml").read_text())
+    if existing is None:
+        values["package_repo"].pop("commit", None)
+    else:
+        values["package_repo"]["commit"] = existing
+    source = tmp_path / "recorded.yaml"
+    source.write_text(yaml.safe_dump(values))
+    before = source.read_bytes()
+    output = tmp_path / "render-only.yaml"
+    arguments = [sys.executable, str(SCRIPT_PATH), "--source", str(source), "--output", str(output)]
+    for key, value in {
+        "spack-source": "https://github.com/spack/spack.git",
+        "spack-version": "1.2.2", "spack-tag": "v1.2.2",
+        "spack-commit": "3e19345b6e12f5ff1b874f4059622fc6a1fd804a",
+        "spack-mode": "shared", "shared-spack-root": "/shared/spack",
+        "initial-spack-root": "/shared/spack",
+    }.items():
+        arguments.extend(["--" + key, value])
+    if explicit is not None:
+        arguments.extend(["--builtin-commit", explicit])
+    result = subprocess.run(arguments, text=True, capture_output=True)
+    assert source.read_bytes() == before
+    if success:
+        assert result.returncode == 0, result.stderr
+        assert yaml.safe_load(output.read_text())["package_repo"]["commit"] == (existing or explicit)
+    else:
+        assert result.returncode == 2
+        assert "builtin" in result.stderr
+        assert not output.exists()
+
+
 def test_prepares_historical_values_for_current_control_render() -> None:
     historical = {
+        "package_repo": {"commit": "d4f7c711a6a42f1c4d551c8fd10fce9a11340a81"},
         "system": {"name": "blueback"},
         "release": "trial-001",
         "architecture": {
@@ -100,6 +145,7 @@ def test_prepares_historical_values_for_current_control_render() -> None:
 
 def test_preserves_reviewed_provider_constraint() -> None:
     values = {
+        "package_repo": {"commit": "d4f7c711a6a42f1c4d551c8fd10fce9a11340a81"},
         "system": {"name": "raider"},
         "release": "trial-001",
         "architecture": {

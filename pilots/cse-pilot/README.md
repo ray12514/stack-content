@@ -264,11 +264,12 @@ The in-place workspace control refresh also replaces the workspace's generated
 `modulefiles/` and `presentation/` control trees. Those trees are separate from
 `values.paths.modules_root`, where Spack writes the package modulefiles, so the
 refresh continues to preserve every environment YAML, lockfile, view, cache,
-installed prefix, and generated package module. Rerun
-`scripts/create-build-values.py` from the reviewed operator session immediately
-before this refresh. Current values include the exact compiler and MPI command
-metadata required by the presentation modules; refreshing with an older values
-file fails validation instead of guessing those commands.
+installed prefix, and generated package module. For an existing trial, start
+with `--scope presentation --dry-run` and preserve its recorded values. Use a
+temporary compatibility-values copy when required fields are missing, as
+described in [CONTROL-REFRESH.md](CONTROL-REFRESH.md). Current values include
+the exact compiler and MPI command metadata required by the presentation
+modules; incomplete values fail validation instead of guessing commands.
 
 The `cse-build` entry point first appears inside that initialized workspace.
 Use the operator session through profile/catalog/value preparation, then use
@@ -310,7 +311,11 @@ both commands for the same surface, and do not let the per-process job budgets
 oversubscribe one node. The two processes receive separate
 node-context/surface-scoped `SPACK_USER_CACHE_PATH` directories while retaining
 the same locked package store and shared source cache. Each process uses the
-same CSE-group-accessible `SPACK_MISC_CACHE_PATH` partition for its builder.
+same CSE-group-accessible `SPACK_MISC_CACHE_PATH` partition for its builder,
+resolved local-repository paths and reviewed overlay inventory digest. A new
+candidate path or an explicitly adopted overlay inventory gets another
+partition, preventing stale package/patch indexes from crossing candidates.
+Existing caches are retained; reopen the prepared shell after inventory adoption.
 
 The selected package-build CMake is 3.31.12. CMake 4.4.2 is the second public
 version. The workspace overlay recipe adds those two versions to the pinned
@@ -320,8 +325,17 @@ The same workspace package repository carries reviewed trial source fixes.
 Its HDF5 overlay applies `parallel-fortran-module-dir.patch` only to
 `hdf5@2.1.0+mpi+fortran+hl`, adding CMake's separately discovered MPI Fortran
 module directory to the static and shared high-level Fortran targets. The
-workspace verifier rejects a missing, stale, or broadened overlay before
-concretization or installation.
+workspace verifier checks the reviewed inventory for every local recipe and
+support file before concretization or installation, rejecting missing,
+changed, unrecorded and unsafe inputs. Expected digests ship as an authored
+input; verification never updates them. Use the explicit review/adoption
+procedure in the quickstart for a new candidate. Existing trials without the
+inventory/helper are not automatically migrated by control refresh.
+
+New values render the builtin repository at commit
+`d4f7c711a6a42f1c4d551c8fd10fce9a11340a81`, retaining `v2026.06.0` as admission
+evidence. The inventory verifies local bytes; real Spack repository selection,
+recipe import and package/consumer behavior remain separate checks.
 
 Start with the [offline package fix quickstart](templates/PACKAGE-OVERLAY-QUICKSTART.md)
 to locate the pinned original recipe and deployed overlay, retry one package

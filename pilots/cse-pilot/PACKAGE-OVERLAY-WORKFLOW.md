@@ -60,6 +60,43 @@ control-refresh helper is for a separate generated-control update.
 
 ## Detailed workflow
 
+Newly prepared candidates use the generic byte-inventory gate described in
+the quickstart's [inventory procedure](templates/PACKAGE-OVERLAY-QUICKSTART.md#reviewed-byte-inventories-in-newly-prepared-candidates).
+Existing running trials are not automatically upgraded to that gate. To
+update authored expectations after reviewing an overlay change, run from the
+Stack Content root:
+
+```bash
+python3 pilots/cse-pilot/templates/scripts/verify-overlay-inputs.py \
+  --candidate /absolute/path/to/review/overlay-inventory.candidate.json
+diff -u pilots/cse-pilot/templates/package-repos/overlay-inventory.json \
+  /absolute/path/to/review/overlay-inventory.candidate.json
+# After reviewing the recipe/support-file and inventory diffs:
+cp /absolute/path/to/review/overlay-inventory.candidate.json \
+  pilots/cse-pilot/templates/package-repos/overlay-inventory.json
+python3 pilots/cse-pilot/templates/scripts/verify-overlay-inputs.py --check
+```
+
+Commit or archive the complete authored files and inventory together after
+review. Rendering and verification do not regenerate expected digests from
+deployed bytes. The candidate command records current bytes for review; it
+does not approve them, change locks, or import Spack recipes.
+
+New build values retain builtin release tag `v2026.06.0` as admission evidence
+and render its resolved commit
+`d4f7c711a6a42f1c4d551c8fd10fce9a11340a81` as the active pin. This is the
+resolved tag identity recorded in the
+[snapshot admission research](../../../stack-planning/docs/spack_repository_snapshot_admission_research_v1.md#immutable-identity-recommendation).
+Do not change an existing trial's pin to receive an overlay or documentation
+update. Current templates require `package_repo.commit` in values; a temporary
+render-only values copy used to stage a presentation-only refresh must provide
+this field. Use `prepare-existing-workspace-values.py --builtin-commit
+<reviewed-full-commit>` alongside its normal arguments when the source values
+lack it. The helper preserves an existing recorded commit and rejects a
+conflicting override; it does not select a new pin silently. Keep the existing
+trial's original values/configuration and active pin intact; select only the
+reviewed presentation files for delivery.
+
 This procedure explains how to obtain a corrected package recipe, review its
 scope, place its files manually in an existing CSE workspace, and validate the
 result. The files may be prepared by any authoring method; the installation and

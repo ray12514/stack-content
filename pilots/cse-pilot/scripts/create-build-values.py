@@ -997,6 +997,7 @@ def main() -> int:
             "package_repo": {
                 "git": "https://github.com/spack/spack-packages.git",
                 "tag": "v2026.06.0",
+                "commit": "d4f7c711a6a42f1c4d551c8fd10fce9a11340a81",
             },
         }
         output.parent.mkdir(parents=True, exist_ok=True)
