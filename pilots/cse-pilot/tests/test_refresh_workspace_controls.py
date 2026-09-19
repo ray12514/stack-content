@@ -271,6 +271,42 @@ def test_late_failure_rolls_back_all_selected_controls(
     assert visible_snapshot(workspace) == before
 
 
+def test_rollback_retains_promoted_tree_without_partial_recursive_deletion(
+    tmp_path: Path, monkeypatch
+) -> None:
+    blueprint, staged, workspace = refresh_fixture(tmp_path)
+    (staged / "modulefiles/second").write_text("second new module")
+    before = visible_snapshot(workspace)
+    replace, rmtree = Path.replace, REFRESH.shutil.rmtree
+
+    def fail_later_promotion(source, destination):
+        if Path(destination) == workspace / "presentation" and source.name == "new":
+            raise OSError("later promotion failed")
+        return replace(source, destination)
+
+    def fail_partial_tree_removal(path, *args, **kwargs):
+        if Path(path) == workspace / "modulefiles":
+            (Path(path) / "lane").unlink()
+            raise OSError("partial tree removal failed")
+        return rmtree(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "replace", fail_later_promotion)
+    monkeypatch.setattr(REFRESH.shutil, "rmtree", fail_partial_tree_removal)
+    with pytest.raises(OSError, match="later promotion failed"):
+        REFRESH.refresh_control_files(
+            blueprint_path=blueprint, staged_workspace=staged, workspace=workspace
+        )
+    assert visible_snapshot(workspace) == before
+    record_path = next((workspace / ".cse-control-refresh").glob("*/record.json"))
+    record = json.loads(record_path.read_text())
+    assert record["status"] == "rolled-back"
+    index = next(i for i, entry in enumerate(record["entries"])
+                 if entry["path"] == "modulefiles")
+    retained = record_path.parent / str(index) / "failed"
+    assert (retained / "lane").read_text() == "new"
+    assert (retained / "second").read_text() == "second new module"
+
+
 def test_restore_rejects_later_control_edits(tmp_path: Path) -> None:
     blueprint, staged, workspace = refresh_fixture(tmp_path)
     REFRESH.refresh_control_files(
@@ -390,6 +426,51 @@ def test_incomplete_rollback_retains_record_and_blocks_next_refresh(
     REFRESH.refresh_control_files(
         blueprint_path=blueprint, staged_workspace=staged, workspace=workspace
     )
+
+
+def test_two_unfinished_records_must_be_recovered_newest_first(
+    tmp_path: Path, monkeypatch
+) -> None:
+    blueprint, staged, workspace = refresh_fixture(tmp_path)
+    before = visible_snapshot(workspace)
+    replace = Path.replace
+
+    def fail_setup(source, destination):
+        if Path(destination) == workspace / "env/setup.sh":
+            raise OSError("setup unavailable")
+        return replace(source, destination)
+
+    with monkeypatch.context() as fault:
+        fault.setattr(Path, "replace", fail_setup)
+        with pytest.raises(REFRESH.RefreshError, match="rollback needs recovery"):
+            REFRESH.refresh_control_files(
+                blueprint_path=blueprint, staged_workspace=staged, workspace=workspace
+            )
+    older = next((workspace / ".cse-control-refresh").glob("*/record.json"))
+
+    def fail_launcher(source, destination):
+        if Path(destination) == workspace / "cse-build":
+            raise OSError("launcher unavailable")
+        return replace(source, destination)
+
+    with monkeypatch.context() as fault:
+        fault.setattr(Path, "replace", fail_launcher)
+        with pytest.raises(REFRESH.RefreshError, match="rollback needs recovery"):
+            REFRESH.recover_control_files(workspace=workspace, record_path=older)
+    newer = next(path for path in (workspace / ".cse-control-refresh").glob("*/record.json")
+                 if path != older)
+    for path in (older, newer):
+        assert json.loads(path.read_text())["status"] == "recovery-required"
+    interrupted = visible_snapshot(workspace)
+    with pytest.raises(REFRESH.RefreshError, match="newest unfinished first"):
+        REFRESH.recover_control_files(workspace=workspace, record_path=older)
+    assert visible_snapshot(workspace) == interrupted
+
+    REFRESH.recover_control_files(workspace=workspace, record_path=newer)
+    REFRESH.recover_control_files(workspace=workspace, record_path=older)
+    assert visible_snapshot(workspace) == before
+    for path in (older, newer):
+        assert json.loads(path.read_text())["status"] == "rolled-back"
 
 
 def test_restore_rejects_protected_paths_in_damaged_record(tmp_path: Path) -> None:

@@ -306,7 +306,11 @@ def _apply_transaction(
             try:
                 if (slot / "old").exists():
                     _copy(slot / "old", slot / "rollback")
-                _remove(destination)
+                # Retain the promoted state intact. Recursive removal can fail
+                # halfway through a tree, making later recovery mistake our own
+                # partial deletion for an unrelated operator edit.
+                if destination.exists() or destination.is_symlink():
+                    destination.replace(slot / "failed")
                 if (slot / "rollback").exists():
                     (slot / "rollback").replace(destination)
             except Exception as error:
