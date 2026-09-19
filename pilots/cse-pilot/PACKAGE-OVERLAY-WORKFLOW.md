@@ -133,6 +133,12 @@ Develop an overlay in place only while the affected lock set is an unaccepted
 release candidate. If the lock set was accepted or its binaries were pushed to
 a release build cache, preserve that release and create a new one.
 
+These in-place steps support diagnosis and a focused retry. The Stack Planning
+trial runbook's same/new-release rule governs adoption: changed recipes,
+variants, or locks enter a new trial release, and checkpoint 4 already protects
+reviewed locks. Preserve the original record and integrate the tested source
+correction into the new candidate before advancing release acceptance.
+
 An overlay is complete only when all of the following are retained together:
 
 1. The original failure evidence.

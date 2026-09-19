@@ -20,6 +20,19 @@ including every patch/support file, while preserving any existing local fixes.
 This procedure is for an unfinished, unaccepted build trial. Coordinate edits
 with anyone using the same package repository or locks. For an accepted
 release, make a new candidate instead of changing its recorded inputs.
+An in-place diagnostic retry does not approve changed release inputs. The
+trial runbook requires a new trial release to adopt changed recipes, variants,
+or locks; reviewed locks are protected before final publication. Preserve the
+original record and return the tested correction to authored content before
+advancing a new candidate through release acceptance.
+
+For partially completed workspaces, record which environments and packages
+are already built before applying anything. Preserve their locks, prefixes,
+views and modules. Limit the retry to the failing candidate and its reviewed
+dependency impact; do not reconcretize every environment or refresh completed
+modules as part of overlay delivery. If the affected dependency set reaches
+completed work, prepare a separate candidate and review that impact before
+proceeding. A compiler-specific guard alone does not prove isolation.
 
 ## Updating an existing workspace
 
@@ -38,6 +51,10 @@ Keep each system's own workspace path, compiler/catalog configuration, and
 locks. There is no automatic propagation to other systems, and this process
 does not reinitialize or replace their workspace trees. Record which file
 revision was delivered and which package correction was tested on each system.
+Treat a generated-control refresh separately: review its allowlisted diff and
+test it in a disposable copy before using it on a partially completed trial.
+Do not advance Spack, the builtin pin, or the installed Composer merely to
+receive a documentation or package-overlay update.
 
 ## Manual steps and optional helpers
 
@@ -137,10 +154,15 @@ compiler, variants, and dependencies. Do not select the first match if several
 appear. Confirm the selection from the lock and original build log.
 Choose a new record directory on shared storage writable from both login and
 compute nodes; a node-local record will not follow you into the allocation.
+Use a separate new directory for each affected environment, for example one
+directory per compiler/lane beneath a shared change directory. The filenames
+below describe only the selected environment. Before changing the shared
+recipe repository, repeat the capture for every affected environment and keep
+the path-to-environment mapping. Never reuse one `OVERLAY_RECORD` for two locks.
 
 ```bash
 export FAILED_HASH="<full-failed-hash-without-leading-slash>"
-export OVERLAY_RECORD="<absolute-new-shared-change-record-directory-outside-package-repo>"
+export OVERLAY_RECORD="<absolute-new-shared-record-directory-for-this-environment>"
 (
   set -e
   test ! -e "$OVERLAY_RECORD"
@@ -244,14 +266,17 @@ OVERLAY_FILES=(package.py)  # Add each reviewed local patch/support filename.
     install -d -m 2770 -g "$CSE_GROUP" "$(dirname "$PACKAGE_DIR/$overlay_file")"
     install -m 0660 -g "$CSE_GROUP" "$OVERLAY_CANDIDATE_DIR/$overlay_file" "$PACKAGE_DIR/$overlay_file"
   done
+  spack -e "$TARGET_ENV" location --package-dir "$PACKAGE_NAME"
+  spack -e "$TARGET_ENV" python -c 'import inspect, os, spack.repo; cls = spack.repo.PATH.get_pkg_class(os.environ["PACKAGE_NAME"]); print(inspect.getfile(cls))'
 )
-spack -e "$TARGET_ENV" location --package-dir "$PACKAGE_NAME"
-spack -e "$TARGET_ENV" python -c 'import inspect, os, spack.repo; cls = spack.repo.PATH.get_pkg_class(os.environ["PACKAGE_NAME"]); print(inspect.getfile(cls))'
 ```
 
 Require successful copying and both paths to identify
 `$PACKAGE_DIR/package.py` (or its enclosing directory for `location`). If a
 copy fails, restore or finish the complete file set before building. Review
+the block's nonzero exit status; selection commands run only after all files
+copy successfully. This is not an atomic replacement: other builders must
+remain stopped until the entire file set and selection checks pass. Review
 any superseded files explicitly; backups belong outside `packages/`.
 The block uses ordinary-file mode `0660` for recipes and patches. If a reviewed
 support file must be executable, install that specific file with mode `0770`
@@ -275,6 +300,9 @@ The alternative can change other nodes; neither command promises only one
 hash will change. Inspect the entire graph and explain unrelated changes.
 Review every environment containing the corrected package and its affected
 dependents. Do not automatically run either command over all eight environments.
+For each additional environment, select its own `TARGET_ENV` and the matching
+`OVERLAY_RECORD` captured in Step 2 before writing the after-listing below.
+Preserve the original before-listing; do not rerun the capture over it.
 
 ```bash
 spack -e "$TARGET_ENV" find -c -d -L -N -v > "$OVERLAY_RECORD/graph.after.txt"
