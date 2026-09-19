@@ -14,6 +14,8 @@ dependencies until the replacement is accepted.
 | Compiler entrance and lane selectors | `--scope presentation` below, validate, then publish modules | Retain existing locks and installed packages |
 | Build helper or operational config | Review `--scope controls` or `all`; satisfy declared dependencies first | Retain locks; this does not accept new recipe inputs |
 | Package module generation | Use the prepared workspace's Spack and its recorded module settings; see `BUILDER-HANDOFF.md` | Generate from installed locked specs; no concretization |
+| Missing or older package-module policy | Explicit `--scope module-policy` from a reviewed candidate, below | Merge named views and replace selected module settings; retain the existing solve |
+| Older overlay gate without an inventory | Explicit inventory/helper admission against existing recipe bytes, below | Retain existing repository pins, recipes and locks |
 | Package version, variant, recipe, compiler or MPI policy | Separate candidate inputs, reviewed overlay inventory if needed, explicit solve and affected-consumer tests | Preserve original locks; inspect new candidate locks |
 
 `presentation` replaces only the blueprint's `modulefiles/` and `presentation/`
@@ -65,6 +67,83 @@ expects the admitted overlay inventory, its helper and other declared
 prerequisites; a controls refresh refuses to install those controls when their
 prerequisites are absent. Prepare and qualify that adoption in a candidate.
 Copying a new verifier alone is not a supported upgrade.
+
+## Upgrade package-module policy in an older workspace
+
+Use a separate reviewed candidate workspace with the same blueprint, system and
+catalog release identity. It may be rendered from recorded values plus explicitly
+reviewed additions, or authored as a comparison tree with the recorded manifest,
+selected `environments/<compiler>/<kind>/spack.yaml` and corresponding
+`configs/environments/<compiler>/<kind>/modules.yaml` files. Older values can lack
+current required compiler command maps; do not invent those facts to make a full
+render pass.
+
+```bash
+python3 "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
+  --workspace "$BUILD_WORKSPACE" --candidate "$MODULE_POLICY_CANDIDATE" \
+  --scope module-policy --environment gcc/core --dry-run
+```
+
+Repeat `--environment` for other completed environments, or omit it when the
+candidate and existing environment/module sets match exactly. Every selected
+environment must have a lock. Quiesce users of the selected controls, review the
+candidate diff, and repeat without `--dry-run` to apply it. The operator tool
+requires Python 3.9 or newer with PyYAML; the generated overlay helper remains
+compatible with Python 3.6.
+
+This operation copies only each selected `modules.yaml` and merges candidate
+named views into the existing environment's `spack.view`. It retains unrelated
+named views and every non-view environment setting, including ordered includes,
+specs, definitions, reuse and compiler/provider policy. Module files may contain
+only the `modules` section. The old include list must already activate the module
+configuration directory or file, and candidate views must refer to existing spec
+groups. A string `use_view` must name a resulting view. Unsupported shapes stop
+before any changes. Current candidate specs are never adopted by this operation.
+
+The retained transaction records exact previous file bytes, modes and protected
+input fingerprints. Apply, restore and recovery check lockfiles, non-view
+environment semantics, shared configuration, catalog and frozen recipe inputs.
+They refuse unrelated changes instead of undoing newer work. The restore and
+recovery commands below work for these records as well as ordinary controls.
+
+After policy adoption, regenerate views/modules using the recorded Spack from
+installed locked specs and test a clean module load plus the real consumer. A
+new include filter can omit an old installed package even when the lock remains
+valid; check expected module names before publication. This transaction does not
+back up or regenerate external view/module output roots. Keep their previous
+presentation until the replacement passes validation.
+
+## Admit an inventory for existing frozen overlays
+
+Use the trusted helper from the tested delivery to produce a separate inventory
+of the workspace's existing recipe tree. Review the inventory and complete file
+diff before admission:
+
+```bash
+python3 "$CONTENT/pilots/cse-pilot/templates/scripts/verify-overlay-inputs.py" \
+  --root "$BUILD_WORKSPACE/package-repos" --candidate "$REVIEWED_INVENTORY"
+
+python3 "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
+  --workspace "$BUILD_WORKSPACE" \
+  --admit-overlay-inventory "$REVIEWED_INVENTORY" \
+  --overlay-helper "$CONTENT/pilots/cse-pilot/templates/scripts/verify-overlay-inputs.py" \
+  --dry-run
+```
+
+Repeat the second command without `--dry-run` after reviewing it. Admission runs
+the explicitly selected trusted helper against a temporary copy of the existing
+recipe tree, then installs only `package-repos/overlay-inventory.json` and
+`scripts/verify-overlay-inputs.py`. Recipe and inventory contents are treated as
+data; recipes are not imported. The transaction retains the exact helper and
+inventory fingerprints and all existing recipe/pin fingerprints for recovery.
+Changed recipes, missing patches or a stale reviewed inventory stop admission.
+
+An older tag-only `configs/common/repos.yaml` stays byte-identical. The current
+template's builtin commit is not silently applied. Admission records existing
+local overlay bytes; it does not prove which checkout an old tag resolved to or
+approve a different builtin checkout. A new recipe or pin is a separate candidate
+change. After admission, a reviewed controls refresh can adopt the new gate;
+remaining graph checks still apply to that workspace's recorded concrete inputs.
 
 ## Restore or recover without re-solving
 

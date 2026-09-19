@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -252,7 +254,15 @@ def _apply_transaction(
     entries: list[tuple[Path, Path | None]],
     identity: tuple[str, str, str],
     scope: str,
+    *,
+    path_policy: str = "controls",
+    guards: dict[str, Any] | None = None,
+    missing_environments: set[str] | None = None,
 ) -> Path:
+    _validate_transaction_paths([p for p, _ in entries], path_policy)
+    if guards is not None:
+        _check_guards(workspace, guards, missing_environments)
+        _validate_policy_payload(entries, path_policy, guards)
     history = _safe_path(workspace, Path(".cse-control-refresh"))
     history.mkdir(exist_ok=True)
     directory = history / uuid.uuid4().hex
@@ -264,6 +274,8 @@ def _apply_transaction(
         "workspace": str(workspace.resolve()),
         "identity": list(identity),
         "scope": scope,
+        "path_policy": path_policy,
+        "guards": guards,
         "status": "preparing",
         "entries": [],
     }
@@ -284,6 +296,8 @@ def _apply_transaction(
                 raise RefreshError(f"control changed while staging refresh: {relative}")
             record["entries"].append({"path": str(relative), "old": old, "new": new})
         record["status"] = "applying"
+        if guards is not None:
+            _check_guards(workspace, guards, missing_environments)
         _journal(record_path, record)
         for index, (relative, source) in enumerate(entries):
             destination = _safe_path(workspace, relative)
@@ -296,6 +310,8 @@ def _apply_transaction(
             else:
                 (slot / "new").replace(destination)
         record["status"] = "applied"
+        if guards is not None:
+            _check_guards(workspace, guards)
         _journal(record_path, record)
     except Exception as original:
         errors = []
@@ -325,6 +341,392 @@ def _apply_transaction(
             ) from original
         raise
     return record_path
+
+
+def _validate_transaction_paths(paths: list[Path], policy: str) -> None:
+    if policy == "controls":
+        _validate_paths(
+            [p for p in paths if p not in (Path("modulefiles"), Path("presentation"))],
+            [p for p in paths if p in (Path("modulefiles"), Path("presentation"))],
+        )
+    elif policy == "module-policy":
+        environments, modules = set(), set()
+        for path in paths:
+            name = str(path)
+            match = re.fullmatch(
+                r"environments/([^/.][^/]*)/([^/.][^/]*)/spack.yaml", name
+            )
+            module = re.fullmatch(
+                r"configs/environments/([^/.][^/]*)/([^/.][^/]*)/modules.yaml", name
+            )
+            if match:
+                environments.add(match.groups())
+            elif module:
+                modules.add(module.groups())
+            else:
+                raise RefreshError(f"invalid module-policy path: {path}")
+        if (
+            not environments
+            or environments != modules
+            or len(paths) != 2 * len(environments)
+        ):
+            raise RefreshError(
+                "module-policy requires one environment/module configuration pair per environment"
+            )
+    elif policy == "overlay-admission":
+        if (
+            set(paths)
+            != {
+                Path("package-repos/overlay-inventory.json"),
+                Path("scripts/verify-overlay-inputs.py"),
+            }
+            or len(paths) != 2
+        ):
+            raise RefreshError("overlay admission may change only inventory and helper")
+    else:
+        raise RefreshError(f"unsupported transaction path policy: {policy}")
+
+
+def _environment_document(path: Path) -> dict[str, Any]:
+    document = _load_mapping(path, "environment")
+    if set(document) != {"spack"}:
+        raise RefreshError(f"unsupported environment mapping: {path}")
+    _mapping(document["spack"], "environment spack")
+    return document
+
+
+def _without_view(document: dict[str, Any]) -> dict[str, Any]:
+    result = copy.deepcopy(document)
+    result["spack"].pop("view", None)
+    return result
+
+
+def _configuration_fingerprint(path: Path, workspace: Path, ignored: set[str]) -> Any:
+    if path.is_symlink():
+        raise RefreshError(f"unsafe symlink in configuration: {path}")
+    if not path.is_dir():
+        return _fingerprint(path)
+    return {
+        "mode": path.stat().st_mode & 0o7777,
+        "children": {
+            p.name: _configuration_fingerprint(p, workspace, ignored)
+            for p in sorted(path.iterdir())
+            if str(p.relative_to(workspace)) not in ignored
+        },
+    }
+
+
+def _input_guards(
+    workspace: Path, module_policy_paths: list[str] | None = None
+) -> dict[str, Any]:
+    paths: dict[str, Any] = {}
+    for relative in (
+        Path("workspace-manifest.yaml"),
+        Path("catalog"),
+        Path("configs/common"),
+        Path("configs/surfaces"),
+    ):
+        paths[str(relative)] = _fingerprint(_safe_path(workspace, relative))
+    repositories = _safe_path(workspace, Path("package-repos"))
+    if repositories.exists():
+        for child in sorted(repositories.iterdir()):
+            if child.name != "overlay-inventory.json":
+                paths[str(child.relative_to(workspace))] = _fingerprint(child)
+    environments = {}
+    for path in sorted(workspace.glob("environments/*/*/spack.yaml")):
+        relative = path.relative_to(workspace)
+        _safe_path(workspace, relative)
+        environments[str(relative)] = _without_view(_environment_document(path))
+        lock = relative.with_name("spack.lock")
+        paths[str(lock)] = _fingerprint(_safe_path(workspace, lock))
+    return {
+        "paths": paths,
+        "environments": environments,
+        "module_policy_paths": sorted(module_policy_paths or []),
+        "configuration": _configuration_fingerprint(
+            _safe_path(workspace, Path("configs")),
+            workspace,
+            set(module_policy_paths or []),
+        ),
+        "repository_entries": sorted(
+            p.name for p in repositories.iterdir() if p.name != "overlay-inventory.json"
+        )
+        if repositories.exists()
+        else None,
+    }
+
+
+def _check_guards(
+    workspace: Path,
+    expected: dict[str, Any],
+    missing_environments: set[str] | None = None,
+) -> None:
+    actual = _input_guards(workspace, expected.get("module_policy_paths"))
+    # Earlier records predate per-environment configuration fingerprints.
+    if "configuration" not in expected:
+        actual.pop("configuration")
+        actual.pop("module_policy_paths")
+    for name in missing_environments or ():
+        if (
+            name in expected.get("environments", {})
+            and not _safe_path(workspace, Path(name)).exists()
+        ):
+            actual["environments"][name] = expected["environments"][name]
+            lock = str(Path(name).with_name("spack.lock"))
+            actual["paths"][lock] = _fingerprint(_safe_path(workspace, Path(lock)))
+    if actual != expected:
+        raise RefreshError(
+            "protected workspace inputs changed; locks, configuration, catalog and recipes must match the recorded upgrade"
+        )
+
+
+def _validate_policy_payload(entries, policy, guards) -> None:
+    if policy != "module-policy":
+        return
+    for relative, source in entries:
+        if relative.name == "spack.yaml":
+            if source is None or _without_view(
+                _environment_document(source)
+            ) != guards.get("environments", {}).get(str(relative)):
+                raise RefreshError(
+                    f"module-policy cannot change non-view environment semantics: {relative}"
+                )
+        elif source is not None:
+            modules = _load_mapping(source, "module policy")
+            if set(modules) != {"modules"} or not isinstance(modules["modules"], dict):
+                raise RefreshError(
+                    f"module policy must contain only a modules mapping: {relative}"
+                )
+
+
+def upgrade_module_policy(
+    *,
+    workspace: Path,
+    candidate: Path,
+    environments: list[str] | None = None,
+    dry_run: bool = False,
+) -> list[Path]:
+    """Adopt reviewed module settings and named views without changing a solve."""
+    with _refresh_access(workspace, dry_run):
+        identity = _workspace_identity(
+            _load_mapping(workspace / "workspace-manifest.yaml", "workspace manifest")
+        )
+        if identity != _workspace_identity(
+            _load_mapping(candidate / "workspace-manifest.yaml", "candidate manifest")
+        ):
+            raise RefreshError("candidate and workspace identities do not match")
+        old_environments = {
+            str(p.parent.relative_to(workspace / "environments"))
+            for p in workspace.glob("environments/*/*/spack.yaml")
+        }
+        candidate_environments = {
+            str(p.parent.relative_to(candidate / "environments"))
+            for p in candidate.glob("environments/*/*/spack.yaml")
+        }
+        candidate_modules = {
+            str(p.parent.relative_to(candidate / "configs/environments"))
+            for p in candidate.glob("configs/environments/*/*/modules.yaml")
+        }
+        selected = sorted(old_environments if environments is None else environments)
+        if (
+            not selected
+            or len(selected) != len(set(selected))
+            or not set(selected) <= old_environments
+        ):
+            raise RefreshError(
+                "selected environments must be distinct existing workspace environments"
+            )
+        if environments is None and (
+            candidate_environments != old_environments
+            or candidate_modules != old_environments
+        ):
+            raise RefreshError(
+                "candidate environment and module sets must match the workspace"
+            )
+        if not set(selected) <= candidate_environments & candidate_modules:
+            raise RefreshError(
+                "selected candidate environments require module configuration"
+            )
+        guards = _input_guards(
+            workspace,
+            [f"configs/environments/{name}/modules.yaml" for name in selected],
+        )
+        paths: list[Path] = []
+        with tempfile.TemporaryDirectory(prefix="cse-module-policy-") as directory:
+            entries = []
+            for environment in selected:
+                relative = Path("environments") / environment / "spack.yaml"
+                module_relative = (
+                    Path("configs/environments") / environment / "modules.yaml"
+                )
+                paths.extend((relative, module_relative))
+                _validate_transaction_paths(
+                    [relative, module_relative], "module-policy"
+                )
+                old_path = _safe_path(workspace, relative)
+                lock = _safe_path(workspace, relative.with_name("spack.lock"))
+                if not lock.is_file():
+                    raise RefreshError(
+                        f"module-policy requires an existing lock: {lock}"
+                    )
+                old = _environment_document(old_path)
+                proposed = _environment_document(_safe_path(candidate, relative))
+                module_source = _safe_path(candidate, module_relative)
+                modules = _load_mapping(module_source, "candidate module policy")
+                if set(modules) != {"modules"} or not isinstance(
+                    modules["modules"], dict
+                ):
+                    raise RefreshError(
+                        "module policy must contain only a modules mapping"
+                    )
+                includes = old["spack"].get("include:", old["spack"].get("include"))
+                if not isinstance(includes, list) or not all(
+                    isinstance(p, str) for p in includes
+                ):
+                    raise RefreshError(
+                        "module-policy requires explicit ordered string includes"
+                    )
+                destination = _safe_path(workspace, module_relative)
+                active = {(old_path.parent / p).resolve() for p in includes}
+                if (
+                    destination.resolve() not in active
+                    and destination.parent.resolve() not in active
+                ):
+                    raise RefreshError(
+                        f"module scope is not active in old environment: {module_relative}"
+                    )
+                if not destination.parent.is_dir():
+                    raise RefreshError(
+                        f"existing module directory is missing: {destination.parent}"
+                    )
+                views = old["spack"].get("view", {})
+                if views is False:
+                    views = {}
+                views = copy.deepcopy(_mapping(views, "existing named views"))
+                proposed_views = _mapping(
+                    proposed["spack"].get("view"), "candidate named views"
+                )
+                specs = old["spack"].get("specs")
+                if not isinstance(specs, list):
+                    raise RefreshError("old environment specs must be a list")
+                groups = {
+                    item["group"]
+                    for item in specs
+                    if isinstance(item, dict) and isinstance(item.get("group"), str)
+                }
+                for name, view in proposed_views.items():
+                    view = _mapping(view, "candidate named view")
+                    if (
+                        not isinstance(name, str)
+                        or not name
+                        or not isinstance(view.get("root"), str)
+                        or not view["root"]
+                    ):
+                        raise RefreshError(
+                            "candidate view requires a name and string root"
+                        )
+                    if "group" in view and (
+                        not isinstance(view["group"], str)
+                        or view["group"] not in groups
+                    ):
+                        raise RefreshError(
+                            f"view {name} refers to a missing spec group: {view['group']}"
+                        )
+                    views[name] = view
+                for name, module in modules["modules"].items():
+                    if (
+                        isinstance(module, dict)
+                        and isinstance(module.get("use_view"), str)
+                        and module["use_view"] not in views
+                    ):
+                        raise RefreshError(
+                            f"module set {name} refers to a missing named view"
+                        )
+                old["spack"]["view"] = views
+                staged = Path(directory) / str(len(entries))
+                staged.write_text(
+                    yaml.safe_dump(old, sort_keys=False), encoding="utf-8"
+                )
+                shutil.copymode(old_path, staged)
+                entries.extend(((relative, staged), (module_relative, module_source)))
+            _validate_policy_payload(entries, "module-policy", guards)
+            if not dry_run:
+                _apply_transaction(
+                    workspace,
+                    entries,
+                    identity,
+                    "module-policy",
+                    path_policy="module-policy",
+                    guards=guards,
+                )
+        return paths
+
+
+def admit_overlay_inventory(
+    *, workspace: Path, inventory_path: Path, helper_path: Path, dry_run: bool = False
+) -> list[Path]:
+    """Admit a reviewed inventory of existing recipes, retaining their exact bytes.
+
+    The helper is trusted executable tooling explicitly selected by the operator;
+    recipe files and inventory content are data and are never imported.
+    """
+    with _refresh_access(workspace, dry_run):
+        identity = _workspace_identity(
+            _load_mapping(workspace / "workspace-manifest.yaml", "workspace manifest")
+        )
+        guards = _input_guards(workspace)
+        for source in (inventory_path, helper_path):
+            if source.is_symlink() or not source.is_file():
+                raise RefreshError(f"admission input must be a regular file: {source}")
+        repository = _safe_path(workspace, Path("package-repos"))
+        if not repository.is_dir():
+            raise RefreshError(
+                "existing package-repos directory is required for admission"
+            )
+        paths = [
+            Path("package-repos/overlay-inventory.json"),
+            Path("scripts/verify-overlay-inputs.py"),
+        ]
+        for relative in paths:
+            destination = _safe_path(workspace, relative)
+            if not destination.parent.is_dir():
+                raise RefreshError(
+                    f"existing admission directory is missing: {destination.parent}"
+                )
+        with tempfile.TemporaryDirectory(prefix="cse-overlay-admission-") as directory:
+            snapshot = Path(directory) / "package-repos"
+            shutil.copytree(repository, snapshot)
+            inventory = snapshot / "overlay-inventory.json"
+            shutil.copy2(inventory_path, inventory)
+            helper = Path(directory) / "verify-overlay-inputs.py"
+            shutil.copy2(helper_path, helper)
+            try:
+                verified = subprocess.run(
+                    [sys.executable, str(helper), "--root", str(snapshot), "--check"],
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    timeout=60,
+                )
+            except subprocess.TimeoutExpired as error:
+                raise RefreshError(
+                    "overlay inventory verification timed out"
+                ) from error
+            if verified.returncode:
+                raise RefreshError(
+                    f"reviewed overlay inventory does not match existing recipes: {verified.stdout.strip()}"
+                )
+            _check_guards(workspace, guards)
+            if not dry_run:
+                _apply_transaction(
+                    workspace,
+                    [(paths[0], inventory), (paths[1], helper)],
+                    identity,
+                    "overlay-admission",
+                    path_policy="overlay-admission",
+                    guards=guards,
+                )
+        return paths
 
 
 def _refresh_control_files(
@@ -455,7 +857,26 @@ def _restore_control_files(
             for key in ("old", "new")
         )
         (trees if is_tree else files).append(relative)
-    _validate_paths(files, trees)
+    policy = record.get("path_policy", "controls")
+    guards = record.get("guards")
+    missing_environments = (
+        {str(p) for p in files if p.name == "spack.yaml"} if recover else None
+    )
+    if policy != "controls" and not isinstance(guards, dict):
+        raise RefreshError("upgrade recovery requires recorded protected input guards")
+    if guards is not None:
+        _check_guards(workspace, guards, missing_environments)
+    if recover and record["status"] == "preparing" and not raw_entries:
+        if policy not in ("controls", "module-policy", "overlay-admission"):
+            raise RefreshError(f"unsupported transaction path policy: {policy}")
+        if not dry_run:
+            record["status"] = "rolled-back"
+            record["recovery_note"] = (
+                "staging was interrupted before any workspace mutation"
+            )
+            _journal(record_path, record)
+        return []
+    _validate_transaction_paths([*files, *trees], policy)
     entries = []
     for index, entry in enumerate(record["entries"]):
         relative = Path(entry["path"])
@@ -471,13 +892,21 @@ def _restore_control_files(
                 f"refresh backup no longer matches recorded content: {relative}"
             )
         entries.append((relative, backup if entry["old"] is not None else None))
+    if guards is not None:
+        _validate_policy_payload(entries, policy, guards)
     if not dry_run:
         previous_status = record["status"]
         record["status"] = "recovering" if recover else "restoring"
         _journal(record_path, record)
         try:
             recovery = _apply_transaction(
-                workspace, entries, identity, "recovery" if recover else "restore"
+                workspace,
+                entries,
+                identity,
+                "recovery" if recover else "restore",
+                path_policy=policy,
+                guards=guards,
+                missing_environments=missing_environments,
             )
         except Exception:
             record["status"] = previous_status
@@ -563,7 +992,26 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--values")
     parser.add_argument("--workspace", required=True)
     parser.add_argument(
-        "--scope", choices=("presentation", "controls", "all"), default="all"
+        "--candidate",
+        help="separately reviewed candidate workspace for module-policy migration",
+    )
+    parser.add_argument(
+        "--environment",
+        action="append",
+        help="existing compiler/environment to upgrade; repeat to select several",
+    )
+    parser.add_argument(
+        "--admit-overlay-inventory",
+        help="explicitly reviewed inventory of this workspace's existing recipes",
+    )
+    parser.add_argument(
+        "--overlay-helper",
+        help="trusted overlay verification helper to admit with the inventory",
+    )
+    parser.add_argument(
+        "--scope",
+        choices=("presentation", "controls", "all", "module-policy"),
+        default="all",
     )
     parser.add_argument(
         "--dry-run",
@@ -588,6 +1036,65 @@ def main(argv: list[str] | None = None) -> int:
     staging_parent: Path | None = None
     try:
         workspace = _absolute_path(args.workspace, "workspace")
+        if args.scope == "module-policy" or args.admit_overlay_inventory:
+            if (
+                args.restore_from
+                or args.recover_from
+                or any((args.composer, args.blueprint, args.values))
+            ):
+                raise RefreshError(
+                    "explicit upgrade modes cannot be combined with render or recovery arguments"
+                )
+            if args.scope == "module-policy":
+                if (
+                    not args.candidate
+                    or args.admit_overlay_inventory
+                    or args.overlay_helper
+                ):
+                    raise RefreshError(
+                        "module-policy requires --candidate and cannot include overlay admission"
+                    )
+                changed = upgrade_module_policy(
+                    workspace=workspace,
+                    candidate=_absolute_path(args.candidate, "candidate"),
+                    environments=args.environment,
+                    dry_run=args.dry_run,
+                )
+                operation = "upgrade module policy"
+            else:
+                if (
+                    not args.overlay_helper
+                    or args.candidate
+                    or args.environment
+                    or args.scope != "all"
+                ):
+                    raise RefreshError(
+                        "overlay admission requires --overlay-helper and cannot include another scope"
+                    )
+                changed = admit_overlay_inventory(
+                    workspace=workspace,
+                    inventory_path=_absolute_path(
+                        args.admit_overlay_inventory, "inventory"
+                    ),
+                    helper_path=_absolute_path(args.overlay_helper, "overlay helper"),
+                    dry_run=args.dry_run,
+                )
+                operation = "admit overlay inventory and helper"
+            print(("Would " if args.dry_run else "Completed ") + operation + ":")
+            for relative in changed:
+                print(f"  {relative}")
+            if not args.dry_run:
+                print(
+                    f"Restore records: {workspace / '.cse-control-refresh'}/*/record.json"
+                )
+            print(
+                "Preserved concrete inputs, lockfiles, repository pins and recipes, and installed packages."
+            )
+            return 0
+        if args.candidate or args.environment or args.overlay_helper:
+            raise RefreshError(
+                "candidate/environment/helper arguments require their explicit upgrade mode"
+            )
         if args.restore_from or args.recover_from:
             restore = (
                 recover_control_files if args.recover_from else restore_control_files
