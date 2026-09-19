@@ -113,6 +113,16 @@ valid; check expected module names before publication. This transaction does not
 back up or regenerate external view/module output roots. Keep their previous
 presentation until the replacement passes validation.
 
+If the retained launcher predates the `modules` action, use its prepared Spack
+shell and the native view/module commands in the delivered
+[`BUILDER-HANDOFF.md` template](templates/BUILDER-HANDOFF.md.j2), under “Commands
+used by the wrapper.” Select only completed, locked environments and check their
+installed prefixes first. Refresh `default` before any additional set sharing
+its root; `core_independent` must not use `--delete-tree`. Compiler/MPI producer
+sets have separate roots. Adding an inventory does not make older compiler
+specifications satisfy a newer launcher's graph policy, so qualify a controls
+refresh separately instead of changing old specs or locks to satisfy it.
+
 ## Admit an inventory for existing frozen overlays
 
 Use the trusted helper from the tested delivery to produce a separate inventory
