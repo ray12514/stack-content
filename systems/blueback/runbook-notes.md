@@ -157,66 +157,45 @@ failure must stop that step without exiting the interactive shell.
 
 ### Refresh `cse-build` without replacing the workspace
 
-Use this shortcut when Blueback already has a valid initialized workspace and
-lockfiles, but Stack Content changed `cse-build` or one of its generated helper
-files. It does not rerender the static catalog, replace environment YAML,
-reconcretize, clear caches, or touch installed packages.
+For an existing Blueback workspace, follow the complete
+[existing-trial maintenance procedure](../../pilots/cse-pilot/CONTROL-REFRESH.md).
+It starts with the saved login session and tool selection, identifies the
+recorded values, creates a separate reviewed `REFRESH_VALUES` copy when needed,
+and previews the exact maintenance scope. The earlier shortcut that regenerated
+`BUILD_VALUES` and refreshed the default `all` scope is superseded.
 
-Stop active `cse-build` processes first. From the existing operator session,
-synchronize only the two inputs used by this refresh and rebuild Stack Composer
-when its checkout changed:
+Keep the original values, catalog, environment inputs, locks and installed
+prefixes. Do not rerun `create-build-values.py` for this maintenance operation.
+For compiler entrances and lane selectors, use `--scope presentation`.
+Adopting `cse-build`, configuration or its verifier is a separate qualified
+`--scope controls` operation: admit the inventory/helper prerequisites against
+existing recipe bytes and check the proposed launcher's graph requirements
+before replacing retained controls. A newer verifier does not authorize edits
+to old specs or locks merely to satisfy it.
 
-```bash
-source "$CSE_OPERATOR_SESSION_FILE"
-
-for repo in stack-composer stack-content; do
-  git -C "$WORK_ROOT/$repo" status --short --branch
-done
-# Stop here if either checkout contains unreviewed work.
-
-for repo in stack-composer stack-content; do
-  git -C "$WORK_ROOT/$repo" pull --ff-only
-done
-
-source "$CSE_OPERATOR_SESSION_FILE"
-cse_rebuild_tools composer
-```
-
-Refresh the declared control set in place, then run the read-only status and
-lock verification checks:
+Quiesce builders and consumers of the selected controls. Use the guide's
+preview, review, apply and retained-recovery steps, then check the existing
+workspace with its qualified launcher:
 
 ```bash
-"$CSE_PYTHON" \
-  "$CONTENT/pilots/cse-pilot/scripts/create-build-values.py"
-
-"$CSE_PYTHON" \
-  "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
-  --composer "$STACK_COMPOSER" \
-  --blueprint "$CONTENT/pilots/cse-pilot" \
-  --values "$BUILD_VALUES" \
-  --workspace "$BUILD_WORKSPACE"
-
 cd "$BUILD_WORKSPACE"
 ./cse-build login status
 ./cse-build login verify
 ```
 
-The refresh renders a disposable workspace, confirms the blueprint, Blueback
-system, and catalog release match, and atomically replaces only `cse-build`,
-the common config, its environment helpers, the lock verifier, and the builder
-handoff note, plus the generated workspace `modulefiles/` and `presentation/`
-control trees. Those workspace trees do not contain Spack's release package
-modules. A mismatch stops without changing the existing controls. If
-environment inputs or package overlays changed, use the common runbook's
-appropriate workspace or release recovery instead of this shortcut.
+An older launcher may lack `modules` or `publish-modules`; follow the guide's
+older-launcher route for installed-module maintenance instead of assuming a
+source update changed the generated launcher. `presentation` refresh affects
+workspace entrance/lane files, not the external package-module or view roots.
+Back up those generated roots separately before regenerating them. Package,
+compiler, provider or recipe changes require a separate candidate and affected
+consumer validation.
 
-The same shared control set is used on every trial system. For Blueback it
-places the builder's misc/provider and concretization indexes below
-`$CSE_RESTRICTED_ROOT/cache/misc/$USER`. Before and after Spack it restores and
-verifies the CSE group, group read/write access, directory search/setgid access,
-and no-world-access policy across the workspace, source/misc caches, views,
-modules, and file-backed build cache. The source cache remains shared without a
-builder suffix; installed prefixes remain governed by Spack package permissions.
+The qualified shared controls enforce the recorded CSE group, group read/write
+and directory search/setgid access across generated workspace/cache/view/module
+content. Installed package prefixes remain governed by Spack package
+permissions. Use the common runbook's exact-root permission recovery when a
+traversal failure prevents entry; do not recursively chmod the install tree.
 
 ### Blueback shared generated-content recovery
 
@@ -264,25 +243,17 @@ find "$BROKEN_ROOT" -xdev -user "$USER" -type f ! -perm -0100 \
   -exec chmod 0660 {} +
 ```
 
-Synchronize Stack Content and replace the generated controls in the existing
-Blueback workspace. Pulling the repository alone does not update that already
-rendered workspace:
+After the one-time traversal repair, use the
+[existing-trial maintenance procedure](../../pilots/cse-pilot/CONTROL-REFRESH.md)
+to qualify and preview `--scope controls` from retained recorded values. Do not
+regenerate `BUILD_VALUES` or replace the workspace. The earlier default-scope
+refresh shortcut is superseded; an overlay inventory and helper may need
+explicit admission before current controls can be adopted.
+
+After the reviewed controls have been applied, check the configured misc-cache
+variable and the retained workspace:
 
 ```bash
-git -C "$CONTENT" status --short --branch
-# Stop here if the checkout contains unreviewed work.
-git -C "$CONTENT" pull --ff-only origin codex/simplified-render-plan
-
-"$CSE_PYTHON" \
-  "$CONTENT/pilots/cse-pilot/scripts/create-build-values.py"
-
-"$CSE_PYTHON" \
-  "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
-  --composer "$STACK_COMPOSER" \
-  --blueprint "$CONTENT/pilots/cse-pilot" \
-  --values "$BUILD_VALUES" \
-  --workspace "$BUILD_WORKSPACE"
-
 grep -F 'misc_cache: ${SPACK_MISC_CACHE_PATH}' \
   "$BUILD_WORKSPACE/configs/common/config.yaml"
 
@@ -295,8 +266,9 @@ The originating builder exits the prepared shell and reruns `./cse-build login
 status`. The second Blueback builder then sources that builder's own operator
 session, enters the same workspace, and runs the same status command. A clean
 status from both accounts is the handoff gate. Each account uses its own
-`cache/misc/$USER` partition while sharing the workspace, source cache, install
-tree, views, modules, and file-backed build cache.
+recorded misc-cache partition (current controls also bind it to the reviewed
+overlay inventory) while sharing the workspace, source cache, install tree,
+views, modules, and file-backed build cache.
 
 Do not point `BROKEN_ROOT` at the restricted trial root, release root, or Spack
 install tree, and do not recursively apply `660` to a directory tree. After the
@@ -1135,8 +1107,17 @@ create a new trial release.
 ### Phase Zero restricted module review after both surfaces finish
 
 Do not add a package, root spec, environment, or replacement lock to create the
-consumer entrance. Refresh the declared workspace controls, finish all eight
-existing environments, and then run:
+consumer entrance. Use the
+[existing-trial maintenance procedure](../../pilots/cse-pilot/CONTROL-REFRESH.md)
+to inspect installed coverage, adopt only needed module policy, regenerate
+package modules from retained locks, and test the consumer before presentation
+publication. An older completed build may still lack current module settings;
+completion alone does not establish module readiness.
+
+Select `presentation` for workspace entrance/lane changes. Qualify any launcher
+or verifier update separately; if the retained launcher lacks `modules` or
+`publish-modules`, use the guide's older-launcher route. Once both surfaces and
+their required module/view output are ready, the qualified launcher supports:
 
 ```bash
 cd "$BUILD_WORKSPACE"
@@ -1172,6 +1153,7 @@ Validate the candidate from a clean module state:
 
 ```bash
 module --force purge
+module use "$BUILD_WORKSPACE/modulefiles"
 module load cse/init-GCC
 module use "$BUILD_WORKSPACE/modulefiles/gcc/lanes"
 module load MPI

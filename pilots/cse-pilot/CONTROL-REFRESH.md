@@ -6,16 +6,181 @@ cluster. Local lab workspaces are disposable test fixtures. Preserve the real
 cluster's recorded inputs, locks, Spack database, installed prefixes and runtime
 dependencies until the replacement is accepted.
 
-## Choose the change
+## Start here after the packages are built
+
+The sequence is **restore the operator session → check the existing build →
+review/change module policy or presentation → generate package modules if
+needed → test with `module use` → expose the accepted presentation**. A source
+checkout update alone does not perform any of those workspace operations.
+
+For the usual completed-build pass, follow steps 1–3, choose only the needed
+change from the table, then continue to [module generation](#generate-package-modules-from-the-existing-installations)
+and [the clean consumer test](#test-the-workspaces-entrance-and-lanes-with-module-use).
+Inventory admission and transaction restoration are separate reference sections;
+they are not required on every login.
+
+Run each block separately in Bash and stop on a nonzero result. Use the saved
+system/release paths from this trial; the angle-bracket examples below must be
+replaced with those recorded values.
+
+### 1. Restore this system's operator session
+
+On a fresh login, source the existing activation file by its recorded absolute
+path. For the default operator-session location:
+
+```bash
+source "$HOME/STACK_TESTING/operator-sessions/<system>/<trial-release>/activate.sh"
+cse_session_status
+printf 'workspace=%s\nrecorded values=%s\n' "$BUILD_WORKSPACE" "$BUILD_VALUES"
+```
+
+This restores the paths used for preparation and maintenance. It does not
+activate a Spack environment, recreate values, render, or rebuild packages.
+The site must already supply `USER` and an absolute writable `WORKDIR`; start
+with no active Spack environment. If activation reports a missing prerequisite,
+resolve it before continuing rather than inventing a shared work path.
+Do not create a new session for an already-built trial or source the generated
+`env/setup-build-env.sh` directly. A different operator session root uses its
+recorded `activate.sh` path instead of the default above.
+
+| Variable | Supplied by the saved session | Meaning |
+| --- | --- | --- |
+| `BUILD_WORKSPACE` | Yes | Existing generated workspace containing `cse-build`, `catalog/`, environments and locks |
+| `BUILD_VALUES` | Yes | Path to the recorded `cse-trials-build-values.yaml` used to initialize this trial; confirm that file still describes this workspace |
+| `CONTENT`, `STACK_COMPOSER`, `CSE_PYTHON` | Yes | Checkout-based content, portable Composer and preparation Python paths |
+| `BUILD_EVIDENCE` | Yes | Evidence directory for this system/release |
+| `PREP_PYTHON` | No | The preparation Python you explicitly select below |
+| `REFRESH_VALUES` | No | Path to the YAML input selected for this maintenance operation |
+
+The receiving builder can enter an existing workspace directly through
+`./cse-build`; that handoff does not require an operator session. Here you are
+acting as the operator because you also need the content/tools and recorded
+inputs to review changes.
+
+### 2. Select the maintenance tools and values
+
+For either tool choice, select the recorded input file first:
+
+```bash
+REFRESH_VALUES="$BUILD_VALUES"
+test -r "$REFRESH_VALUES"
+```
+
+For the reviewed checkout-based tools restored by the session:
+
+```bash
+PREP_PYTHON="$CSE_PYTHON"
+test -x "$PREP_PYTHON"
+"$PREP_PYTHON" -c 'import yaml'
+"$PREP_PYTHON" "$STACK_COMPOSER" --help
+```
+
+The preparation Python must be 3.9 or newer and have PyYAML. Updating Git does
+not rebuild `stack-composer.pyz`; use [the tool update procedure](STACK-COMPOSER-UPDATE.md)
+when selecting a changed Composer implementation. The tested recovery work is
+on `codex/recovery-hardening`. The saved session may still report the original
+`STACK_BRANCH`; activation does not switch branches or select the new delivery.
+
+If using the verified offline delivery instead, first restore the session as
+above, then select the delivery and its already-created helper runtime:
+
+```bash
+DELIVERY_ROOT=/absolute/path/to/the/verified/versioned/delivery
+PREP_PYTHON=/absolute/path/to/its/runtime/bin/python
+STACK_COMPOSER="$DELIVERY_ROOT/tools/stack-composer.pyz"
+CONTENT="$DELIVERY_ROOT/sources/stack-content"
+export SHIV_ROOT="$(dirname "$(dirname "$PREP_PYTHON")")/shiv-cache"
+export PYTHONDONTWRITEBYTECODE=1
+"$PREP_PYTHON" "$STACK_COMPOSER" --help
+"$PREP_PYTHON" -c 'import yaml'
+```
+
+Follow the delivery's `UPDATE.md` once to verify it and create that offline
+runtime. Keep `BUILD_VALUES`, `BUILD_WORKSPACE` and the other trial paths from
+the saved session. Sourcing `activate.sh` again resets the tool/content paths
+to the checkouts, so repeat the delivery selection after any reactivation.
+Do not run `cse_rebuild_tools` against immutable delivery sources.
+
+`REFRESH_VALUES` is an input filename, not another environment or an output
+generated by `refresh-workspace-controls.py`. It can point directly to
+`BUILD_VALUES` when the recorded file already satisfies the selected templates.
+If fields are missing or presentation values need editing, create and review a
+separate copy using [the values procedure below](#prepare-a-separate-values-copy).
+The refresh helper reads those values with the workspace's retained `catalog/`,
+renders a temporary comparison workspace, and adopts only the selected scope.
+
+### 3. Check the existing build and inspect its module layout
+
+Run the retained workspace's launcher; do not replace it just to obtain newer
+commands:
+
+```bash
+cd "$BUILD_WORKSPACE"
+./cse-build --help
+./cse-build login status
+./cse-build login verify
+```
+
+`cse-build` prepares its own pinned Spack process. You do not need to run
+`spack env activate` or load the CSE consumer modules first. `status` reports
+installed specs; `verify` checks configuration and concrete locks. Neither
+proves that every locked prefix is present or that modules load correctly.
+These actions also run the launcher's existing permission/preflight hooks.
+If they fail, retain the error and diagnose that failure before refreshing.
+
+Use the recorded values to print the output roots and entrance names:
+
+```bash
+"$PREP_PYTHON" - "$BUILD_VALUES" <<'PY'
+import sys, yaml
+v = yaml.safe_load(open(sys.argv[1]))
+print("Package modules:", v["paths"]["modules_root"])
+print("Views:", v["paths"]["views_root"])
+for name in ("shared", "platform"):
+    c = v[name]["compiler"]
+    print(name, "compiler:", c["name"], "entrance: cse/" + c["public_name"])
+PY
+if test -d "$BUILD_WORKSPACE/modulefiles"; then
+  find "$BUILD_WORKSPACE/modulefiles" -type f -print
+else
+  printf 'Workspace presentation is missing; prepare it before the consumer check.\n'
+fi
+find "$BUILD_WORKSPACE/configs/environments" -name modules.yaml -print
+```
+
+The generated `configs/environments/<compiler>/<kind>/modules.yaml` owns package
+names/projections, dependencies, visibility and output roots. The corresponding
+`environments/<compiler>/<kind>/spack.yaml` owns named views. The workspace's
+`modulefiles/` owns the compiler entrances and Serial/MPI selectors. Review
+these files against the intended CSE presentation before choosing a change.
+
+Create a retained record for this maintenance pass and capture the lock hashes:
+
+```bash
+mkdir -p "$BUILD_EVIDENCE"
+MODULE_REVIEW=$(mktemp -d "$BUILD_EVIDENCE/module-review.XXXXXX")
+cd "$BUILD_WORKSPACE"
+find environments -name spack.lock -print0 | sort -z | \
+  xargs -0 sha256sum > "$MODULE_REVIEW/locks.sha256"
+```
+
+Record the printed module/view roots, module names and command results there.
+Before changing generated outputs, stop their writers/readers and retain copies
+of those exact external module/view trees using the site's backup procedure.
+The control transaction backs up configuration; it does not back up these
+output trees. No change is needed when the current policy and modules already
+match the intended layout: proceed directly to the clean-session check.
+
+## Choose and preview the change
 
 | Change | Operation | Concrete graph |
 | --- | --- | --- |
 | Preparation tool code only | Update/rebuild the tool, render to a separate comparison directory | Retain existing locks |
-| Compiler entrance and lane selectors | `--scope presentation` below, validate, then publish modules | Retain existing locks and installed packages |
+| Compiler entrance and lane selectors | [Preview/apply `--scope presentation`](#preview-and-apply-compiler-entrancelane-presentation), then test | Retain existing locks and installed packages |
 | Build helper or operational config | Review `--scope controls` or `all`; satisfy declared dependencies first | Retain locks; this does not accept new recipe inputs |
-| Package module generation | Use the prepared workspace's Spack and its recorded module settings; see `BUILDER-HANDOFF.md` | Generate from installed locked specs; no concretization |
-| Missing or older package-module policy | Explicit `--scope module-policy` from a reviewed candidate, below | Merge named views and replace selected module settings; retain the existing solve |
-| Older overlay gate without an inventory | Explicit inventory/helper admission against existing recipe bytes, below | Retain existing repository pins, recipes and locks |
+| Package module generation | [Run the retained workspace's module commands](#generate-package-modules-from-the-existing-installations) | Generate from installed locked specs; no concretization |
+| Missing or older package-module policy | [Preview/apply `--scope module-policy`](#upgrade-package-module-policy-in-an-older-workspace) from a reviewed candidate | Merge named views and replace selected module settings; retain the existing solve |
+| Older overlay gate without an inventory | [Admit an inventory/helper](#admit-an-inventory-for-existing-frozen-overlays) against existing recipe bytes | Retain existing repository pins, recipes and locks |
 | Package version, variant, recipe, compiler or MPI policy | Separate candidate inputs, reviewed overlay inventory if needed, explicit solve and affected-consumer tests | Preserve original locks; inspect new candidate locks |
 
 `presentation` replaces only the blueprint's `modulefiles/` and `presentation/`
@@ -25,23 +190,66 @@ refreshing package modules are separate operations. Back up the destination
 module tree before an intentional package-module refresh; the control refresh
 does not back up an external module root.
 
-## Render values and preview
+### Prepare a separate values copy
 
-Keep recorded values unchanged. If they predate required fields, use
-`scripts/prepare-existing-workspace-values.py --help` to create a temporary
-render-only copy from the recorded values and the recorded Spack identity.
-When the old values have no builtin commit, supply the explicitly reviewed
-`--builtin-commit`; the June 2026 builtin used by this candidate is
-`d4f7c711a6a42f1c4d551c8fd10fce9a11340a81`. This only satisfies rendering. It does
-not change the active workspace's repository configuration or lockfiles.
-Do not regenerate existing values from current discovery and assume the result
-is equivalent to the recorded trial.
-
-Use the Python environment supplied for the preparation tools (with PyYAML),
-the portable Composer entry point, and absolute paths:
+Keep `BUILD_VALUES` unchanged. For a presentation edit to an already-current
+file, copy it to a new path under `MODULE_REVIEW`, set `REFRESH_VALUES` to that
+copy, and edit only the reviewed fields there:
 
 ```bash
-python3 "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
+REFRESH_VALUES="$MODULE_REVIEW/refresh-values.yaml"
+test ! -e "$REFRESH_VALUES" && test ! -L "$REFRESH_VALUES" && \
+  cp -p -- "$BUILD_VALUES" "$REFRESH_VALUES"
+```
+
+After that command succeeds, edit the reviewed presentation fields in the copy
+and inspect `diff -u "$BUILD_VALUES" "$REFRESH_VALUES"`.
+
+For older values, use the following alternative instead of that copy block.
+The preparation helper creates that copy and fills supported historical fields. First
+compare the saved Spack identity below with the existing `BUILDER-HANDOFF.md`
+and launcher; use the workspace's recorded identity if they differ:
+
+```bash
+printf 'Spack: %s %s %s %s\nmode=%s\nroot=%s\n' \
+  "$SPACK_SOURCE" "$SPACK_VERSION" "$SPACK_TAG" "$SPACK_COMMIT" \
+  "$SPACK_RUNTIME_MODE" "$SPACK_ROOT"
+REFRESH_VALUES="$MODULE_REVIEW/refresh-values.yaml"
+test ! -e "$REFRESH_VALUES" && test ! -L "$REFRESH_VALUES" && \
+"$PREP_PYTHON" "$CONTENT/pilots/cse-pilot/scripts/prepare-existing-workspace-values.py" \
+  --source "$BUILD_VALUES" --output "$REFRESH_VALUES" \
+  --spack-source "$SPACK_SOURCE" --spack-version "$SPACK_VERSION" \
+  --spack-tag "$SPACK_TAG" --spack-commit "$SPACK_COMMIT" \
+  --spack-mode "$SPACK_RUNTIME_MODE" \
+  --shared-spack-root "$CSE_TOOLS_ROOT/spack/$SPACK_VERSION" \
+  --initial-spack-root "$SPACK_ROOT"
+```
+
+Require successful output creation, then run
+`diff -u "$BUILD_VALUES" "$REFRESH_VALUES"`. `diff` exits 1 when it shows
+differences; inspect them. The helper writes the new file named by `--output`.
+The current source helper also rejects an existing file or link. The sealed
+`stack-tools-2026.09.19-recovery.2` delivery predates that guard; the explicit
+new-output check above is required when using its helper. The helper updates
+supported render fields such as stage
+contexts, permissions and explicit Spack metadata; it cannot discover missing
+compiler driver commands or approve changed provider facts. Missing facts stop
+the operation until supplied from reviewed system evidence.
+
+If the recorded `package_repo.commit` is absent, the helper stops. Repeat with
+`--builtin-commit <reviewed-full-commit>` only after recording which builtin
+snapshot the candidate should render against. The tested delivery used
+`d4f7c711a6a42f1c4d551c8fd10fce9a11340a81`; this is not evidence for an older
+workspace's tag resolution. Adding it to a render-only copy does not adopt that
+pin in the active workspace. Do not rerun `create-build-values.py` over the
+recorded file or regenerate values from current discovery for this maintenance.
+
+### Preview and apply compiler entrance/lane presentation
+
+Use the tool and values selections from steps 1–2:
+
+```bash
+"$PREP_PYTHON" "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
   --composer "$STACK_COMPOSER" \
   --blueprint "$CONTENT/pilots/cse-pilot" \
   --values "$REFRESH_VALUES" \
@@ -58,7 +266,9 @@ Quiesce builders and consumers of the selected controls, then repeat the command
 without `--dry-run`. Ordinary replacement failures roll the complete selected
 set back, including file modes and removal of newly introduced files. Successful
 refreshes retain previous controls and fingerprints under
-`$BUILD_WORKSPACE/.cse-control-refresh/<id>/record.json`. The script serializes
+`$BUILD_WORKSPACE/.cse-control-refresh/<id>/record.json`. Record the exact ID/path
+for this operation; the CLI may print the history pattern rather than the
+individual filename. Use the listing in the restore section below. The script serializes
 its own refresh/restore operations. It does not lock an already running builder
 or make a multi-file switch atomic for concurrent readers or power loss.
 
@@ -78,8 +288,25 @@ selected `environments/<compiler>/<kind>/spack.yaml` and corresponding
 current required compiler command maps; do not invent those facts to make a full
 render pass.
 
+When the reviewed `REFRESH_VALUES` supports current rendering, create that
+comparison candidate at a new path:
+
 ```bash
-python3 "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
+MODULE_POLICY_CANDIDATE="$MODULE_REVIEW/module-policy-candidate"
+"$PREP_PYTHON" "$STACK_COMPOSER" init-workspace \
+  --blueprint "$CONTENT/pilots/cse-pilot" \
+  --catalog "$BUILD_WORKSPACE/catalog" --values "$REFRESH_VALUES" \
+  --output "$MODULE_POLICY_CANDIDATE"
+```
+
+Inspect/edit the proposed named views and selected module policy in this
+candidate. Rendering it does not install anything, but its recorded output roots
+may refer to the active trial: do not run its launcher. If using a separately
+authored comparison tree instead, set `MODULE_POLICY_CANDIDATE` to its reviewed
+absolute path. Preview adoption only after that candidate exists:
+
+```bash
+"$PREP_PYTHON" "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
   --workspace "$BUILD_WORKSPACE" --candidate "$MODULE_POLICY_CANDIDATE" \
   --scope module-policy --environment gcc/core --dry-run
 ```
@@ -123,6 +350,164 @@ sets have separate roots. Adding an inventory does not make older compiler
 specifications satisfy a newer launcher's graph policy, so qualify a controls
 refresh separately instead of changing old specs or locks to satisfy it.
 
+## Generate package modules from the existing installations
+
+Do this after any accepted module-policy change, or when package modules/views
+are missing. Skip generation when the current outputs already match the policy.
+Their locations come from the workspace's effective `modules.yaml` and named
+views, not from the directory where you invoke the command. A presentation-only
+refresh does not move or regenerate them.
+
+When the retained launcher's `--help` lists `modules`, run from the appropriate
+site-approved context (the example uses an allocated compute node):
+
+```bash
+cd "$BUILD_WORKSPACE"
+./cse-build compute modules
+```
+
+This checks that all non-external locked specs in the selected environments are
+installed and their prefixes exist before refreshing any selected view/module
+tree. It regenerates the named views and all applicable module sets without
+fetching, concretizing or installing. `--surface shared` or `--surface platform`
+selects one compiler surface; lock verification still covers the whole workspace.
+The `compute` argument selects a context; it does not request an allocation.
+
+### If the older launcher has no `modules` action
+
+Retain that launcher and enter its prepared shell. Inspect each completed
+environment's effective policy before touching its outputs:
+
+```bash
+cd "$BUILD_WORKSPACE"
+./cse-build compute shell
+# The following commands run inside that prepared shell.
+ENV_DIR="$CSE_BUILD_WORKSPACE/environments/gcc/core"  # choose an existing environment
+test -f "$ENV_DIR/spack.lock"
+spack -e "$ENV_DIR" config get modules
+spack -e "$ENV_DIR" python -c '
+import os, sys
+import spack.environment as ev
+missing = [s for s in ev.active_environment().all_specs()
+           if not s.external and (not s.installed or not os.path.isdir(str(s.prefix)))]
+if missing:
+    sys.stderr.write("Missing installed specs: " + ", ".join(str(s) for s in missing) + "\n")
+    sys.exit(1)
+'
+```
+
+Require that check to pass before continuing. If the module policy or named
+views are absent, return to the explicit module-policy upgrade above. After
+retaining the output trees and stopping their writers/readers:
+
+```bash
+spack -e "$ENV_DIR" env view regenerate
+spack -e "$ENV_DIR" module tcl refresh --delete-tree -y
+```
+
+The unqualified refresh processes only the `default` set. Then refresh each
+additional set actually present in this environment's effective policy:
+
+| Set | Command after the default refresh |
+| --- | --- |
+| `core_independent` in a Core environment | `spack -e "$ENV_DIR" module tcl --name core_independent refresh -y` |
+| `compiler_producer` for a built compiler | `spack -e "$ENV_DIR" module tcl --name compiler_producer refresh --delete-tree -y` |
+| `mpi_producer` for a built MPI provider | `spack -e "$ENV_DIR" module tcl --name mpi_producer refresh --delete-tree -y` |
+
+`core_independent` shares the default Core output root: do not use
+`--delete-tree` for it. The producer sets must own separate roots as recorded in
+the reviewed policy. Repeat for each intended completed environment, then
+`exit` the prepared build shell to return to the operator shell.
+
+From the operator shell, check the retained lock record:
+
+```bash
+cd "$BUILD_WORKSPACE"
+sha256sum --check "$MODULE_REVIEW/locks.sha256"
+```
+
+## Test the workspace's entrance and lanes with `module use`
+
+Use a fresh login or allocation shell with the site's module command available,
+no active Spack environment, and no previously loaded CSE/compiler/MPI surface.
+Use the site's clean-module reset procedure. Do not test consumer behavior from
+inside `cse-build shell`, whose build paths and compiler state can mask errors.
+
+Set only the existing workspace path in this clean consumer shell. The example
+uses `init-GCC`; replace it with the entrance name printed from this system's
+recorded values. Repeat in another clean shell for its platform entrance.
+
+```bash
+BUILD_WORKSPACE=/absolute/path/to/the/existing/workspace
+module use "$BUILD_WORKSPACE/modulefiles"
+module show cse/init-GCC
+module load cse/init-GCC
+module list
+printf 'surface=%s\nC=%s\nC++=%s\nFortran=%s\n' \
+  "${CSE_COMPILER:-missing}" "${CSE_CC:-missing}" \
+  "${CSE_CXX:-missing}" "${CSE_FC:-missing}"
+```
+
+Require all four recorded values to be present before continuing. Older
+entrance files may lack these exports; return to the operator shell to review
+and refresh that presentation first, then restart this clean consumer session.
+Do not derive the lane path from an empty compiler variable.
+
+```bash
+command -v "$CSE_CC" "$CSE_CXX" "$CSE_FC"
+
+# The front door normally exposes lanes from the recorded release module root.
+# Prefer this workspace's newly rendered lane files for this review.
+module use "$BUILD_WORKSPACE/modulefiles/$CSE_COMPILER/lanes"
+module show Serial
+module load Serial
+module avail
+```
+
+Check the filenames shown by `module show`: the entrance and lane must come
+from this workspace. Check that Foundation is exposed through its view, Core
+and Common modules are visible, and selecting Serial exposes the intended
+Serial packages. Load a recorded package/version, inspect its dependency
+autoloads and conflicts, and run its representative installed consumer. Save
+the exact module list, commands and output under the maintenance evidence path.
+
+Repeat from a clean shell with `MPI` instead of `Serial`; inspect
+`CSE_MPICC`, `CSE_MPICXX` and `CSE_MPIFC` and run the approved native MPI smoke
+test in an allocation. Use the system runbook's launcher and node count. A
+module load or compiler `--version` alone does not establish runtime acceptance.
+The CSE-GCC/external-Cray-MPICH candidate requires its native multi-node check.
+`module use` changes only this shell's search path; it does not expose the
+workspace to all users or change a login configuration.
+
+## Copy the accepted presentation, then handle public activation separately
+
+Once the required views, package modules and consumer checks pass, a retained
+launcher that supports `publish-modules` can copy ready entrances/lanes into the
+module root recorded by its build values:
+
+```bash
+# Back in the operator shell, outside the clean consumer test session.
+cd "$BUILD_WORKSPACE"
+./cse-build login publish-modules
+```
+
+For restricted build values, this is the CSE team-review root. Check that exact
+root with `module use <recorded-restricted-module-root>` in another clean team
+session. The command does not refresh package modules or register a login
+`MODULEPATH`. It withholds the external-MPI candidate lane described above;
+passing a smoke test does not automatically clear that gate. Follow the system's
+review/promotion procedure rather than bypassing it. If the older launcher
+lacks this action, qualify a controls update separately; the workspace-path
+review above remains available without replacing the launcher.
+
+Public user activation follows the common runbook's signed cache-only
+publication and published-workspace acceptance. Only then register the approved
+**published** module root in the site's login `MODULEPATH` (or its already
+registered module hierarchy). Keep the restricted build workspace/root out of
+the general user login path. Existing absolute paths inside generated modules
+must refer to the accepted published prefixes/views; adding `module use` does
+not relocate them. Production preparation-path selection remains open.
+
 ## Admit an inventory for existing frozen overlays
 
 Use the trusted helper from the tested delivery to produce a separate inventory
@@ -130,10 +515,15 @@ of the workspace's existing recipe tree. Review the inventory and complete file
 diff before admission:
 
 ```bash
-python3 "$CONTENT/pilots/cse-pilot/templates/scripts/verify-overlay-inputs.py" \
+REVIEWED_INVENTORY="$MODULE_REVIEW/overlay-inventory.json"
+"$PREP_PYTHON" "$CONTENT/pilots/cse-pilot/templates/scripts/verify-overlay-inputs.py" \
   --root "$BUILD_WORKSPACE/package-repos" --candidate "$REVIEWED_INVENTORY"
+```
 
-python3 "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
+Review that candidate file and the frozen recipes it describes before admission:
+
+```bash
+"$PREP_PYTHON" "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
   --workspace "$BUILD_WORKSPACE" \
   --admit-overlay-inventory "$REVIEWED_INVENTORY" \
   --overlay-helper "$CONTENT/pilots/cse-pilot/templates/scripts/verify-overlay-inputs.py" \
@@ -160,7 +550,22 @@ remaining graph checks still apply to that workspace's recorded concrete inputs.
 For an applied refresh, use its exact printed/history record:
 
 ```bash
-python3 "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
+find "$BUILD_WORKSPACE/.cse-control-refresh" -name record.json -print
+```
+
+Select the record for the operation you intend to undo, inspect its recorded
+paths/state, and assign its exact absolute path. Do not pass a wildcard or
+automatically choose another operator's latest record:
+
+```bash
+REFRESH_RECORD="/absolute/workspace/.cse-control-refresh/<id>/record.json"
+"$PREP_PYTHON" -m json.tool "$REFRESH_RECORD"
+```
+
+Then preview restoration:
+
+```bash
+"$PREP_PYTHON" "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
   --workspace "$BUILD_WORKSPACE" --restore-from "$REFRESH_RECORD" --dry-run
 # After checking the selected paths, repeat without --dry-run.
 ```
@@ -171,7 +576,7 @@ another ordinary update and reports the unfinished record. After addressing the
 underlying disk/permission failure, use:
 
 ```bash
-python3 "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
+"$PREP_PYTHON" "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
   --workspace "$BUILD_WORKSPACE" --recover-from "$REFRESH_RECORD" --dry-run
 # Repeat without --dry-run to recover the recorded prior controls.
 ```

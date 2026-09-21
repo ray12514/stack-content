@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +21,69 @@ SPEC = importlib.util.spec_from_file_location(
 PREPARE_CONTROL_REFRESH_VALUES = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(PREPARE_CONTROL_REFRESH_VALUES)
+
+
+def prepare_command(source: Path, output: Path) -> list[str]:
+    return [
+        sys.executable, str(SCRIPT_PATH), "--source", str(source), "--output", str(output),
+        "--spack-source", "https://github.com/spack/spack.git",
+        "--spack-version", "1.2.2", "--spack-tag", "v1.2.2",
+        "--spack-commit", "3e19345b6e12f5ff1b874f4059622fc6a1fd804a",
+        "--spack-mode", "shared", "--shared-spack-root", "/shared/spack",
+        "--initial-spack-root", "/shared/spack",
+    ]
+
+
+@pytest.mark.parametrize("alias", ["symlink", "hardlink", "parent", "directory-symlink"])
+def test_refuses_aliased_output_without_overwriting_recorded_values(tmp_path, alias):
+    source = tmp_path / "recorded.yaml"
+    source.write_bytes((SCRIPT_PATH.parents[1] / "site-values.example.yaml").read_bytes())
+    before = source.read_bytes()
+    output = tmp_path / "render-only.yaml"
+    if alias == "symlink":
+        output.symlink_to(source)
+    elif alias == "hardlink":
+        os.link(source, output)
+    elif alias == "parent":
+        (tmp_path / "nested").mkdir()
+        output = tmp_path / "nested/../recorded.yaml"
+    else:
+        (tmp_path / "alias").symlink_to(tmp_path, target_is_directory=True)
+        output = tmp_path / "alias/recorded.yaml"
+
+    result = subprocess.run(prepare_command(source, output), text=True, capture_output=True)
+
+    assert source.read_bytes() == before
+    assert result.returncode == 2
+    assert "output already exists" in result.stderr
+
+
+@pytest.mark.parametrize("existing", ["reviewed-file", "dangling-symlink"])
+def test_refuses_existing_output_without_replacing_or_following_it(tmp_path, existing):
+    source = tmp_path / "recorded.yaml"
+    source.write_bytes((SCRIPT_PATH.parents[1] / "site-values.example.yaml").read_bytes())
+    before = source.read_bytes()
+    output = tmp_path / "render-only.yaml"
+    target = tmp_path / "unexpected-target.yaml"
+    reviewed = b"# Already reviewed candidate; retain exact bytes.\nreviewed: true\n"
+    if existing == "reviewed-file":
+        output.write_bytes(reviewed)
+        output.chmod(0o640)
+    else:
+        output.symlink_to(target)
+
+    result = subprocess.run(prepare_command(source, output), text=True, capture_output=True)
+
+    assert result.returncode == 2
+    assert "output already exists" in result.stderr
+    assert source.read_bytes() == before
+    assert not target.exists()
+    if existing == "reviewed-file":
+        assert output.read_bytes() == reviewed
+        assert output.stat().st_mode & 0o777 == 0o640
+    else:
+        assert output.is_symlink()
+        assert output.readlink() == target
 
 
 @pytest.mark.parametrize("existing,explicit,success", [

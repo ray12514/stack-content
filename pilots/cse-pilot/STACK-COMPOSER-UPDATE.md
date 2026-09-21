@@ -20,9 +20,10 @@ records the matching implementation commits and candidate artifact checksums.
 After the approved Stack Composer and Stack Content changes are synchronized,
 source the same saved operator session used for this trial. A saved session
 loads the current `operator-session.sh`; it does not need to be recreated.
+On a fresh login, use its recorded path rather than an unset session variable:
 
 ```bash
-source "$CSE_OPERATOR_SESSION_FILE"
+source "$HOME/STACK_TESTING/operator-sessions/<system>/<trial-release>/activate.sh"
 unset CSE_STACK_COMPOSER_NATIVE
 cse_rebuild_tools composer
 cse_stack_composer --help
@@ -30,11 +31,15 @@ cse_stack_composer --licenses
 cse_session_status
 ```
 
-If this is a fresh login, source the saved `activate.sh` by its recorded path
-first; it supplies `CSE_OPERATOR_SESSION_FILE` and the other paths. The rebuild
+Use the actual session path if this trial uses another operator root. After
+activation, `CSE_OPERATOR_SESSION_FILE` is available for resourcing. The rebuild
 helper requires a reviewed clean tool checkout and records the tool commit only
 after the build and smoke check succeed. A failed build must not be marked
-current. `cse_rebuild_tools composer` does not rebuild Cluster Inspector.
+current. `cse_rebuild_tools composer` does not rebuild Cluster Inspector. This
+is the connected checkout route; it installs build dependencies. For an offline
+delivery use its verified tool/runtime directly, after activation, as described
+in [CONTROL-REFRESH.md](CONTROL-REFRESH.md#2-select-the-maintenance-tools-and-values).
+Resourcing the saved session resets delivery overrides to checkout paths.
 
 Python 3.9 or newer remains supported for the current `.pyz` path. No release
 directory rename, package configuration edit, catalog promotion, or lockfile
@@ -47,13 +52,17 @@ Do not replace that entry point with the generic `spack-build` companion.
 Run this only from the restored preparation session with the recorded catalog
 and build-values file. The command renders files; it does not invoke Spack or
 write to the install/cache roots referenced by those values.
+Select `PREP_PYTHON`, `CONTENT`, `STACK_COMPOSER` and `REFRESH_VALUES` through
+[the maintenance guide](CONTROL-REFRESH.md#2-select-the-maintenance-tools-and-values)
+first. `REFRESH_VALUES` is the recorded input file or a separately reviewed
+render-only copy; do not regenerate the original build values.
 
 ```bash
 composer_check=$(mktemp -d "${WORKDIR}/${USER}-composer-check.XXXXXX")
-cse_stack_composer init-workspace \
+"$PREP_PYTHON" "$STACK_COMPOSER" init-workspace \
   --blueprint "$CONTENT/pilots/cse-pilot" \
-  --catalog "$CATALOG" \
-  --values "$BUILD_VALUES" \
+  --catalog "$BUILD_WORKSPACE/catalog" \
+  --values "$REFRESH_VALUES" \
   --output "$composer_check/workspace"
 bash -n "$composer_check/workspace/cse-build"
 bash -n "$composer_check/workspace/env/setup-build-env.sh"

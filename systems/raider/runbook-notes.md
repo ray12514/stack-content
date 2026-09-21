@@ -69,65 +69,45 @@ In addition to the common runbook checks:
 
 ## Refresh `cse-build` without replacing the workspace
 
-Use this shortcut when Raider already has a valid initialized workspace and
-lockfiles, but Stack Content changed `cse-build` or one of its generated helper
-files. It does not rerender the static catalog, replace environment YAML,
-reconcretize, clear caches, or touch installed packages.
+For an existing Raider workspace, follow the complete
+[existing-trial maintenance procedure](../../pilots/cse-pilot/CONTROL-REFRESH.md).
+It starts with the saved login session and tool selection, identifies the
+recorded values, creates a separate reviewed `REFRESH_VALUES` copy when needed,
+and previews the exact maintenance scope. The earlier shortcut that regenerated
+`BUILD_VALUES` and refreshed the default `all` scope is superseded.
 
-Stop active `cse-build` processes first. From the existing operator session,
-synchronize only the two inputs used by this refresh and rebuild Stack Composer
-when its checkout changed:
+Keep the original values, catalog, environment inputs, locks and installed
+prefixes. Do not rerun `create-build-values.py` for this maintenance operation.
+For compiler entrances and lane selectors, use `--scope presentation`.
+Adopting `cse-build`, configuration or its verifier is a separate qualified
+`--scope controls` operation: admit the inventory/helper prerequisites against
+existing recipe bytes and check the proposed launcher's graph requirements
+before replacing retained controls. A newer verifier does not authorize edits
+to old specs or locks merely to satisfy it.
 
-```bash
-source "$CSE_OPERATOR_SESSION_FILE"
-
-for repo in stack-composer stack-content; do
-  git -C "$WORK_ROOT/$repo" status --short --branch
-done
-# Stop here if either checkout contains unreviewed work.
-
-for repo in stack-composer stack-content; do
-  git -C "$WORK_ROOT/$repo" pull --ff-only
-done
-
-source "$CSE_OPERATOR_SESSION_FILE"
-cse_rebuild_tools composer
-```
-
-Refresh the declared control set in place, then run the read-only status and
-lock verification checks:
+Quiesce builders and consumers of the selected controls. Use the guide's
+preview, review, apply and retained-recovery steps, then check the existing
+workspace with its qualified launcher:
 
 ```bash
-"$CSE_PYTHON" \
-  "$CONTENT/pilots/cse-pilot/scripts/create-build-values.py"
-
-"$CSE_PYTHON" \
-  "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
-  --composer "$STACK_COMPOSER" \
-  --blueprint "$CONTENT/pilots/cse-pilot" \
-  --values "$BUILD_VALUES" \
-  --workspace "$BUILD_WORKSPACE"
-
 cd "$BUILD_WORKSPACE"
 ./cse-build login status
 ./cse-build login verify
 ```
 
-The refresh renders a disposable workspace, confirms the blueprint, Raider
-system, and catalog release match, and atomically replaces only `cse-build`,
-the common config, its environment helpers, the lock verifier, and the builder
-handoff note, plus the generated workspace `modulefiles/` and `presentation/`
-control trees. Those workspace trees do not contain Spack's release package
-modules. A mismatch stops without changing the existing controls. If
-environment inputs or package overlays changed, use the common runbook's
-appropriate workspace or release recovery instead of this shortcut.
+An older launcher may lack `modules` or `publish-modules`; follow the guide's
+older-launcher route for installed-module maintenance instead of assuming a
+source update changed the generated launcher. `presentation` refresh affects
+workspace entrance/lane files, not the external package-module or view roots.
+Back up those generated roots separately before regenerating them. Package,
+compiler, provider or recipe changes require a separate candidate and affected
+consumer validation.
 
-That common control set also enforces the restricted owner/group contract on
-Raider's generated workspace and locks, source/misc caches, views, modules, and
-file-backed build cache at launcher/prepared-shell entry and exit. The package
-install tree remains governed by Spack package permissions. Use the common
-runbook's exact-root recovery if an accidental `chmod 660` removed directory
-search bits; do not recursively chmod the install tree.
+The qualified shared controls enforce the recorded CSE group, group read/write
+and directory search/setgid access across generated workspace/cache/view/module
+content. Installed package prefixes remain governed by Spack package
+permissions. Use the common runbook's exact-root permission recovery when a
+traversal failure prevents entry; do not recursively chmod the install tree.
 
 ## Missing operator-session recovery
 

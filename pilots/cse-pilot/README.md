@@ -193,6 +193,13 @@ Hand the entire initialized workspace and its reviewed lockfiles to the builder.
 
 ## Builder-selected user module entrance
 
+For an already-built trial, start with the
+[login-to-module-review procedure](CONTROL-REFRESH.md#start-here-after-the-packages-are-built).
+It explains the saved activation script, tool and values selection, existing
+build checks, module generation, workspace-only `module use` testing and the
+later publication boundary. Package installation alone does not prove module
+coverage or consumer readiness.
+
 To update Stack Composer while finishing an existing build, use
 [Stack Composer update during the current trial](STACK-COMPOSER-UPDATE.md).
 It covers rebuilding only Composer, comparing a temporary candidate, and

@@ -47,27 +47,28 @@ git -C "$CONTENT" pull --ff-only origin codex/simplified-render-plan
 git -C "$CONTENT" log -1 --oneline
 ```
 
-If Fran already has eight lockfiles, do not infer compliance from an older
-`Lockfile verification passed` message. The earlier verifier checked shared
-hashes but did not prove that the shared compiler producer had `+binutils` or
-that every downstream GCC root reached that producer. Refresh only the
-workspace controls first; this preserves every environment YAML file, lockfile,
-cache, view, generated package module, and installed prefix while installing
-the current verifier and replacing only the generated workspace
-`modulefiles/` and `presentation/` control trees:
+If Fran already has lockfiles, retain its recorded values and build inputs.
+An earlier `Lockfile verification passed` message does not establish the newer
+GCC producer checks. Use the complete
+[existing-trial maintenance procedure](../../pilots/cse-pilot/CONTROL-REFRESH.md)
+for login/session selection, retained-value preparation, preview and recovery.
+The former shortcut that ran `create-build-values.py` and refreshed the default
+`all` scope is superseded.
+
+Select `--scope presentation` for entrance/lane changes. Installing a newer
+launcher or verifier is a separately qualified `--scope controls` adoption:
+review its inventory/helper prerequisites and graph policy against Fran's
+unchanged inputs first. If its GCC policy does not match those inputs, preserve
+them and follow the separate candidate procedure; do not alter existing specs
+or locks to make the verifier pass. Older launchers can continue their prepared
+Spack maintenance route described in the guide.
+
+After the chosen controls are qualified and applied, inspect the retained
+workspace and verify its existing locks:
 
 ```bash
-"$CSE_PYTHON" \
-  "$CONTENT/pilots/cse-pilot/scripts/create-build-values.py"
-
-"$CSE_PYTHON" \
-  "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
-  --composer "$STACK_COMPOSER" \
-  --blueprint "$CONTENT/pilots/cse-pilot" \
-  --values "$BUILD_VALUES" \
-  --workspace "$BUILD_WORKSPACE"
-
 cd "$BUILD_WORKSPACE"
+./cse-build login status
 ./cse-build login verify
 ```
 
@@ -1080,10 +1081,18 @@ a missing rsync executable, or a host/session being terminated.
 
 ## Phase Zero restricted module review after both surfaces finish
 
-The consumer gate is a presentation step over the eight existing environments;
-it is not another package or Spack root. After the GCC and CCE surfaces have
-both installed and their package modules have refreshed, synchronize Stack
-Content, run the control-only workspace refresh above, and then run:
+Do not add a package, root spec, environment, or replacement lock to create the
+consumer entrance. Use the
+[existing-trial maintenance procedure](../../pilots/cse-pilot/CONTROL-REFRESH.md)
+to inspect installed coverage, adopt only needed module policy, regenerate
+package modules from retained locks, and test the consumer before presentation
+publication. An older completed build may still lack current module settings;
+completion alone does not establish module readiness.
+
+Select `presentation` for workspace entrance/lane changes. Qualify any launcher
+or verifier update separately; if the retained launcher lacks `modules` or
+`publish-modules`, use the guide's older-launcher route. Once both surfaces and
+their required module/view output are ready, the qualified launcher supports:
 
 ```bash
 cd "$BUILD_WORKSPACE"
@@ -1115,6 +1124,7 @@ Validate the candidate from a clean module state:
 
 ```bash
 module --force purge
+module use "$BUILD_WORKSPACE/modulefiles"
 module load cse/init-GCC
 module use "$BUILD_WORKSPACE/modulefiles/gcc/lanes"
 module load MPI

@@ -202,10 +202,17 @@ def main(argv: list[str] | None = None) -> int:
             initial_spack_root=args.initial_spack_root,
             builtin_commit=args.builtin_commit,
         )
+        rendered = yaml.safe_dump(prepared, sort_keys=False)
         output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(
-            yaml.safe_dump(prepared, sort_keys=False), encoding="utf-8"
-        )
+        try:
+            # Exclusive creation rejects existing files and links, including
+            # source aliases and candidates another operator already reviewed.
+            with output.open("x", encoding="utf-8") as stream:
+                stream.write(rendered)
+        except FileExistsError as error:
+            raise InputError(
+                f"output already exists; choose a new output path: {output}"
+            ) from error
     except (InputError, OSError, yaml.YAMLError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
