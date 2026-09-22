@@ -35,6 +35,8 @@ def launcher_fixture(
         "    handle.write(json.dumps(args) + '\\n')\n"
         "if args == ['--version']:\n"
         "    print('1.2.2')\n"
+        "elif args[:1] == ['python'] and args[1].endswith('/workspace-build.py') and args[2:3] == ['check']:\n"
+        "    os.execv(sys.executable, [sys.executable] + args[1:])\n"
         "elif args[:1] == ['-e'] and args[2:5] == ['config', 'scopes', '-vp']:\n"
         "    print('workspace include active ' + os.environ['CSE_BUILD_WORKSPACE'] + '/configs/common')\n"
         "elif args[:1] == ['-e'] and args[2:4] == ['python', '-c']:\n"
@@ -105,11 +107,14 @@ def launcher_fixture(
         PILOT / "templates/scripts/verify-overlay-inputs.py",
         workspace / "scripts/verify-overlay-inputs.py",
     )
+    for helper in ('workspace-build.py', 'workspace-overlay.py', 'overlay-recovery.py', 'module-preview.py'):
+        shutil.copyfile(PILOT / 'templates/scripts' / helper, workspace / 'scripts' / helper)
     shutil.copytree(PILOT / "templates/package-repos", workspace / "package-repos")
     for surface in ("gcc", "aocc"):
         for lane in ("core", "common", "serial", "mpi-openmpi"):
             lane_path = workspace / "environments" / surface / lane
             lane_path.mkdir(parents=True)
+            (lane_path / "spack.yaml").write_text("spack:\n  specs: [tiny]\n")
             (lane_path / "spack.lock").write_bytes(b"existing reviewed lock\n")
     workdir = tmp_path / "work"
     workdir.mkdir()
@@ -213,3 +218,80 @@ def test_modules_action_refreshes_selected_surface_without_build_or_solve(tmp_pa
     ]
     assert regenerated_views == ["gcc/core", "gcc/common", "gcc/serial", "gcc/mpi-openmpi"]
     assert {path: path.read_bytes() for path in locks} == locks
+
+@pytest.mark.parametrize('action,arguments,helper', [
+    ('overlay', ['status'], 'workspace-overlay.py'),
+    ('module-preview', ['--check-only'], 'module-preview.py'),
+])
+def test_operator_actions_forward_arguments_without_install_or_solve(
+    tmp_path: Path, action: str, arguments: list[str], helper: str,
+) -> None:
+    workspace, environment, log = launcher_fixture(tmp_path, 'build', 'build')
+    before = {p: p.read_bytes() for p in workspace.glob('environments/*/*/spack.lock')}
+    result = subprocess.run(
+        ['bash', str(workspace / 'cse-build'), 'login', action, *arguments],
+        env=environment, text=True, capture_output=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    commands = [json.loads(line) for line in log.read_text().splitlines()]
+    assert ['python', str(workspace / 'scripts' / helper), *arguments] in commands
+    assert not any('install' in command or 'concretize' in command for command in commands)
+    assert all(p.read_bytes() == content for p, content in before.items())
+
+
+@pytest.mark.parametrize('action,context,extra', [
+    ('concretize', 'login', ['--reconcretize']),
+    ('resume', 'compute', []),
+])
+def test_selected_environment_recovery_dispatch_preserves_other_locks(tmp_path, action, context, extra):
+    workspace, environment, log = launcher_fixture(tmp_path, 'build', 'build')
+    before = {p: p.read_bytes() for p in workspace.glob('environments/*/*/spack.lock')}
+    result = subprocess.run(['bash', str(workspace / 'cse-build'), context, action,
+                             '--environment', 'aocc/common', *extra], env=environment,
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    commands = [json.loads(line) for line in log.read_text().splitlines()]
+    expected = ['python', str(workspace / 'scripts/workspace-build.py'), action,
+                '--workspace', str(workspace), '--environment', 'aocc/common', *extra]
+    assert expected in commands
+    dispatched = [command for command in commands if 'workspace-build.py' in ' '.join(command)]
+    assert dispatched == [expected]
+    assert all(p.read_bytes() == value for p, value in before.items())
+
+
+def test_reconcretize_requires_explicit_environment(tmp_path):
+    workspace, environment, log = launcher_fixture(tmp_path, 'build', 'build')
+    result = subprocess.run(['bash', str(workspace / 'cse-build'), 'login', 'concretize',
+                             '--reconcretize'], env=environment, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert '--environment' in result.stderr
+    assert not log.exists()
+
+
+def test_maintenance_lock_blocks_competing_launcher_before_spack(tmp_path):
+    import fcntl
+    workspace, environment, log = launcher_fixture(tmp_path, 'build', 'build')
+    with (workspace / '.cse-maintenance.lock').open('w') as stream:
+        fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = subprocess.run(['bash', str(workspace / 'cse-build'), 'login', 'status'],
+                                env=environment, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert 'another finite workspace operation is active' in result.stderr.lower()
+    assert not log.exists()
+
+
+def test_install_cannot_bypass_an_unfinished_selected_solve(tmp_path):
+    workspace, environment, log = launcher_fixture(tmp_path, 'build', 'build')
+    record = workspace / '.cse-build-recovery/interrupted/recovery.json'
+    record.parent.mkdir(parents=True)
+    record.write_text(json.dumps({'tool': 'workspace-build', 'status': 'concretizing',
+                                  'action': 'concretize', 'environment': 'aocc/common'}))
+    before = {p: p.read_bytes() for p in workspace.glob('environments/*/*/spack.lock')}
+    result = subprocess.run(['bash', str(workspace / 'cse-build'), 'compute', 'install',
+                             '--environment', 'aocc/common'], env=environment,
+                            capture_output=True, text=True)
+    assert result.returncode != 0
+    assert 'unfinished workspace build operation' in result.stderr
+    commands = [json.loads(line) for line in log.read_text().splitlines()]
+    assert not any('install' in command or 'concretize' in command for command in commands)
+    assert all(p.read_bytes() == data for p, data in before.items())

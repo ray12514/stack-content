@@ -181,3 +181,18 @@ def test_prepared_shell_scopes_cache_to_workspace_and_reviewed_overlay_identity(
     shutil.copyfile(candidate, workspace / "package-repos/overlay-inventory.json")
     assert shell_cache(workspace) != first
     assert sentinel.read_text() == "retained old cache\n"
+
+
+def test_lock_reader_accepts_pinned_spack_122_format(workspace, tmp_path):
+    import runpy
+    reader = runpy.run_path(str(workspace / 'scripts/verify-lockfiles.py'))['load_lock']
+    lock = tmp_path / 'spack.lock'
+    document = {'_meta': {'file-type': 'spack-lockfile', 'lockfile-version': 6,
+                           'specfile-version': 5},
+                'roots': [], 'concrete_specs': {}}
+    lock.write_text(json.dumps(document))
+    assert reader(lock) == (document, {})
+    document['_meta']['lockfile-version'] = 999
+    lock.write_text(json.dumps(document))
+    with pytest.raises(ValueError, match='lockfile version 6'):
+        reader(lock)

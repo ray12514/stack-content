@@ -19,18 +19,23 @@ readonly CSE_RECORDED_SPACK_MODE={{ values.spack.default_mode | yaml_scalar }}
 readonly CSE_RECORDED_SHARED_SPACK_ROOT={{ values.spack.shared_root | yaml_scalar }}
 readonly CSE_RECORDED_INITIAL_SPACK_ROOT={{ values.spack.initial_root | yaml_scalar }}
 
+ORIGINAL_ARGS=("$@")
 ACTION="tmux"
 REQUESTED_SPACK_MODE="auto"
 REQUESTED_SURFACE="all"
+REQUESTED_ENVIRONMENT=""
+RECONCRETIZE=0
 CSE_NODE_CONTEXT="${CSE_NODE_CONTEXT:-}"
 ACTION_SET=0
 CONTEXT_SET=0
+OPERATOR_ARGS=()
 
 usage() {
   cat <<'EOF'
 Usage: ./cse-build [login|compute] [ACTION]
                    [--spack-mode auto|shared|local]
                    [--surface all|shared|platform]
+                   [--environment COMPILER/LANE] [--reconcretize]
 
 Node context:
   login      Use the reviewed login-node stages, with an executable WORKDIR
@@ -45,11 +50,20 @@ Actions:
   tmux        Create or reattach the release build session (default).
   shell       Enter a prepared interactive build shell without tmux.
   status      Show lockfile and installation status.
-  concretize  Concretize only environments that do not have a lockfile.
+  concretize  Create missing locks. With --environment and --reconcretize,
+              replace only that environment's lock, retaining a recovery record.
+  resume      Continue --environment from its current lock; reuse installed
+              hashes and keep module/view generation a separate action.
   verify      Verify configuration scopes and all existing lockfiles.
   fetch       Fetch all sources for the locked environments.
   install     Install, regenerate views, and refresh package modules in order.
   modules     Regenerate views and package modules for installed locked specs.
+  module-preview [OPTIONS]
+              Check module prerequisites or generate an isolated presentation
+              from installed locks. Pass --check-only or --output NEW_DIRECTORY.
+  overlay [apply|edit|status|restore] [OPTIONS]
+              Correct package recipes in this workspace, retain backups, and
+              report affected locks. See overlay --help.
   publish-modules
               Copy only the generated CSE front doors and lane selectors into
               the module root recorded by the current values. With restricted
@@ -68,9 +82,11 @@ Environment selection:
   shared      Process only the shared GCC surface.
   platform    Process only the selected platform-compiler surface.
 
-The surface selector applies to status, fetch, install, and modules. Concretize and
-verify remain whole-workspace gates. Concurrent shared/platform installs are
-allowed only after the real shared install tree passes the prefix-lock test.
+The surface selector applies to status, fetch, install, and modules. Select one
+recorded environment for a focused concretize or resume. --reconcretize requires
+--environment; other locks stay unchanged. Whole-workspace verify remains the
+release gate. Finite actions serialize through the workspace maintenance lock;
+coordinate any already-running older launcher or manual Spack command first.
 
 See ./BUILDER-HANDOFF.md for the exact Spack commands behind each action.
 EOF
@@ -92,10 +108,18 @@ while [ "$#" -gt 0 ]; do
       CSE_NODE_CONTEXT="$1"
       CONTEXT_SET=1
       ;;
-    tmux|shell|status|concretize|verify|fetch|install|modules|publish-modules)
+    tmux|shell|status|concretize|resume|verify|fetch|install|modules|publish-modules)
       [ "$ACTION_SET" -eq 0 ] || fail "only one action may be selected"
       ACTION="$1"
       ACTION_SET=1
+      ;;
+    overlay|module-preview)
+      [ "$ACTION_SET" -eq 0 ] || fail "only one action may be selected"
+      ACTION="$1"
+      ACTION_SET=1
+      shift
+      OPERATOR_ARGS=("$@")
+      break
       ;;
     --spack-mode)
       shift
@@ -113,6 +137,13 @@ while [ "$#" -gt 0 ]; do
     --surface=*)
       REQUESTED_SURFACE="${1#*=}"
       ;;
+    --environment)
+      shift
+      [ "$#" -gt 0 ] || fail "--environment requires a recorded compiler/lane"
+      REQUESTED_ENVIRONMENT="$1"
+      ;;
+    --environment=*) REQUESTED_ENVIRONMENT="${1#*=}" ;;
+    --reconcretize) RECONCRETIZE=1 ;;
     -h|--help)
       usage
       exit 0
@@ -147,14 +178,43 @@ if [ "$REQUESTED_SURFACE" != all ]; then
   esac
 fi
 
+if [ -n "$REQUESTED_ENVIRONMENT" ]; then
+  [ "$REQUESTED_SURFACE" = all ] || fail "choose --environment or --surface, not both"
+  case "$ACTION" in
+    status|concretize|resume|fetch|install|modules) ;;
+    *) fail "--environment applies to status, concretize, resume, fetch, install, and modules" ;;
+  esac
+fi
+if [ "$RECONCRETIZE" -eq 1 ]; then
+  [ "$ACTION" = concretize ] && [ -n "$REQUESTED_ENVIRONMENT" ] || fail \
+    "--reconcretize requires concretize --environment COMPILER/LANE"
+fi
+if [ "$ACTION" = resume ]; then
+  [ -n "$REQUESTED_ENVIRONMENT" ] || fail "resume requires --environment COMPILER/LANE"
+  [ "$CSE_NODE_CONTEXT" = compute ] || fail "resume requires compute context"
+fi
+
 if [ "$CSE_RECORDED_ROLE" != build ]; then
   case "$ACTION" in
-    concretize|fetch|install)
+    concretize|resume|fetch|install|overlay)
       fail "$ACTION is disabled for a publication workspace; use the cache-only \
 publication procedure"
       ;;
   esac
 fi
+
+case "$ACTION" in
+  shell|tmux) ;;
+  *)
+    if [ -z "${CSE_MAINTENANCE_LOCK_FD:-}" ]; then
+      exec python3 "$CSE_WORKSPACE_ROOT/scripts/workspace-build.py" guard \
+        --workspace "$CSE_WORKSPACE_ROOT" -- bash "$CSE_WORKSPACE_ROOT/cse-build" \
+        "${ORIGINAL_ARGS[@]}"
+    fi
+    python3 "$CSE_WORKSPACE_ROOT/scripts/workspace-build.py" check-lock \
+      --workspace "$CSE_WORKSPACE_ROOT" || fail "workspace maintenance lock is invalid"
+    ;;
+esac
 
 [ -z "${SPACK_ENV:-}" ] || fail \
   "start from a shell with no active Spack environment: $SPACK_ENV"
@@ -389,6 +449,14 @@ case "$REQUESTED_SURFACE" in
   platform) CSE_ACTION_ENVIRONMENTS=("${CSE_PLATFORM_ENVIRONMENTS[@]}") ;;
   all) CSE_ACTION_ENVIRONMENTS=("${CSE_ENVIRONMENTS[@]}") ;;
 esac
+if [ -n "$REQUESTED_ENVIRONMENT" ]; then
+  CSE_ENVIRONMENT_FOUND=0
+  for environment in "${CSE_ENVIRONMENTS[@]}"; do
+    [ "$environment" != "$REQUESTED_ENVIRONMENT" ] || CSE_ENVIRONMENT_FOUND=1
+  done
+  [ "$CSE_ENVIRONMENT_FOUND" -eq 1 ] || fail "unknown recorded environment: $REQUESTED_ENVIRONMENT"
+  CSE_ACTION_ENVIRONMENTS=("$REQUESTED_ENVIRONMENT")
+fi
 readonly CSE_ENVIRONMENT_COUNT=8
 
 checkpoint_summary() {
@@ -490,16 +558,27 @@ show_status() {
 
 concretize_missing() {
   local environment
-  for environment in "${CSE_ENVIRONMENTS[@]}"; do
-    if [ -f "$CSE_WORKSPACE_ROOT/environments/$environment/spack.lock" ]; then
-      note "keeping existing lock: $environment"
-      continue
-    fi
-    note "concretizing $environment"
-    spack -e "$CSE_WORKSPACE_ROOT/environments/$environment" \
-      concretize --fresh -j 1
+  local flags=()
+  [ "$RECONCRETIZE" -eq 0 ] || flags=(--reconcretize)
+  for environment in "${CSE_ACTION_ENVIRONMENTS[@]}"; do
+    spack python "$CSE_WORKSPACE_ROOT/scripts/workspace-build.py" concretize \
+      --workspace "$CSE_WORKSPACE_ROOT" --environment "$environment" "${flags[@]}"
   done
-  verify_locks
+  if [ -z "$REQUESTED_ENVIRONMENT" ]; then
+    verify_locks
+  fi
+}
+
+check_overlay_build_inputs() {
+  local environment
+  local selected=()
+  for environment in "${CSE_ACTION_ENVIRONMENTS[@]}"; do
+    selected+=(--environment "$environment")
+  done
+  spack python "$CSE_WORKSPACE_ROOT/scripts/workspace-build.py" check \
+    --workspace "$CSE_WORKSPACE_ROOT" "${selected[@]}"
+  spack python "$CSE_WORKSPACE_ROOT/scripts/workspace-overlay.py" check \
+    --workspace "$CSE_WORKSPACE_ROOT" --action build "${selected[@]}"
 }
 
 fetch_selected() {
@@ -514,6 +593,7 @@ fetch_selected() {
 
 install_selected() {
   local environment
+  check_overlay_build_inputs
   verify_locks
   note "install surface: $REQUESTED_SURFACE"
   for environment in "${CSE_ACTION_ENVIRONMENTS[@]}"; do
@@ -697,9 +777,19 @@ case "$ACTION" in
     ;;
   status) show_status ;;
   concretize) concretize_missing ;;
+  resume)
+    spack python "$CSE_WORKSPACE_ROOT/scripts/workspace-build.py" resume \
+      --workspace "$CSE_WORKSPACE_ROOT" --environment "$REQUESTED_ENVIRONMENT"
+    ;;
   verify) verify_locks ;;
   fetch) fetch_selected ;;
   install) install_selected ;;
   modules) refresh_selected_modules ;;
+  overlay)
+    spack python "$CSE_WORKSPACE_ROOT/scripts/workspace-overlay.py" "${OPERATOR_ARGS[@]}"
+    ;;
+  module-preview)
+    spack python "$CSE_WORKSPACE_ROOT/scripts/module-preview.py" "${OPERATOR_ARGS[@]}"
+    ;;
   publish-modules) publish_presentation_modules ;;
 esac

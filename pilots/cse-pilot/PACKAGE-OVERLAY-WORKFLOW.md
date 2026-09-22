@@ -1,5 +1,10 @@
 # Manual CSE package overlay workflow
 
+For the normal same-workspace correction loop, start with
+[Overlay recovery](OVERLAY-RECOVERY.md). It coordinates inspection, solving and
+retry while retaining the existing workspace. This document supplies the manual
+diagnosis and package-authoring detail.
+
 Start with the [offline package fix quickstart](templates/PACKAGE-OVERLAY-QUICKSTART.md)
 for workspace navigation, a reusable agent handoff, a direct one-package Spack
 retry, and archive/copy transfer between systems without Git. That guide is
@@ -19,7 +24,7 @@ and extract the file without switching branches or updating workspace controls:
 ```bash
 export CONTENT="<absolute-existing-stack-content-checkout>"
 export BUILD_WORKSPACE="<absolute-existing-trial-workspace>"
-export DOC_REF="codex/simplified-render-plan"  # Current published trial-doc branch.
+export DOC_REF="codex/recovery-hardening"  # Reviewed recovery and module workflow branch.
 git -C "$CONTENT" fetch origin "$DOC_REF"
 git -C "$CONTENT" show FETCH_HEAD:pilots/cse-pilot/templates/PACKAGE-OVERLAY-QUICKSTART.md \
   > "$CONTENT/PACKAGE-OVERLAY-QUICKSTART.download.md"
@@ -154,7 +159,7 @@ a new one-fix skeleton. The current zlib directory already has an overlay.
 The manual sequence is: capture the failure and exact inputs; prepare a complete
 candidate against the pinned builtin and current local recipe; review its scope;
 back up and copy the reviewed files; confirm recipe selection; recover only the
-affected candidate locks and check source availability; build and validate; then
+selected affected lock and check source availability; build and validate; then
 retain a transferable correction and copy it back to the canonical template
 repository. A Git commit/push can follow later. The sections below
 provide the commands and a reusable request for obtaining the candidate files.
@@ -170,11 +175,12 @@ Develop an overlay in place only while the affected lock set is an unaccepted
 release candidate. If the lock set was accepted or its binaries were pushed to
 a release build cache, preserve that release and create a new one.
 
-These in-place steps support diagnosis and a focused retry. The Stack Planning
-trial runbook's same/new-release rule governs adoption: changed recipes,
-variants, or locks enter a new trial release, and checkpoint 4 already protects
-reviewed locks. Preserve the original record and integrate the tested source
-correction into the new candidate before advancing release acceptance.
+An unfinished trial uses this same workspace for corrections. Preserve each
+previous lock and input revision in its recovery record, invalidate the affected
+lock review, reconcretize only the selected environment, and repeat its build.
+Review other affected locks before building them again. Installation alone does
+not freeze an unfinished trial; accepted or published releases remain immutable.
+Return the tested source correction to authored content before acceptance.
 
 An overlay is complete only when all of the following are retained together:
 
@@ -475,9 +481,10 @@ readelf --version-info "<library>"
 ldd "<executable-or-library>"
 ```
 
-Numerical and MPI packages also require a small compile, link, and execution
-test. An install command returning zero does not by itself validate the
-resulting interface.
+For a configure, compile, or link failure, a successful corrected build that
+passes the original failing stage with the same compiler is the recovery test.
+Add a numerical, MPI, or other consumer check when the reported defect concerns
+runtime behavior or the normal release acceptance procedure requires it.
 
 ## 7. Recover the affected unaccepted locks
 

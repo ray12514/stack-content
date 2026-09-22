@@ -870,6 +870,8 @@ class ToolchainTemplateTests(unittest.TestCase):
                 "# fake verifier\n",
                 encoding="utf-8",
             )
+            for helper in ('workspace-build.py', 'workspace-overlay.py', 'overlay-recovery.py'):
+                shutil.copyfile(TEMPLATE_ROOT / 'scripts' / helper, workspace / 'scripts' / helper)
             copy_trial_package_overlay(workspace, "cce")
             cache_key = subprocess.check_output(
                 [sys.executable, str(workspace / "scripts" / "verify-overlay-inputs.py"), "--cache-key"],
@@ -969,18 +971,19 @@ class ToolchainTemplateTests(unittest.TestCase):
                 generated_executable.stat().st_mode
             )
 
-        expected_directory_mode = 0o770 if sys.platform == "darwin" else 0o2770
+        # macOS may preserve or clear setgid depending on execution permissions.
+        # Both cases must retain the complete owner/group traversal permissions.
+        expected_directory_modes = {0o770, 0o2770} if sys.platform == "darwin" else {0o2770}
         self.assertIn("Node context: login (login)", result.stdout)
         self.assertIn("Concrete locks: 0/8", result.stdout)
         self.assertEqual(home_entries, [])
-        self.assertEqual(provider_cache_mode, expected_directory_mode)
+        self.assertIn(provider_cache_mode, expected_directory_modes)
         self.assertEqual(provider_index_mode, 0o660)
-        self.assertEqual(concretization_cache_mode, expected_directory_mode)
+        self.assertIn(concretization_cache_mode, expected_directory_modes)
         self.assertEqual(concretization_index_mode, 0o660)
-        self.assertEqual(
-            generated_modes,
-            [(expected_directory_mode, 0o660)] * len(generated_modes),
-        )
+        for directory_mode, file_mode in generated_modes:
+            self.assertIn(directory_mode, expected_directory_modes)
+            self.assertEqual(file_mode, 0o660)
         self.assertEqual(generated_executable_mode, 0o770)
 
     def test_gcc_groups_bind_the_managed_producer_with_a_conditional_toolchain(

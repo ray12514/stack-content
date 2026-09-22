@@ -16,12 +16,32 @@ control_files:
   - env/setup-build-env.sh
   - env/workspace-shell.rc
   - scripts/verify-lockfiles.py
+  - scripts/overlay-recovery.py
+  - scripts/workspace-overlay.py
+  - scripts/workspace-build.py
+  - scripts/module-preview.py
   - BUILDER-HANDOFF.md
   - PACKAGE-OVERLAY-QUICKSTART.md
 control_file_dependencies:
   cse-build:
     - scripts/verify-overlay-inputs.py
     - package-repos/overlay-inventory.json
+    - scripts/overlay-recovery.py
+    - scripts/workspace-overlay.py
+    - scripts/workspace-build.py
+    - scripts/module-preview.py
+  scripts/workspace-overlay.py:
+    - scripts/workspace-build.py
+    - scripts/overlay-recovery.py
+    - scripts/verify-overlay-inputs.py
+  scripts/workspace-build.py:
+    - scripts/workspace-overlay.py
+    - scripts/overlay-recovery.py
+    - scripts/verify-overlay-inputs.py
+  scripts/overlay-recovery.py:
+    - scripts/verify-overlay-inputs.py
+  scripts/module-preview.py:
+    - scripts/workspace-build.py
   env/setup-build-env.sh:
     - scripts/verify-overlay-inputs.py
     - package-repos/overlay-inventory.json

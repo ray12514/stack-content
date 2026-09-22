@@ -1,5 +1,9 @@
 # CSE Initial Conversion Trials workspace
 
+For an already built system, start with [module maintenance and tool requirements](CONTROL-REFRESH.md#do-the-tools-need-updating-first)
+and [isolated module presentation previews](MODULE-PRESENTATION.md). For a failed
+package, use the [overlay recovery helper](OVERLAY-RECOVERY.md).
+
 This blueprint combines one reviewed `render-static` catalog with the approved
 CPU-only trial package roster. It renders Core, Common, Serial, and MPI
 environments for the CSE GCC 12.5 surface and the selected platform-compiler

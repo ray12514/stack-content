@@ -6,6 +6,30 @@ cluster. Local lab workspaces are disposable test fixtures. Preserve the real
 cluster's recorded inputs, locks, Spack database, installed prefixes and runtime
 dependencies until the replacement is accepted.
 
+## Do the tools need updating first?
+
+**Generating modules from already installed packages does not require a new
+Stack Composer version or a rebuild.** Composer is needed only when rendering
+reviewed replacement controls/policy that the existing workspace lacks. The
+workspace's `cse-build` (or its documented native Spack commands) performs module
+generation. The separate generic `spack-build` driver is not needed for this CSE
+maintenance operation.
+
+For lane presentation, first check the existing workspace. If its named views,
+module policies and front doors are already complete, use its current `modules`
+action and the consumer check below. If any are absent, adopt only the required
+`module-policy`, `controls` or `presentation` refresh described here; retain the
+original build values and locks. An updated source checkout does not itself
+change those deployed files.
+
+For naming/layout iterations, use [Module presentation previews](MODULE-PRESENTATION.md).
+That helper checks prerequisites and generates into a new preview directory
+using existing installed hashes. Start with the lane layout, try alternate
+Spack projections in reviewed policy files, and compare using `module use` before
+changing the published presentation. It requires no solve, install or Composer
+update. Its prerequisite report identifies missing views/policy rather than
+silently updating a completed workspace.
+
 ## Start here after the packages are built
 
 The sequence is **restore the operator session → check the existing build →
@@ -181,7 +205,8 @@ match the intended layout: proceed directly to the clean-session check.
 | Package module generation | [Run the retained workspace's module commands](#generate-package-modules-from-the-existing-installations) | Generate from installed locked specs; no concretization |
 | Missing or older package-module policy | [Preview/apply `--scope module-policy`](#upgrade-package-module-policy-in-an-older-workspace) from a reviewed candidate | Merge named views and replace selected module settings; retain the existing solve |
 | Older overlay gate without an inventory | [Admit an inventory/helper](#admit-an-inventory-for-existing-frozen-overlays) against existing recipe bytes | Retain existing repository pins, recipes and locks |
-| Package version, variant, recipe, compiler or MPI policy | Separate candidate inputs, reviewed overlay inventory if needed, explicit solve and affected-consumer tests | Preserve original locks; inspect new candidate locks |
+| Package version, variant or recipe correction in an unfinished trial | [Same-workspace correction loop](OVERLAY-RECOVERY.md), explicit selected solve and build retry | Retain prior selected lock and all unselected locks/prefixes |
+| Compiler/MPI policy or accepted release correction | Separate reviewed release under the SOP | Preserve accepted inputs and reuse compatible binaries |
 
 `presentation` replaces only the blueprint's `modulefiles/` and `presentation/`
 trees. These are the workspace's entrance/lane files, not the package module
@@ -275,8 +300,9 @@ or make a multi-file switch atomic for concurrent readers or power loss.
 For completed trials, start with `presentation`. A current launcher/verifier
 expects the admitted overlay inventory, its helper and other declared
 prerequisites; a controls refresh refuses to install those controls when their
-prerequisites are absent. Prepare and qualify that adoption in a candidate.
-Copying a new verifier alone is not a supported upgrade.
+prerequisites are absent. Use the standalone same-workspace overlay helper to
+review and admit a correction; separately rehearse any required controls upgrade
+in the lab. Copying a new verifier alone is not a supported upgrade.
 
 ## Upgrade package-module policy in an older workspace
 

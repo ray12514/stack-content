@@ -1,5 +1,13 @@
 # Offline package fixes in an existing CSE trial
 
+The normal helper workflow stays in this workspace: `overlay apply` or
+`overlay edit`, `concretize --environment COMPILER/LANE --reconcretize`, then
+`resume --environment COMPILER/LANE`. It retains backups internally and never
+creates a new operator workspace. See Stack Content's
+`pilots/cse-pilot/OVERLAY-RECOVERY.md`. The manual steps below remain available
+for diagnosis. `scripts/overlay-recovery.py` is an optional isolated experiment;
+it is not required for the normal correction loop.
+
 Use this guide to inspect one failure, install a reviewed recipe correction,
 retry that package with Spack, and carry the correction to another workspace.
 Git, GitLab, Stack Composer, and a new workspace render are not needed for
@@ -20,19 +28,19 @@ including every patch/support file, while preserving any existing local fixes.
 This procedure is for an unfinished, unaccepted build trial. Coordinate edits
 with anyone using the same package repository or locks. For an accepted
 release, make a new candidate instead of changing its recorded inputs.
-An in-place diagnostic retry does not approve changed release inputs. The
-trial runbook requires a new trial release to adopt changed recipes, variants,
-or locks; reviewed locks are protected before final publication. Preserve the
-original record and return the tested correction to authored content before
-advancing a new candidate through release acceptance.
+Keep correcting the same unfinished workspace. Preserve the previous inputs
+and lock in recovery records, repeat review for the changed environment, and
+return the tested correction to authored content before release acceptance.
+An accepted or published release needs a separate release record.
 
 For partially completed workspaces, record which environments and packages
 are already built before applying anything. Preserve their locks, prefixes,
 views and modules. Limit the retry to the failing candidate and its reviewed
 dependency impact; do not reconcretize every environment or refresh completed
 modules as part of overlay delivery. If the affected dependency set reaches
-completed work, prepare a separate candidate and review that impact before
-proceeding. A compiler-specific guard alone does not prove isolation.
+completed work, report that impact and retain its current lock and prefix until
+that environment is explicitly selected for reconcretization. A compiler-specific
+guard alone does not prove isolation.
 
 ## Updating an existing workspace
 
@@ -71,8 +79,9 @@ below are commands to run step by step, not a new updater to install.
 | `./cse-build compute install --surface platform` (or `shared`) | Optional full compiler-surface resume after the focused package retry |
 | `refresh-workspace-controls.py` | Optional generated-control update, documented in Stack Content's `pilots/cse-pilot/STACK-COMPOSER-UPDATE.md`; does not copy package overlays |
 
-There is no separate package-overlay apply/export helper attached to this
-guide. The copy and archive steps are shown explicitly. Healthy existing
+The `scripts/workspace-overlay.py` and `scripts/workspace-build.py` helpers
+automate the normal correction loop in this workspace with retained backups. The manual copy and
+archive steps below remain available for diagnosis. Healthy existing
 workspaces only need a copy of this Markdown guide; they do not need a render
 or control refresh to read it or follow the manual overlay procedure.
 
@@ -85,12 +94,14 @@ inventory before its existing compiler and concrete-graph checks. It covers
 `ncurses`, `zlib`), and their patch/helper files. New packages use the same
 inventory; no package-specific verifier code is needed.
 
-Older trials without these files remain unsupported by the new gate. Do not
-install this gate, change their builtin pin, or inventory their current files
-as an incidental control refresh. Adoption requires a separately prepared
-candidate, reviewed complete files, and explicit review of the inventory.
-The control refresh does not deploy either prerequisite. A presentation-only
-refresh can leave the existing gate in place.
+An older trial without an inventory can use the current standalone
+`workspace-overlay.py apply` after reviewing the existing recipe tree and complete
+correction. That explicit operation records the previous inventory absence,
+validates the complete tree, and admits its inventory without replacing the
+workspace or changing the builtin pin. The old launcher does not automatically
+gain the new build gate: use the companion selected concretize/resume helpers.
+A later controls refresh must satisfy its declared helper/inventory prerequisites.
+A presentation-only refresh can leave the existing controls in place.
 
 After preparing the complete correction in the **unaccepted candidate**, run
 the shipped helper directly; it needs Python 3.6+ and no Spack imports:
@@ -414,13 +425,12 @@ The install may update the selected environment's view. Preserve the old stage
 evidence first: `--keep-stage` retains the stage after a successful build; it
 does not guarantee that a retry keeps previous partial build artifacts.
 
-Rerun the same minimal failing operation against the corrected stage/new
-prefix, preserving the relevant flags and failure check; do not replay paths
-that still point at the old hash. Run the small validation supplied with the
-fix: for a library, compile/link a tiny consumer and execute its result check;
-for a tool, exercise the affected command and check its output. Numerical or
-MPI packages need an appropriate numerical or MPI check. Installation success
-alone does not prove the reported defect is fixed. Record results in
+For a configure, compile, or link failure, the corrected build passing the
+original failing stage with the same compiler is the recovery test. A CCE
+failure needs a CCE retry. For a runtime defect, rerun the failing operation
+against the corrected prefix with the relevant flags and result check. Add
+consumer checks when the defect or release acceptance requires them; they are
+not a mandatory extra step for every build correction. Record results in
 `CHANGE.md`, naming the system and compiler tested; do not mark unrun checks
 as passed.
 
@@ -516,9 +526,9 @@ workaround in Blueback's other notes addresses a different symptom.
 For an eventual source fix, the overlay structure would import `NetlibLapack`
 from `spack_repo.builtin.packages.netlib_lapack.package` and subclass it as
 `NetlibLapack`. The actual change and `when` condition still require diagnosis.
-No deployable fix or successful Blueback CCE retry is claimed here. Acceptance
-should include the formerly failing BLAS link and a tiny BLAS/LAPACK numerical
-consumer compiled, linked, and run with the same compiler.
+No deployable fix or successful Blueback CCE retry is claimed here. The recovery test is the formerly failing BLAS link completing in the
+CCE build. A numerical consumer remains part of any separately required
+runtime acceptance.
 
 After that correction is validated, Step 7 creates
 `netlib_lapack-overlay.tar.gz`; the receiving system sets

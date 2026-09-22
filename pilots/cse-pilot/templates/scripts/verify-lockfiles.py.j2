@@ -234,8 +234,8 @@ def load_lock(path: Path) -> Tuple[Dict, Dict]:
     with path.open(encoding="utf-8") as stream:
         lock = json.load(stream)
     version = lock.get("_meta", {}).get("lockfile-version")
-    if version != 7:
-        raise ValueError(f"{path}: expected Spack 1.2 lockfile version 7, got {version!r}")
+    if version != 6:
+        raise ValueError(f"{path}: expected Spack 1.2.2 lockfile version 6, got {version!r}")
     return lock, lock.get("concrete_specs", {})
 
 

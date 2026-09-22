@@ -318,3 +318,40 @@ only under the verified-lock conditions above. Before handing the workspace
 back, record the last action, node, environment, result, and relevant log or
 evidence path.
 {% endif %}
+
+## Overlay recovery and module presentation previews
+
+The standalone helpers run in this workspace's prepared shell. `cse-build`
+also delegates to them:
+
+```bash
+./cse-build login overlay --help
+./cse-build login module-preview --check-only
+```
+
+`overlay apply --from /path/to/corrected-package-directory` updates the existing
+workspace's complete package directory and inventory with a retained undo record.
+`overlay edit --package NAME --environment COMPILER/LANE` supports local manual
+editing with the same backup and validation. Both report potentially affected
+locks; neither solves them automatically.
+
+```bash
+./cse-build login concretize --environment cce/common --reconcretize
+./cse-build compute resume --environment cce/common
+```
+
+Use the recorded compiler/lane that actually failed. Reconcretize changes only
+that selected lock and retains its previous bytes. Resume builds that environment
+from its current lock and reuses installed matching hashes. It keeps module/view
+generation separate. Other completed locks and installed prefixes remain intact.
+Affected unselected locks are flagged before any later build against them.
+The failed build succeeding with the correction is the verification; no additional
+test program is required. See `pilots/cse-pilot/OVERLAY-RECOVERY.md` in Stack Content.
+
+`module-preview --output /absolute/new/review-directory` generates from the
+existing installed hashes into a separate Tcl module tree. Existing views must
+already be present; this never solves, installs or publishes. Edit the saved
+preview policies/presentation and pass them to a new iteration. Composer and
+Spack upgrades are unnecessary when the existing module policy is valid. See
+Stack Content's `pilots/cse-pilot/MODULE-PRESENTATION.md` for prerequisites,
+older-launcher commands, alternative projections and clean-shell `module use`.
