@@ -264,7 +264,14 @@ For restricted trial values, this is a restricted CSE team-review checkpoint,
 not public promotion. The command does not publish the static catalog, create a
 publication workspace, change filesystem audience, run `spack module refresh`,
 or delete or replace a package module tree. It copies the two
-`cse/<public-name>` front doors and only the ready lane selectors. A
+`cse/<public-name>` front doors under `<modules-root>/entrances/` and only the
+ready lane selectors under `<modules-root>/<compiler>/lanes/`. In a clean
+consumer shell, add only `<modules-root>/entrances` with `module use`; loading
+the compiler entrance exposes its lanes, and loading a lane exposes its
+packages. Keep the parent module root out of the initial `MODULEPATH` so its
+backing trees are not discovered recursively. Existing workspaces need the
+reviewed controls update before their publisher uses this layout; existing
+site registration changes remain explicit. A
 CSE-GCC/external-Cray-MPICH selector marked
 `multi-node-validation-required` remains available from the workspace
 `modulefiles/` tree but is withheld from the release module root. Publish it

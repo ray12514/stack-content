@@ -90,10 +90,11 @@ modules. It then writes these artifacts:
 
 | Preview path | Contents |
 |---|---|
-| `modulefiles/` | Compiler entrances, lane selectors, and generated package modules with module roots redirected here |
+| `entrances/` | Only the `cse/` compiler entrances; this is the initial consumer `MODULEPATH` root |
+| `modulefiles/` | Private compiler, Core/Common, lane selector, and package trees, exposed by the entrance and lane modules |
 | `presentation/` | Editable copy of the entrance/lane inputs, retaining the original recorded module-root spelling |
 | `policies/<compiler>/<kind>/modules.yaml` | Editable effective policy, retaining the original recorded module roots |
-| `preview.json` | Status, source hashes, selected environments, package hashes/prefixes, module filenames and required views |
+| `preview.json` | Status, consumer module path, source hashes, selected environments, package hashes/prefixes, module filenames and required views |
 | `state/` | Private caches, requests, reports and Spack logs |
 
 No views are regenerated. Generated modules may refer to the existing views
@@ -113,32 +114,45 @@ preview dependency unnoticed.
 
 Exit the prepared Spack shell. In a fresh login or allocation shell, use the
 site's clean-module procedure and reassign the absolute preview path. Do not
-source the build environment for this test. Example for the GCC surface:
+source the build environment for this test. There is **one initial `module use`**.
+The CSE entrance exposes its Core/Common modules and available lanes; selecting
+a lane exposes that lane's packages. Example for the GCC surface:
 
 ```bash
 PREVIEW=/absolute/path/to/module-review/lane-01
-module use "$PREVIEW/modulefiles"
+module use "$PREVIEW/entrances"
+module avail
+# The preview initially shows cse/init-GCC and the platform compiler entrance
+# (for example cse/init-CCE), without raw gcc/... or cce/... package trees.
 module show cse/init-GCC
 module load cse/init-GCC
-# Keep the preview lane selectors ahead of any existing publication.
-module use "$PREVIEW/modulefiles/gcc/lanes"
+module avail
+# Serial and MPI are now visible automatically, together with Core/Common.
 module show Serial
 module load Serial
 module avail
 module list
+# The selected Serial packages are now visible.
 ```
 
 The copied entrance points to this preview's compiler/Core/Common/lanes
-directories. Confirm the filenames printed by `module show` belong to this
-preview. Older entrances can omit `CSE_COMPILER`; use the known compiler
-directory rather than deriving a path from an unset variable. Inspect and load
+directories. Do not add a lane directory manually: if loading the entrance does
+not expose its lanes, that entrance has failed this test. Older entrances can
+omit `CSE_COMPILER`; automatic lane exposure is still required. Keep the private
+`modulefiles/` parent out of the initial `MODULEPATH`: Lmod scans it recursively
+and would show the backing compiler/lane/package tree before entrance selection.
+Confirm the filenames printed by `module show` belong to this preview. Inspect and load
 the intended package/version, check its prefix and dependency modules, and
 run a representative consumer. Check unloading and Serial/MPI mutual exclusion.
-Repeat MPI checks in a separate clean shell with the site's native launcher.
+Repeat with `module load MPI` in a separate clean shell, starting with the same
+single `module use` and compiler entrance, then use the site's native launcher.
+Repeat the entrance → lane → package sequence for the platform compiler, such
+as `cse/init-CCE`, using that system's actual entrance name. A GPU lane belongs
+at the same selection level when configured; this CPU trial supplies Serial/MPI.
 Compiler or MPI naming changes must still load the exact accepted compiler and
 provider. A successful `module avail` is not runtime acceptance.
 
-For a deliberate single-environment package-name experiment, use
+For a deliberate single-environment package-name experiment only, use
 `module use "$PREVIEW/modulefiles/gcc/serial"` after the reviewed compiler/site
 prerequisites. Record that this tested package presentation only, not the full
 compiler entrance and lane sequence.

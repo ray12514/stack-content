@@ -459,46 +459,45 @@ no active Spack environment, and no previously loaded CSE/compiler/MPI surface.
 Use the site's clean-module reset procedure. Do not test consumer behavior from
 inside `cse-build shell`, whose build paths and compiler state can mask errors.
 
-Set only the existing workspace path in this clean consumer shell. The example
-uses `init-GCC`; replace it with the entrance name printed from this system's
-recorded values. Repeat in another clean shell for its platform entrance.
+First generate a private preview of the workspace's presentation and existing
+installed packages using [Module presentation previews](MODULE-PRESENTATION.md).
+In this clean consumer shell, set its absolute path. The example uses `init-GCC`;
+replace it with the entrance name from this system's recorded values. Repeat in
+another clean shell for its platform entrance.
 
 ```bash
-BUILD_WORKSPACE=/absolute/path/to/the/existing/workspace
-module use "$BUILD_WORKSPACE/modulefiles"
+PREVIEW=/absolute/path/to/module-review/lane-01
+module use "$PREVIEW/entrances"
+module avail
+# Only the preview's CSE compiler entrances are initially visible.
 module show cse/init-GCC
 module load cse/init-GCC
+module avail
+# Core/Common modules and Serial/MPI selectors are now visible automatically.
 module list
 printf 'surface=%s\nC=%s\nC++=%s\nFortran=%s\n' \
   "${CSE_COMPILER:-missing}" "${CSE_CC:-missing}" \
   "${CSE_CXX:-missing}" "${CSE_FC:-missing}"
-```
-
-Require all four recorded values to be present before continuing. Older
-entrance files may lack these exports; return to the operator shell to review
-and refresh that presentation first, then restart this clean consumer session.
-Do not derive the lane path from an empty compiler variable.
-
-```bash
-command -v "$CSE_CC" "$CSE_CXX" "$CSE_FC"
-
-# The front door normally exposes lanes from the recorded release module root.
-# Prefer this workspace's newly rendered lane files for this review.
-module use "$BUILD_WORKSPACE/modulefiles/$CSE_COMPILER/lanes"
 module show Serial
 module load Serial
 module avail
 ```
 
 Check the filenames shown by `module show`: the entrance and lane must come
-from this workspace. Check that Foundation is exposed through its view, Core
-and Common modules are visible, and selecting Serial exposes the intended
+from this preview. No second `module use` is needed: exposing the lane directory
+is the compiler entrance's job. If Serial/MPI do not appear after loading that
+entrance, correct the presentation and generate another preview. Do not bypass
+the failure by adding the lane directory manually. Older entrances can omit
+the diagnostic `CSE_*` exports; inspect their module bodies and verify the exact
+recorded compiler commands instead of deriving paths from absent variables.
+Check that Foundation is exposed through its view, Core and Common modules
+are visible, and selecting Serial exposes the intended
 Serial packages. Load a recorded package/version, inspect its dependency
 autoloads and conflicts, and run its representative installed consumer. Save
 the exact module list, commands and output under the maintenance evidence path.
 
-Repeat from a clean shell with `MPI` instead of `Serial`; inspect
-`CSE_MPICC`, `CSE_MPICXX` and `CSE_MPIFC` and run the approved native MPI smoke
+Repeat the same entrance → lane sequence from a clean shell with `MPI` instead
+of `Serial`; inspect `CSE_MPICC`, `CSE_MPICXX` and `CSE_MPIFC` and run the approved native MPI smoke
 test in an allocation. Use the system runbook's launcher and node count. A
 module load or compiler `--version` alone does not establish runtime acceptance.
 The CSE-GCC/external-Cray-MPICH candidate requires its native multi-node check.
@@ -508,8 +507,13 @@ workspace to all users or change a login configuration.
 ## Copy the accepted presentation, then handle public activation separately
 
 Once the required views, package modules and consumer checks pass, a retained
-launcher that supports `publish-modules` can copy ready entrances/lanes into the
-module root recorded by its build values:
+launcher with the corrected `publish-modules` layout can copy ready
+entrances/lanes into the module root recorded by its build values. The current
+launcher puts entrances in `<recorded-module-root>/entrances/cse/` and keeps the
+compiler/lane/package trees under `<recorded-module-root>/<compiler>/`. If the
+retained launcher still writes entrances directly under `<recorded-module-root>/cse/`,
+qualify the scoped controls update above before using this publication step.
+Source checkout updates alone do not change the launcher.
 
 ```bash
 # Back in the operator shell, outside the clean consumer test session.
@@ -518,18 +522,24 @@ cd "$BUILD_WORKSPACE"
 ```
 
 For restricted build values, this is the CSE team-review root. Check that exact
-root with `module use <recorded-restricted-module-root>` in another clean team
+root with `module use <recorded-restricted-module-root>/entrances` in another clean team
 session. The command does not refresh package modules or register a login
 `MODULEPATH`. It withholds the external-MPI candidate lane described above;
 passing a smoke test does not automatically clear that gate. Follow the system's
 review/promotion procedure rather than bypassing it. If the older launcher
-lacks this action, qualify a controls update separately; the workspace-path
+lacks this action, qualify a controls update separately; the private-preview
 review above remains available without replacing the launcher.
 
 Public user activation follows the common runbook's signed cache-only
 publication and published-workspace acceptance. Only then register the approved
-**published** module root in the site's login `MODULEPATH` (or its already
-registered module hierarchy). Keep the restricted build workspace/root out of
+**published entrance** directory, `<published-module-root>/entrances`, in the
+site's login `MODULEPATH` (or its already registered module hierarchy). Do not
+register the parent package-module root: recursive discovery would expose
+compiler/lane/package trees before selection. An older parent-root registration
+must be changed deliberately after the new entrance passes its checks; merely
+adding `/entrances` while keeping that parent active does not correct discovery.
+The publisher leaves older root-level entrance files in place and does not edit
+site login settings. Keep the restricted build workspace/root out of
 the general user login path. Existing absolute paths inside generated modules
 must refer to the accepted published prefixes/views; adding `module use` does
 not relocate them. Production preparation-path selection remains open.

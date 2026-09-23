@@ -45,8 +45,9 @@ def installed_workspace(tmp_path, monkeypatch):
         }}}))
     entrance = workspace / "modulefiles/cse/init-GCC"
     entrance.parent.mkdir(parents=True)
-    entrance.write_text("#%Module1.0\nsetenv CSE_COMPILER gcc\nprepend-path MODULEPATH "
-                        + str(existing) + "/gcc/core\n")
+    entrance.write_text("#%Module1.0\nsetenv CSE_COMPILER gcc\n"
+                        + "".join("prepend-path MODULEPATH " + str(existing / "gcc" / kind) + "\n"
+                                  for kind in ("core", "common", "lanes")))
     lane = workspace / "modulefiles/gcc/lanes/Serial"
     lane.parent.mkdir(parents=True)
     lane.write_text("#%Module1.0\nprepend-path MODULEPATH " + str(existing) + "/gcc/serial\n")
@@ -183,6 +184,41 @@ def test_check_only_and_selection_require_no_generated_module_output(installed_w
     assert report["status"] == "checked"
     assert state["commands"] == [("gcc/core", "check")]
     assert not (options["output"] / "modulefiles").exists()
+    assert not (options["output"] / "entrances").exists()
+
+
+def test_consumer_root_exposes_only_entrances_and_entrances_expose_preview_lanes(installed_workspace):
+    options, _ = installed_workspace
+    platform = options["workspace"] / "modulefiles/cse/init-CCE"
+    platform.write_text("#%Module1.0\nprepend-path MODULEPATH "
+                        + str(options["modules_root"] / "cce/lanes") + "\n")
+    report = preview.preview(**options)
+    root = options["output"] / "entrances"
+    # Lmod walks the initial MODULEPATH recursively. It must not contain the
+    # private compiler tree, otherwise lanes/packages appear before activation.
+    assert sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file()) == [
+        "cse/init-CCE", "cse/init-GCC"]
+    assert report["consumer_modulepath"] == str(root)
+    assert not (options["output"] / "modulefiles/cse").exists()
+    for compiler, entrance in (("gcc", "init-GCC"), ("cce", "init-CCE")):
+        body = (root / "cse" / entrance).read_text()
+        assert str(options["output"] / "modulefiles" / compiler / "lanes") in body
+        assert str(options["modules_root"]) not in body
+
+
+def test_cli_points_to_entrances_without_a_manual_lane_path_for_legacy_files(
+        installed_workspace, monkeypatch, capsys):
+    options, _ = installed_workspace
+    entrance = options["workspace"] / "modulefiles/cse/init-GCC"
+    entrance.write_text(entrance.read_text().replace("setenv CSE_COMPILER gcc\n", ""))
+    arguments = [str(SCRIPT)]
+    for name in ("workspace", "output", "modules_root", "spack"):
+        arguments += ["--" + name.replace("_", "-"), str(options[name])]
+    monkeypatch.setattr(sys, "argv", arguments)
+    assert preview.main() == 0
+    output = capsys.readouterr().out
+    assert "module use " + str(options["output"] / "entrances") in output
+    assert "use the explicit compiler lane path" not in output
 
 
 @pytest.mark.parametrize("missing", ["uninstalled", "prefix", "view"])

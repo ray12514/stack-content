@@ -107,6 +107,13 @@ def presentation_files(source, modules_root, destination):
     return result
 
 
+def presentation_target(output, name):
+    # Module systems scan each MODULEPATH root recursively. Expose entrances
+    # alone; their MODULEPATH changes reveal the private compiler/lane tree.
+    root = "entrances" if name.startswith("cse/") else "modulefiles"
+    return output / root / name
+
+
 def preview(*, workspace, output, modules_root, spack, environments=None,
             policy_tree=None, presentation_tree=None, check_only=False):
     workspace, output = workspace.resolve(), output.absolute()
@@ -127,6 +134,7 @@ def preview(*, workspace, output, modules_root, spack, environments=None,
     staging = Path(tempfile.mkdtemp(prefix="cse-module-preview-"))
     report = {"schema_version": 1, "status": "checking", "workspace": str(workspace),
               "modules_root": str(modules_root), "preview": str(output),
+              "consumer_modulepath": str(output / "entrances"),
               "spack": str(spack.resolve()), "check_only": check_only,
               "environments": {}, "source_sha256": protected,
               "capabilities": {"composer_required": False, "controls_refresh_required": False,
@@ -134,7 +142,7 @@ def preview(*, workspace, output, modules_root, spack, environments=None,
     status = staging / "preview.json"
     try:
         plans = {}
-        filenames = {str(output / "modulefiles" / name): "presentation" for name in presentation}
+        filenames = {str(presentation_target(output, name)): "presentation" for name in presentation}
         for name in selected:
             policy = None
             if policy_tree:
@@ -172,7 +180,7 @@ def preview(*, workspace, output, modules_root, spack, environments=None,
         shutil.copytree(staging / "policies", output / "policies")
         if not check_only:
             for name, body in presentation.items():
-                target = output / "modulefiles" / name
+                target = presentation_target(output, name)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(body)
             # Keep editable entrance/lane inputs separate from package output.
@@ -392,14 +400,14 @@ def main():
               + str(len(report["environments"])) + " environments")
         print("Existing controls suffice for this preview; no Composer refresh is required.")
         if report["capabilities"]["legacy_entrance_variables"]:
-            print("Older entrances omit CSE_COMPILER; use the explicit compiler lane path.")
+            print("Older entrances omit CSE_COMPILER; verify that loading the entrance exposes its lanes.")
         if report["capabilities"]["omitted_environments"]:
             print("Partial preview: omitted " + ", ".join(report["capabilities"]["omitted_environments"])
                   + ". Test package naming directly; full lane tests need its Core/Common/provider modules.")
         if not temporary:
             print("Review record: " + str(args.output / "preview.json"))
             if not args.check_only:
-                print("Clean consumer shell: module use " + str(args.output / "modulefiles"))
+                print("Clean consumer shell: module use " + report["consumer_modulepath"])
         return 0
     except (PreviewError, OSError, ValueError) as error:
         print("module-preview: " + str(error), file=sys.stderr)

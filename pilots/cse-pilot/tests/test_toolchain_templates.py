@@ -511,6 +511,59 @@ class ToolchainTemplateTests(unittest.TestCase):
             report["surfaces"]["platform"]["consumer_candidate"]
         )
 
+    def test_publish_entrances_separately_preserves_existing_backing_and_legacy_files(self) -> None:
+        test_values = yaml.safe_load(SITE_VALUES_PATH.read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace, modules, views = root / "workspace", root / "modules", root / "views"
+            test_values["paths"]["modules_root"] = str(modules)
+            test_values["paths"]["views_root"] = str(views)
+            for surface_name in ("shared", "platform"):
+                surface = test_values[surface_name]
+                compiler = surface["compiler"]["name"]
+                public = surface["compiler"]["public_name"]
+                mpi = "mpi-" + surface["mpi"]["name"]
+                for relative in ("cse/" + public, compiler + "/lanes/Serial", compiler + "/lanes/MPI"):
+                    source = workspace / "modulefiles" / relative
+                    source.parent.mkdir(parents=True, exist_ok=True)
+                    source.write_text("#%Module1.0\n# refreshed " + relative + "\n")
+                (views / compiler / "foundation").mkdir(parents=True)
+                for lane in ("core", "common", "serial", mpi):
+                    (modules / compiler / lane).mkdir(parents=True)
+                for provider, relative in (
+                    (surface["compiler"], "compiler/" + compiler),
+                    (surface["mpi"], mpi + "-provider/" + surface["mpi"]["name"]),
+                ):
+                    if provider["source"] == "build":
+                        target = modules / compiler / relative / provider["version"]
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_text("#%Module1.0\n# installed provider\n")
+            legacy = modules / "cse" / test_values["shared"]["compiler"]["public_name"]
+            legacy.parent.mkdir(parents=True)
+            legacy.write_text("#%Module1.0\n# retained old entrance\n")
+            package = modules / test_values["shared"]["compiler"]["name"] / "serial/accepted/1.0"
+            package.parent.mkdir(parents=True)
+            package.write_text("#%Module1.0\n# retained package\n")
+            retained = {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in (legacy, package)}
+            launcher = render_text("cse-build.j2", values=test_values)
+            publisher = launcher.split("publish_module_file() {", 1)[1].split("\nverify_workspace_inputs\n", 1)[0]
+            result = subprocess.run(
+                ["bash", "-c", "set -e\nfail() { printf '%s\\n' \"$*\" >&2; exit 1; }\n"
+                 "note() { printf '%s\\n' \"$*\"; }\nverify_locks() { :; }\n"
+                 "publish_module_file() {" + publisher + "\npublish_presentation_modules\n"],
+                env=dict(os.environ, CSE_WORKSPACE_ROOT=str(workspace), CSE_MODULES_ROOT=str(modules)),
+                text=True, capture_output=True, check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            for surface_name in ("shared", "platform"):
+                surface = test_values[surface_name]
+                relative = "cse/" + surface["compiler"]["public_name"]
+                self.assertEqual((modules / "entrances" / relative).read_bytes(),
+                                 (workspace / "modulefiles" / relative).read_bytes())
+                self.assertTrue((modules / surface["compiler"]["name"] / "lanes/Serial").is_file())
+            self.assertEqual(retained, {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in retained})
+            self.assertIn('module use "' + str(modules / "entrances") + '"', result.stdout)
+
     def test_build_sourced_mpi_selectors_are_ready_for_presentation(self) -> None:
         site_values = yaml.safe_load(SITE_VALUES_PATH.read_text(encoding="utf-8"))
 

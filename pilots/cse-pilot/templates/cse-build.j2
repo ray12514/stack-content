@@ -660,7 +660,10 @@ publish_module_file() {
     /*|*../*|../*|*/..|..|"") fail "unsafe presentation-module target: $relative" ;;
   esac
   source="$CSE_WORKSPACE_ROOT/$source"
-  destination="$CSE_MODULES_ROOT/$relative"
+  case "$relative" in
+    cse/*) destination="$CSE_MODULES_ROOT/entrances/$relative" ;;
+    *) destination="$CSE_MODULES_ROOT/$relative" ;;
+  esac
   [ -f "$source" ] && [ ! -L "$source" ] || fail \
     "presentation-module source is missing or unsafe: $source"
   mkdir -p "$(dirname "$destination")"
@@ -735,6 +738,9 @@ publish_presentation_modules() {
   publish_module_file \
     {{ ('modulefiles/' ~ values.platform.compiler.name ~ '/lanes/MPI') | yaml_scalar }} \
     {{ (values.platform.compiler.name ~ '/lanes/MPI') | yaml_scalar }}
+  note "consumer entrance root: $CSE_MODULES_ROOT/entrances"
+  note "clean consumer shell: module use \"$CSE_MODULES_ROOT/entrances\""
+  note "register only this entrance root; any older site MODULEPATH registration is unchanged"
 }
 
 verify_workspace_inputs

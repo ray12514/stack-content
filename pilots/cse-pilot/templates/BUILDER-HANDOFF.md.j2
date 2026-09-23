@@ -295,7 +295,12 @@ module and view exists, publish the separate CSE presentation files with:
 ```
 
 The command writes only the generated compiler front doors and short lane
-selectors into the module root recorded by the current values. With restricted
+selectors into the module root recorded by the current values. Compiler
+entrances go under `entrances/cse/`; lane selectors remain under
+`<compiler>/lanes/`. Add only `{{ values.paths.modules_root }}/entrances`
+to the clean consumer shell with `module use`. Loading the compiler entrance
+exposes its lanes automatically; loading a lane exposes its packages. Do not
+add the parent module root or lane paths manually for this check. With restricted
 trial values, it is a CSE team-review checkpoint rather than public promotion.
 It does not publish the static catalog, create a publication workspace, or
 change filesystem audience. It preserves the package roster, environment

@@ -54,14 +54,23 @@ This workspace records:
 - shared compiler front door: `cse/{{ values.shared.compiler.public_name }}`
 - platform compiler front door: `cse/{{ values.platform.compiler.public_name }}`
 
-After the release's module root is published on the site `MODULEPATH`, enter one
-surface and exactly one payload lane:
+After the accepted release's **entrance root**
+`{{ values.paths.modules_root }}/entrances` is registered on the site
+`MODULEPATH`, enter one surface and exactly one payload lane:
 
 ```bash
 module load cse/{{ values.shared.compiler.public_name }}  # or cse/{{ values.platform.compiler.public_name }}
 module load Serial                                        # or MPI
 module load <package>/<version>
 ```
+
+For a private check, use `module use {{ values.paths.modules_root }}/entrances`
+once in a clean consumer shell. Before loading an entrance, only the two CSE
+compiler entrances should be visible from this release. The entrance makes its
+Serial/MPI selectors visible automatically; selecting a lane exposes its
+packages. Do not add the parent `{{ values.paths.modules_root }}` to
+`MODULEPATH`: module tools recursively discover the backing package and lane
+files there, bypassing the intended discovery sequence.
 
 The `init-` prefix used by the current trial selections is trial-only. The full
 Stack Composer renderer's canonical convention is `cse/<Compiler>`, followed
@@ -91,7 +100,7 @@ prefix, simple-wrapper paths, and allowlisted runtime paths are recorded in
 separate live site fact and is not inferred from the compile-wrapper prefix.
 
 After all package installs and package-module refreshes finish, copy the
-independent presentation layer into the module root recorded by the current
+independent presentation layer under the module root recorded by the current
 values with:
 
 ```bash
@@ -101,8 +110,12 @@ values with:
 For restricted trial values, this is a restricted CSE team-review checkpoint,
 not public promotion. It does not publish the static catalog, create a
 publication workspace, change filesystem audience, or refresh or replace a
-package module tree. It copies only `cse/<public-name>` and
-`<compiler>/lanes/{Serial,MPI}` files. A CSE-built-compiler/external-MPI
+package module tree. It copies compiler entrances into
+`entrances/cse/<public-name>` and lane selectors into
+`<compiler>/lanes/{Serial,MPI}`. Existing legacy `cse/<public-name>` files and
+site `MODULEPATH` registrations are preserved. After accepting the new entrance
+root, update the site's registration deliberately; registering its parent would
+continue exposing backing files. A CSE-built-compiler/external-MPI
 selector whose status is
 `multi-node-validation-required` remains usable from the workspace
 `modulefiles/` tree but is withheld from the release module root. Publish it
