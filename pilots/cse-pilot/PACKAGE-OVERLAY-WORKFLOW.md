@@ -1,6 +1,10 @@
 # Manual CSE package overlay workflow
 
-For the normal same-workspace correction loop, start with
+For a teammate's correction in an existing trial, start with
+[inspection and retry using the installed tools](templates/PACKAGE-OVERLAY-QUICKSTART.md#inspect-an-existing-correction-with-the-installed-tools).
+Inspect the deployed files first; updating tools is not a prerequisite.
+
+For the helper-assisted same-workspace correction loop, start with
 [Overlay recovery](OVERLAY-RECOVERY.md). It coordinates inspection, solving and
 retry while retaining the existing workspace. This document supplies the manual
 diagnosis and package-authoring detail.

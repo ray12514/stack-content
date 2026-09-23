@@ -2,7 +2,11 @@
 
 For an already built system, start with [module maintenance and tool requirements](CONTROL-REFRESH.md#do-the-tools-need-updating-first)
 and [isolated module presentation previews](MODULE-PRESENTATION.md). For a failed
-package, use the [overlay recovery helper](OVERLAY-RECOVERY.md).
+package or a teammate's existing correction, start with
+[inspection and retry using the installed tools](templates/PACKAGE-OVERLAY-QUICKSTART.md#inspect-an-existing-correction-with-the-installed-tools).
+No tool update is required for that procedure. The
+[overlay recovery helpers](OVERLAY-RECOVERY.md) automate the correction loop
+when available.
 
 This blueprint combines one reviewed `render-static` catalog with the approved
 CPU-only trial package roster. It renders Core, Common, Serial, and MPI

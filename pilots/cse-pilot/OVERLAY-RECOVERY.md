@@ -1,5 +1,13 @@
 # Correct a package and continue in the same workspace
 
+**If your teammate already changed a package in an existing trial, start with
+[Inspect an existing correction with the installed tools](templates/PACKAGE-OVERLAY-QUICKSTART.md#inspect-an-existing-correction-with-the-installed-tools).**
+No tool update is required to enter the existing prepared shell, inspect the
+deployed recipe and Spack paths, explicitly reconcretize the affected environment,
+and retry it. That procedure includes the CCE Core/GSL example and preserves
+the completed GCC locks. Use the helper workflow below when those helpers are
+already available or you deliberately choose to adopt them.
+
 The normal loop is **edit/apply the complete package correction → explicitly
 reconcretize the selected environment → resume that same environment**. Keep the
 workspace, its recorded configuration and its existing installed prefixes. A new
@@ -168,6 +176,11 @@ its startup inventory gate, use the direct helper recovery path below. This
 restores recorded bytes without going through that failing startup gate.
 
 ## Older launchers and direct recovery
+
+For inspection and a manual selected-environment retry with the tools already
+installed, use the [existing-tooling procedure](templates/PACKAGE-OVERLAY-QUICKSTART.md#inspect-an-existing-correction-with-the-installed-tools).
+The following is an optional way to adopt the newer recovery helpers; it is
+not a prerequisite for checking or retrying a teammate's correction.
 
 An older launcher need not be replaced merely to apply a recipe. Use its prepared
 shell and the helper from a reviewed current content checkout:

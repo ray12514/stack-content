@@ -1,6 +1,11 @@
 # Offline package fixes in an existing CSE trial
 
-The normal helper workflow stays in this workspace: `overlay apply` or
+**Checking a teammate's existing correction does not require a tool update.**
+Start with [Inspect an existing correction with the installed tools](#inspect-an-existing-correction-with-the-installed-tools).
+Use the current workspace, confirm which recipe Spack sees, then explicitly
+reconcretize and retry only the failing environment.
+
+When the recovery helpers are already available, their workflow stays in this workspace: `overlay apply` or
 `overlay edit`, `concretize --environment COMPILER/LANE --reconcretize`, then
 `resume --environment COMPILER/LANE`. It retains backups internally and never
 creates a new operator workspace. See Stack Content's
@@ -41,6 +46,158 @@ modules as part of overlay delivery. If the affected dependency set reaches
 completed work, report that impact and retain its current lock and prefix until
 that environment is explicitly selected for reconcretization. A compiler-specific
 guard alone does not prove isolation.
+
+## Inspect an existing correction with the installed tools
+
+This is the starting point when someone says they already fixed a package in
+an older running trial. No Stack Content pull, Stack Composer rebuild, Cluster
+Inspector update, Spack upgrade, control refresh, or new render is needed to
+inspect and retry that correction. Check the tools and paths already recorded
+for this workspace; "check" does not mean advance them to newer versions.
+
+The example below investigates GSL in `cce/core`. Substitute the actual failing
+environment on your system. Keep completed GCC locks and installations intact.
+Coordinate with your teammate so neither operator changes recipes or solves the
+same environment during the other's inspection/retry.
+
+**1. Enter the existing prepared shell.**
+
+```bash
+cd /absolute/path/to/existing-workspace
+./cse-build login shell
+```
+
+Continue in that shell if it is already open. The existing `cse-build login
+tmux` command is another entry point when supported by that launcher. Plain
+`tmux` only keeps a session alive; it does not activate Spack or prepare the
+workspace by itself. The prepared shell sets the runtime and paths. The `-e`
+argument below selects the specific environment without a separate
+`spack env activate` command.
+
+**2. Check this workspace's runtime, repository, and store paths.**
+
+```bash
+export TARGET_ENV="$CSE_BUILD_WORKSPACE/environments/cce/core"
+export PACKAGE_DIR="$CSE_BUILD_WORKSPACE/package-repos/spack_repo/cse_trials/packages/gsl"
+type -a spack
+spack --version
+spack location --spack-root
+spack -e "$TARGET_ENV" repo list
+spack -e "$TARGET_ENV" config get repos
+spack -e "$TARGET_ENV" config get config
+spack -e "$TARGET_ENV" config get modules
+cat "$TARGET_ENV/spack.yaml"
+```
+
+Compare these with the existing workspace's `BUILDER-HANDOFF.md` and recorded
+configuration. `builtin` is a **recipe repository**; the install tree is the
+**package store**. Check both, plus the stage/cache paths. Require `cse_trials`
+to resolve to this workspace's overlay repo ahead of builtin. Check that the
+selected view and module output paths belong to the intended CCE environment.
+
+**3. Read what was deployed and prove recipe selection.**
+
+```bash
+ls -l "$PACKAGE_DIR"
+less "$PACKAGE_DIR/package.py"
+spack -e "$TARGET_ENV" location --package-dir gsl
+PYTHONDONTWRITEBYTECODE=1 spack -e "$TARGET_ENV" python -c \
+  'import inspect, spack.repo; cls = spack.repo.PATH.get_pkg_class("gsl"); print(cls.__module__); print(inspect.getfile(cls))'
+spack -e "$TARGET_ENV" find -c -d -L -N -v gsl
+```
+
+Read any referenced local patches too, and compare the deployed files with the
+complete correction your teammate intended to deliver. If the file is absent
+or the selected class comes from builtin/another workspace, resolve that path
+or delivery problem before solving. A change in a Stack Content checkout alone
+does not update this deployed directory. A complete copied builtin recipe is
+valid as an overlay; subclassing is a maintenance choice, not a registration
+requirement.
+
+The recipe-path check shows current repository selection; `find` shows the
+existing concrete graph. They can disagree before reconcretization. Inspect
+both GSL versions if this environment contains more than one. The generated
+`.spack-env/repos` tree is a concrete recipe snapshot, not a mirror of every
+overlay. Do not edit it. Starting another build against the old lock does not
+by itself switch `builtin.gsl` to `cse_trials.gsl`.
+
+**4. Retain the selected inputs, then reconcretize that environment.**
+
+If the intended correction is already deployed, leave it in place; there is
+no need to reapply it or install a helper first. If it needs correction, use
+Steps 2–4 below to retain and review the complete package before replacing it.
+Before solving, create a new record for the current selected inputs:
+
+```bash
+REVIEW_RECORD=$(mktemp -d "$CSE_BUILD_WORKSPACE/gsl-review.XXXXXX")
+(
+  set -e
+  test -n "$REVIEW_RECORD" && test -d "$REVIEW_RECORD"
+  cp -p "$TARGET_ENV/spack.yaml" "$REVIEW_RECORD/spack.yaml.before"
+  cp -p "$TARGET_ENV/spack.lock" "$REVIEW_RECORD/spack.lock.before"
+  cp -a "$PACKAGE_DIR" "$REVIEW_RECORD/overlay-before"
+  spack -e "$TARGET_ENV" find -c -d -L -N -v > "$REVIEW_RECORD/graph.before.txt"
+)
+if [ "$?" -ne 0 ]; then
+  printf 'Input capture failed; do not reconcretize. Reopen the prepared shell after resolving it.\n' >&2
+  exit 1
+fi
+printf 'Keep this review directory: %s\n' "$REVIEW_RECORD"
+```
+
+Require that capture to succeed. Keep the original failure log as well. Then:
+
+```bash
+spack -e "$TARGET_ENV" concretize -f --fresh -j 1
+```
+
+This forces a new solve of **only `cce/core`**, without reusing old concrete
+specs during the solve. It does not delete installed packages; matching
+installed hashes remain reusable at installation. It can change other hashes
+within that environment. After a successful solve, review the resulting graph:
+
+```bash
+spack -e "$TARGET_ENV" find -c -d -L -N -v > "$REVIEW_RECORD/graph.after.txt"
+diff -u "$REVIEW_RECORD/graph.before.txt" "$REVIEW_RECORD/graph.after.txt"
+spack -e "$TARGET_ENV" find -c -d -L -N -v gsl
+```
+
+`diff` status 1 means differences were found. Confirm `cse_trials.gsl`, the
+intended versions and CCE compiler dependencies, and explain any other changed
+nodes before building. If the solve fails, retain its output and the backup;
+do not build or delete the lock to work around it. These manual commands do
+not provide the newer helper's automatic rollback or transaction records.
+
+**5. Retry this environment in its normal compute allocation.**
+
+Exit the login builder shell and enter the site's normal compute allocation.
+From the same workspace, open its compute shell and reselect the environment:
+
+```bash
+cd /absolute/path/to/existing-workspace
+./cse-build compute shell
+export TARGET_ENV="$CSE_BUILD_WORKSPACE/environments/cce/core"
+spack -e "$TARGET_ENV" install --only-concrete --no-add --fail-fast --keep-stage -j 1
+```
+
+This installs the selected lock and reuses matching installed packages. It does
+not reconcretize, run other environments, or perform a broad `cse-build` module
+refresh/publication. Direct Spack still follows this environment's configured
+view and module settings: concretize/install can update its views, and install
+hooks can write its package modules. This is not a presentation-isolated retry.
+
+Retain the build log. The previously failing stage passing with CCE is the
+build-fix check. If the corrected package is reused from a store or binary
+cache, that is not a new compile test; retain matching successful CCE evidence
+or use the focused source retry in Step 6 below. Do not uninstall shared
+packages to force it. Review other environments for the corrected package and
+its dependents, but do not reconcretize all CCE or GCC locks automatically.
+
+If this workspace already has a recovery transaction or reports inventory
+drift, use its existing recovery procedure. Direct Spack does not acknowledge
+the helper's pending-impact records; do not use this route to bypass a gate.
+Tool/control upgrades remain a separate task when a capability is actually
+needed, not a prerequisite for inspecting the teammate's change.
 
 ## Updating an existing workspace
 
