@@ -182,12 +182,13 @@ installed, use the [existing-tooling procedure](templates/PACKAGE-OVERLAY-QUICKS
 The following is an optional way to adopt the newer recovery helpers; it is
 not a prerequisite for checking or retrying a teammate's correction.
 
-An older launcher need not be replaced merely to apply a recipe. Use its prepared
-shell and the helper from a reviewed current content checkout:
+An older launcher need not be replaced merely to apply a recipe. Enter its
+default prepared tmux session with `./cse-build login`, then use the helper from
+a reviewed current content checkout:
 
 ```bash
 cd /absolute/path/to/existing-workspace
-./cse-build login shell
+./cse-build login
 OVERLAY_HELPER=/absolute/path/to/stack-content/pilots/cse-pilot/templates/scripts/workspace-overlay.py
 spack python "$OVERLAY_HELPER" apply --environment cce/common \
   --from /absolute/path/to/corrections/netlib_lapack

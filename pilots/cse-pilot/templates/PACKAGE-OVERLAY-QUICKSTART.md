@@ -60,18 +60,18 @@ environment on your system. Keep completed GCC locks and installations intact.
 Coordinate with your teammate so neither operator changes recipes or solves the
 same environment during the other's inspection/retry.
 
-**1. Enter the existing prepared shell.**
+**1. Enter the existing prepared build session.**
 
 ```bash
 cd /absolute/path/to/existing-workspace
-./cse-build login shell
+./cse-build login
 ```
 
-Continue in that shell if it is already open. The existing `cse-build login
-tmux` command is another entry point when supported by that launcher. Plain
-`tmux` only keeps a session alive; it does not activate Spack or prepare the
-workspace by itself. The prepared shell sets the runtime and paths. The `-e`
-argument below selects the specific environment without a separate
+`./cse-build login` defaults to tmux: it creates or reattaches the prepared
+build session with Spack and the workspace's recorded paths set up. No `shell`
+argument is needed. Continue there if that session is already open. Use
+`./cse-build login shell` only when you want a prepared shell without tmux.
+The `-e` argument below selects the specific environment without a separate
 `spack env activate` command.
 
 **2. Check this workspace's runtime, repository, and store paths.**
@@ -170,12 +170,12 @@ not provide the newer helper's automatic rollback or transaction records.
 
 **5. Retry this environment in its normal compute allocation.**
 
-Exit the login builder shell and enter the site's normal compute allocation.
-From the same workspace, open its compute shell and reselect the environment:
+In the site's normal compute allocation, return to the same workspace, enter
+its prepared compute session, and reselect the environment:
 
 ```bash
 cd /absolute/path/to/existing-workspace
-./cse-build compute shell
+./cse-build compute
 export TARGET_ENV="$CSE_BUILD_WORKSPACE/environments/cce/core"
 spack -e "$TARGET_ENV" install --only-concrete --no-add --fail-fast --keep-stage -j 1
 ```
@@ -231,7 +231,7 @@ below are commands to run step by step, not a new updater to install.
 | Tool or action | Role in this guide |
 | --- | --- |
 | Text editor, `install`/`cp`, `spack`, `tar`, `sha256sum` | Manual edit, apply, test, and transfer steps below |
-| `./cse-build login shell` / `./cse-build compute shell` | Existing generated shell setup; selects this workspace's runtime and node context |
+| `./cse-build login` / `./cse-build compute` | Default prepared tmux session; selects this workspace's runtime and node context. Add `shell` only to skip tmux. |
 | `./cse-build login verify` | Existing lock check after recovering affected locks; does not prove a new package fix works |
 | `./cse-build compute install --surface platform` (or `shared`) | Optional full compiler-surface resume after the focused package retry |
 | `refresh-workspace-controls.py` | Optional generated-control update, documented in Stack Content's `pilots/cse-pilot/STACK-COMPOSER-UPDATE.md`; does not copy package overlays |
@@ -331,11 +331,12 @@ From a fresh login shell:
 
 ```bash
 cd "<absolute-existing-trial-workspace>"
-./cse-build login shell
+./cse-build login
 ```
 
-This opens the generated Bash setup; it does not start an install. If already
-in that prepared shell, continue there. All remaining command blocks use Bash.
+This creates or reattaches the prepared tmux session; it does not start an
+install. If already in that session, continue there. All remaining command
+blocks use Bash. Add `shell` only to open the prepared shell without tmux.
 The standalone `env/setup-build-env.sh` only exports workspace values; sourcing
 it alone does not activate Spack, select node-local staging, or prepare modules
 and caches. Use the prepared shell, then run direct Spack commands below.
@@ -435,7 +436,7 @@ exact stage path printed in the original log. Login and compute staging may
 be different, and a new login may not retain node-local files.
 For a compute failure, prefer the original absolute stage path from the log.
 If discovering it with Spack, first return to the original compute allocation,
-enter `./cse-build compute shell`, and re-enter Step 1's variables plus
+enter `./cse-build compute`, and re-enter Step 1's variables plus
 `FAILED_HASH` and the shared `OVERLAY_RECORD` path before running this command.
 Do not treat a login-context stage location as the failed compute stage.
 
@@ -558,7 +559,7 @@ not expand the full release validation procedures.
 ## 6. Retry only this package, directly with Spack
 
 Enter the site's approved compute allocation, return to the same shared
-workspace, and run `./cse-build compute shell`. Re-enter the selection variables
+workspace, and run `./cse-build compute`. Re-enter the selection variables
 from Step 1 and set `OVERLAY_RECORD` to the saved record path. Use the new hash
 from the updated lock, not the old failed hash:
 
