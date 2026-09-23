@@ -67,10 +67,17 @@ module load <package>/<version>
 For a private check, use `module use {{ values.paths.modules_root }}/entrances`
 once in a clean consumer shell. Before loading an entrance, only the two CSE
 compiler entrances should be visible from this release. The entrance makes its
-Serial/MPI selectors visible automatically; selecting a lane exposes its
+individual Core/Common package modules and Serial/MPI selectors visible
+automatically. Core and Common are package groups, not lane selector modules;
+users load their packages by name without a `module load Core` or
+`module load Common` step. Selecting a lane exposes its
 packages. Do not add the parent `{{ values.paths.modules_root }}` to
 `MODULEPATH`: module tools recursively discover the backing package and lane
 files there, bypassing the intended discovery sequence.
+
+These are Tcl modulefiles for Tcl Environment Modules (TModules), also readable
+by Lmod. Use the site's normal module implementation for consumer acceptance;
+Lmod is not required by this workspace.
 
 The `init-` prefix used by the current trial selections is trial-only. The full
 Stack Composer renderer's canonical convention is `cse/<Compiler>`, followed

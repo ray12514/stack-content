@@ -473,7 +473,7 @@ module avail
 module show cse/init-GCC
 module load cse/init-GCC
 module avail
-# Core/Common modules and Serial/MPI selectors are now visible automatically.
+# Individual Core/Common package modules and Serial/MPI selectors are visible.
 module list
 printf 'surface=%s\nC=%s\nC++=%s\nFortran=%s\n' \
   "${CSE_COMPILER:-missing}" "${CSE_CC:-missing}" \
@@ -490,8 +490,9 @@ entrance, correct the presentation and generate another preview. Do not bypass
 the failure by adding the lane directory manually. Older entrances can omit
 the diagnostic `CSE_*` exports; inspect their module bodies and verify the exact
 recorded compiler commands instead of deriving paths from absent variables.
-Check that Foundation is exposed through its view, Core and Common modules
-are visible, and selecting Serial exposes the intended
+Check that Foundation is exposed through its view, individual packages from
+Core and Common are available without loading a Core/Common selector, and
+selecting Serial exposes the intended
 Serial packages. Load a recorded package/version, inspect its dependency
 autoloads and conflicts, and run its representative installed consumer. Save
 the exact module list, commands and output under the maintenance evidence path.

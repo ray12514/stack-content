@@ -7,9 +7,11 @@ or a Composer upgrade. This procedure generates a **private preview**, leaving
 the workspace inputs, existing views, and published module tree unchanged.
 
 Start with the retained workspace and its recorded Spack. The helper currently
-supports the CSE Tcl module policy on Spack **1.2.2**, with Python **3.6+**. Tcl
-modules are usable with Environment Modules or Lmod; this helper does not
-introduce a new Lmod hierarchy or decide the eventual production layout.
+supports the CSE Tcl module policy on Spack **1.2.2**, with Python **3.6+**.
+The generated files are **Tcl modulefiles** (`#%Module1.0`). Tcl Environment
+Modules (TModules) is the primary consumer implementation for these systems;
+Lmod can also read those files. Test with the implementation actually used at
+the site. The helper does not require Lmod or generate Lua modulefiles.
 
 ## Decide whether the existing controls suffice
 
@@ -116,7 +118,15 @@ Exit the prepared Spack shell. In a fresh login or allocation shell, use the
 site's clean-module procedure and reassign the absolute preview path. Do not
 source the build environment for this test. There is **one initial `module use`**.
 The CSE entrance exposes its Core/Common modules and available lanes; selecting
-a lane exposes that lane's packages. Example for the GCC surface:
+a lane exposes that lane's packages. **Core and Common are package groups, not
+user-selectable lane modules.** After loading the compiler entrance,
+`module avail` shows their individual package names (for example
+`cmake/<version>` and `lapack/<version>`) alongside the `Serial` and `MPI`
+selectors. Those packages are available to load, not all loaded automatically.
+There is no `module load Core` or `module load Common` step. Their separate
+build environments are an implementation detail of building the stack.
+
+Example for the GCC surface:
 
 ```bash
 PREVIEW=/absolute/path/to/module-review/lane-01
@@ -127,7 +137,7 @@ module avail
 module show cse/init-GCC
 module load cse/init-GCC
 module avail
-# Serial and MPI are now visible automatically, together with Core/Common.
+# Individual Core/Common package modules and Serial/MPI selectors are visible.
 module show Serial
 module load Serial
 module avail
@@ -139,8 +149,8 @@ The copied entrance points to this preview's compiler/Core/Common/lanes
 directories. Do not add a lane directory manually: if loading the entrance does
 not expose its lanes, that entrance has failed this test. Older entrances can
 omit `CSE_COMPILER`; automatic lane exposure is still required. Keep the private
-`modulefiles/` parent out of the initial `MODULEPATH`: Lmod scans it recursively
-and would show the backing compiler/lane/package tree before entrance selection.
+`modulefiles/` parent out of the initial `MODULEPATH`: recursive discovery can
+show the backing compiler/lane/package tree before entrance selection.
 Confirm the filenames printed by `module show` belong to this preview. Inspect and load
 the intended package/version, check its prefix and dependency modules, and
 run a representative consumer. Check unloading and Serial/MPI mutual exclusion.
