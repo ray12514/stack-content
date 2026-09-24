@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import argparse
 import copy
+import fcntl
 import hashlib
 import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -729,6 +731,20 @@ def admit_overlay_inventory(
         return paths
 
 
+def _startup_bindings(launcher: Path) -> dict[str, str]:
+    # Compare rendered shell assignments as data, without sourcing either file.
+    names = {"CSE_INSTALL_TREE_ROOT", "CSE_SHARED_SOURCE_CACHE_ROOT", "CSE_SHARED_MISC_CACHE_ROOT",
+             "CSE_VIEWS_ROOT", "CSE_MODULES_ROOT", "CSE_BUILDCACHE_URL"}
+    bindings = {}
+    for line in launcher.read_text(encoding="utf-8").splitlines():
+        match = re.fullmatch(r"(?:readonly|export) ([A-Z_]+)=(.+)", line)
+        if match and (match[1].startswith("CSE_RECORDED_") or match[1] in names):
+            bindings[match[1]] = match[2]
+    if not names.issubset(bindings) or "CSE_RECORDED_SPACK_COMMIT" not in bindings:
+        raise RefreshError("cannot verify recorded startup roots/identity in " + str(launcher))
+    return bindings
+
+
 def _refresh_control_files(
     *,
     blueprint_path: Path,
@@ -742,7 +758,7 @@ def _refresh_control_files(
     Quiesce workspace users first: the set is rolled back on ordinary failures,
     but concurrent readers and power loss cannot see an atomic directory switch.
     """
-    if scope not in ("all", "controls", "presentation"):
+    if scope not in ("all", "controls", "presentation", "startup"):
         raise RefreshError(f"unknown refresh scope: {scope}")
     blueprint = _load_mapping(blueprint_path, "blueprint")
     files, trees = _control_files(blueprint), _control_trees(blueprint)
@@ -750,6 +766,13 @@ def _refresh_control_files(
     selected = (files if scope != "presentation" else []) + (
         trees if scope != "controls" else []
     )
+    if scope == "startup":
+        selected = [Path(name) for name in (
+            "cse-build", "env/share-generated-permissions.sh", "env/workspace-shell.rc",
+            "scripts/workspace-permissions.py", "BUILDER-HANDOFF.md",
+        )]
+        if any(path not in files for path in selected):
+            raise RefreshError("blueprint does not declare the complete startup control set")
     existing = _workspace_identity(
         _load_mapping(
             workspace / "workspace-manifest.yaml", "existing workspace manifest"
@@ -778,6 +801,8 @@ def _refresh_control_files(
             raise RefreshError(
                 f"existing control directory is missing: {relative.parent}"
             )
+    if scope == "startup" and _startup_bindings(workspace / "cse-build") != _startup_bindings(staged_workspace / "cse-build"):
+        raise RefreshError("startup refresh would change recorded roots or runtime identity; use this workspace's recorded values")
     dependencies = _mapping(
         blueprint.get("control_file_dependencies", {}), "control_file_dependencies"
     )
@@ -925,16 +950,47 @@ def _restore_control_files(
 
 
 @contextmanager
+def _finite_operation_lock(workspace: Path, dry_run: bool):
+    # Share the generated launcher's lock. Refresh's directory lock alone cannot
+    # stop a build from opening a helper halfway through control replacement.
+    path = _safe_path(workspace, Path(".cse-maintenance.lock"))
+    flags = os.O_RDWR | os.O_NOFOLLOW
+    if not dry_run:
+        flags |= os.O_CREAT
+    try:
+        fd = os.open(path, flags, 0o660)
+    except FileNotFoundError:
+        if not dry_run:
+            raise
+        yield  # Read-only previews do not create a missing lock file.
+        return
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise RefreshError("workspace maintenance lock is not a regular file")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise RefreshError("another finite workspace operation is active; refresh between commands") from error
+        if not dry_run and info.st_uid == os.geteuid() and stat.S_IMODE(info.st_mode) != 0o660:
+            os.fchmod(fd, 0o660)
+        yield
+    finally:
+        os.close(fd)
+
+
+@contextmanager
 def _refresh_access(workspace: Path, dry_run: bool, recover_record: Path | None = None):
     if dry_run:
         if (workspace / ".cse-refresh.lock").exists():
             raise RefreshError(
                 f"workspace refresh lock exists: {workspace / '.cse-refresh.lock'}"
             )
-        _check_pending(workspace, exclude=recover_record)
-        yield
+        with _finite_operation_lock(workspace, True):
+            _check_pending(workspace, exclude=recover_record)
+            yield
     else:
-        with _refresh_lock(workspace):
+        with _finite_operation_lock(workspace, False), _refresh_lock(workspace):
             _check_pending(workspace, exclude=recover_record)
             yield
 
@@ -1010,7 +1066,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--scope",
-        choices=("presentation", "controls", "all", "module-policy"),
+        choices=("presentation", "controls", "all", "module-policy", "startup"),
         default="all",
     )
     parser.add_argument(

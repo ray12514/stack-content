@@ -1,0 +1,152 @@
+{
+  "files_per_package": 100,
+  "packages": 500,
+  "platform": "macOS-26.5.2-x86_64-i386-64bit-Mach-O",
+  "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "records": [
+    {
+      "changed": 1,
+      "elapsed_seconds": 0.002,
+      "errors": [],
+      "failures": 0,
+      "jobs": 1,
+      "mounts": 0,
+      "phase": "root-check",
+      "symlinks": 0,
+      "visited": 1,
+      "wall_seconds": 0.199
+    },
+    {
+      "changed": 52500,
+      "elapsed_seconds": 3.949,
+      "errors": [],
+      "failures": 0,
+      "jobs": 1,
+      "mounts": 0,
+      "phase": "repair",
+      "symlinks": 1,
+      "visited": 52501,
+      "wall_seconds": 4.141
+    },
+    {
+      "changed": 0,
+      "elapsed_seconds": 0.897,
+      "errors": [],
+      "failures": 0,
+      "jobs": 1,
+      "mounts": 0,
+      "phase": "already-correct",
+      "symlinks": 1,
+      "visited": 52501,
+      "wall_seconds": 1.101
+    },
+    {
+      "changed": 1,
+      "elapsed_seconds": 0.003,
+      "errors": [],
+      "failures": 0,
+      "jobs": 4,
+      "mounts": 0,
+      "phase": "root-check",
+      "symlinks": 0,
+      "visited": 1,
+      "wall_seconds": 0.307
+    },
+    {
+      "changed": 52500,
+      "elapsed_seconds": 2.632,
+      "errors": [],
+      "failures": 0,
+      "jobs": 4,
+      "mounts": 0,
+      "phase": "repair",
+      "symlinks": 1,
+      "visited": 52501,
+      "wall_seconds": 2.842
+    },
+    {
+      "changed": 0,
+      "elapsed_seconds": 0.369,
+      "errors": [],
+      "failures": 0,
+      "jobs": 4,
+      "mounts": 0,
+      "phase": "already-correct",
+      "symlinks": 1,
+      "visited": 52501,
+      "wall_seconds": 0.603
+    },
+    {
+      "changed": 1,
+      "elapsed_seconds": 0.002,
+      "errors": [],
+      "failures": 0,
+      "jobs": 16,
+      "mounts": 0,
+      "phase": "root-check",
+      "symlinks": 0,
+      "visited": 1,
+      "wall_seconds": 0.205
+    },
+    {
+      "changed": 52500,
+      "elapsed_seconds": 1.572,
+      "errors": [],
+      "failures": 0,
+      "jobs": 16,
+      "mounts": 0,
+      "phase": "repair",
+      "symlinks": 1,
+      "visited": 52501,
+      "wall_seconds": 1.784
+    },
+    {
+      "changed": 0,
+      "elapsed_seconds": 0.421,
+      "errors": [],
+      "failures": 0,
+      "jobs": 16,
+      "mounts": 0,
+      "phase": "already-correct",
+      "symlinks": 1,
+      "visited": 52501,
+      "wall_seconds": 0.646
+    },
+    {
+      "changed": 1,
+      "elapsed_seconds": 0.002,
+      "errors": [],
+      "failures": 0,
+      "jobs": 32,
+      "mounts": 0,
+      "phase": "root-check",
+      "symlinks": 0,
+      "visited": 1,
+      "wall_seconds": 0.197
+    },
+    {
+      "changed": 52500,
+      "elapsed_seconds": 1.761,
+      "errors": [],
+      "failures": 0,
+      "jobs": 32,
+      "mounts": 0,
+      "phase": "repair",
+      "symlinks": 1,
+      "visited": 52501,
+      "wall_seconds": 1.979
+    },
+    {
+      "changed": 0,
+      "elapsed_seconds": 0.469,
+      "errors": [],
+      "failures": 0,
+      "jobs": 32,
+      "mounts": 0,
+      "phase": "already-correct",
+      "symlinks": 1,
+      "visited": 52501,
+      "wall_seconds": 0.746
+    }
+  ]
+}

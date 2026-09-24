@@ -1,5 +1,10 @@
 # Updating an existing trial without rebuilding its packages
 
+
+For slow interactive startup at **any build stage**, use the narrow
+[`--scope startup` procedure](STARTUP-PERMISSIONS.md). It preserves all Spack
+configuration, padding, environments, locks, views, modules and packages.
+
 Updating the source checkout or preparation tool does not update a generated
 workspace. Use this procedure for a deliberate, scoped adoption on a real
 cluster. Local lab workspaces are disposable test fixtures. Preserve the real

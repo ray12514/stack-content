@@ -238,11 +238,14 @@ existing lock merely because the builder or Spack root changed. See the
 generated `BUILDER-HANDOFF.md` for the complete handoff procedure.
 
 For a restricted build workspace, the wrapper also makes owner-created shared
-outputs equally accessible to the recorded CSE group. Its entry/exit hook
-normalizes the workspace, source and misc caches, views, modules, and a
+outputs equally accessible to the recorded CSE group. Finite-command exit and
+the explicit `./cse-build login permissions` handoff command normalize the workspace, source and misc caches, views, modules, and a
 file-backed build cache to the `2770` directory, `0660` ordinary-file, and
 `0770` executable-file contract. Spack's package permissions own installed
 prefixes; per-builder user caches, bootstrap state, and keyrings stay private.
+Interactive entry/exit checks roots without walking generated trees. After
+manual work, stop writers and run `permissions` before changing builders.
+`--permission-jobs 1..32` controls maintenance concurrency (default 4).
 
 Before activating Spack, the wrapper unloads any selected external compiler or
 MPI module that is already active in its own process. Spack 1.2.2 otherwise

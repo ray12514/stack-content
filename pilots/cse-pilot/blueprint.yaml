@@ -12,6 +12,7 @@ control_files:
   - configs/common/config.yaml
   - env/prepare-module-state.sh
   - env/share-generated-permissions.sh
+  - scripts/workspace-permissions.py
   - env/select-build-context.sh
   - env/setup-build-env.sh
   - env/workspace-shell.rc
@@ -24,12 +25,20 @@ control_files:
   - PACKAGE-OVERLAY-QUICKSTART.md
 control_file_dependencies:
   cse-build:
+    - env/share-generated-permissions.sh
+    - env/workspace-shell.rc
+    - scripts/workspace-permissions.py
     - scripts/verify-overlay-inputs.py
     - package-repos/overlay-inventory.json
     - scripts/overlay-recovery.py
     - scripts/workspace-overlay.py
     - scripts/workspace-build.py
     - scripts/module-preview.py
+  env/share-generated-permissions.sh:
+    - scripts/workspace-permissions.py
+  env/workspace-shell.rc:
+    - env/share-generated-permissions.sh
+    - scripts/workspace-permissions.py
   scripts/workspace-overlay.py:
     - scripts/workspace-build.py
     - scripts/overlay-recovery.py

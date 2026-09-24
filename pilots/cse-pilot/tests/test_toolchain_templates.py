@@ -546,7 +546,7 @@ class ToolchainTemplateTests(unittest.TestCase):
             package.write_text("#%Module1.0\n# retained package\n")
             retained = {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in (legacy, package)}
             launcher = render_text("cse-build.j2", values=test_values)
-            publisher = launcher.split("publish_module_file() {", 1)[1].split("\nverify_workspace_inputs\n", 1)[0]
+            publisher = launcher.split("publish_module_file() {", 1)[1].split("\n# Full validation belongs to finite work.", 1)[0]
             result = subprocess.run(
                 ["bash", "-c", "set -e\nfail() { printf '%s\\n' \"$*\" >&2; exit 1; }\n"
                  "note() { printf '%s\\n' \"$*\"; }\nverify_locks() { :; }\n"
@@ -795,6 +795,7 @@ class ToolchainTemplateTests(unittest.TestCase):
             fake_spack.write_text(
                 "#!/usr/bin/env bash\n"
                 "set -euo pipefail\n"
+                "if [ -n \"${CSE_TEST_TRACE:-}\" ]; then printf '%s\\n' \"$*\" >>\"$CSE_TEST_TRACE\"; fi\n"
                 "if [ -n \"${SPACK_MISC_CACHE_PATH:-}\" ]; then\n"
                 "  mkdir -p \"$SPACK_MISC_CACHE_PATH/concretization\"\n"
                 "  chmod 0700 \"$SPACK_MISC_CACHE_PATH/concretization\"\n"
@@ -923,7 +924,7 @@ class ToolchainTemplateTests(unittest.TestCase):
                 "# fake verifier\n",
                 encoding="utf-8",
             )
-            for helper in ('workspace-build.py', 'workspace-overlay.py', 'overlay-recovery.py'):
+            for helper in ('workspace-build.py', 'workspace-overlay.py', 'overlay-recovery.py', 'workspace-permissions.py'):
                 shutil.copyfile(TEMPLATE_ROOT / 'scripts' / helper, workspace / 'scripts' / helper)
             copy_trial_package_overlay(workspace, "cce")
             cache_key = subprocess.check_output(
@@ -982,6 +983,21 @@ class ToolchainTemplateTests(unittest.TestCase):
             for path in sorted(spack_root.rglob("*"), reverse=True):
                 path.chmod(0o550 if path.is_dir() or os.access(path, os.X_OK) else 0o440)
             spack_root.chmod(0o550)
+
+            # The entire launcher plus prepared RC must enter/exit without
+            # traversing generated descendants or spawning all-scope checks.
+            (env_dir / "workspace-shell.rc").write_text(
+                render_text("env/workspace-shell.rc.j2", values=test_values))
+            trace = root / "spack-calls"
+            shell_result = subprocess.run(
+                ["bash", str(workspace / "cse-build"), "login", "shell", "--spack-mode", "shared"],
+                input="exit\n", text=True, capture_output=True,
+                env={"HOME": str(builder_home), "USER": builder_user, "WORKDIR": str(workdir),
+                     "PATH": os.environ["PATH"], "CSE_TEST_TRACE": str(trace), "HISTFILE": "/dev/null"},
+            )
+            self.assertEqual(shell_result.returncode, 0, shell_result.stderr)
+            self.assertEqual(trace.read_text().splitlines(), ["--version"])
+            self.assertEqual(stat.S_IMODE((source_cache / "generated.json").stat().st_mode), 0o600)
 
             result = subprocess.run(
                 [
@@ -1781,8 +1797,8 @@ class ToolchainTemplateTests(unittest.TestCase):
 
         self.assertIn("verify_workspace_inputs()", template)
         self.assertLess(
-            template.index("\nverify_workspace_inputs\n"),
-            template.index("\nverify_scopes\n"),
+            template.index("\n    verify_workspace_inputs\n"),
+            template.index("\n    verify_scopes\n"),
         )
 
     def test_cse_build_prepares_modules_before_activating_spack(self) -> None:

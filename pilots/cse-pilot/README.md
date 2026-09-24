@@ -154,8 +154,8 @@ The two contexts use the same environments, lockfiles, install tree, shared
 source cache, builder-partitioned misc/concretization cache and bootstrap
 store, views, modules, and portable CPU target. Only the build stage and
 per-context mutable command cache differ. Each misc-cache partition lives
-under the shared restricted cache root. The generated entry/exit hook restores
-and verifies the owner/group permission contract across the workspace,
+under the shared restricted cache root. Finite commands repair output on exit;
+`./cse-build login permissions` repairs and verifies an explicit handoff. These maintain the owner/group permission contract across the workspace,
 source/misc caches, views, modules, and file-backed build cache because tools
 can create artifacts with user-only modes. Separate builder partitions prevent
 two users from concurrently replacing one mutable index. Installed prefixes

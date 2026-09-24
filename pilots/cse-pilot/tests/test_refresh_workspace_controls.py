@@ -543,3 +543,79 @@ def test_restore_reports_completed_controls_when_final_receipt_write_fails(
         REFRESH.refresh_control_files(
             blueprint_path=blueprint, staged_workspace=staged, workspace=workspace
         )
+
+
+@pytest.mark.parametrize("stage", ["empty", "partial", "complete"])
+def test_startup_refresh_preserves_configuration_locks_and_installed_prefixes(tmp_path, stage):
+    pilot = SCRIPT_PATH.parents[1]
+    blueprint = pilot / "blueprint.yaml"
+    data = yaml.safe_load(blueprint.read_text())
+    workspace, staged = tmp_path / "workspace", tmp_path / "staged"
+    selected = ["cse-build", "env/share-generated-permissions.sh", "env/workspace-shell.rc",
+                "scripts/workspace-permissions.py", "BUILDER-HANDOFF.md"]
+    for root in (workspace, staged):
+        write_yaml(root / "workspace-manifest.yaml", manifest())
+        # Dependency contents need not be rendered to exercise refresh selection.
+        for name in set(data["control_files"] + sum(data["control_file_dependencies"].values(), [])):
+            target = root / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("new" if root == staged else "old")
+    assignments = "".join("export CSE_{}=\"/recorded/{}\"\n".format(name, name) for name in (
+        "INSTALL_TREE_ROOT", "SHARED_SOURCE_CACHE_ROOT", "SHARED_MISC_CACHE_ROOT",
+        "VIEWS_ROOT", "MODULES_ROOT", "BUILDCACHE_URL")) + 'readonly CSE_RECORDED_SPACK_COMMIT="pinned"\n'
+    for root in (workspace, staged):
+        (root / "cse-build").write_text(assignments + ("# new" if root == staged else "# old"))
+    config = workspace / "configs/common/config.yaml"
+    config.write_text("config:\n  install_tree:\n    root: /recorded/store\n    padded_length: 128\n")
+    before = {}
+    for i in range(8):
+        path = workspace / ("environments/lane{}/spack.yaml".format(i))
+        path.parent.mkdir(parents=True)
+        path.write_text("recorded input {}".format(i))
+        if stage == "complete" or (stage == "partial" and i < 3):
+            path.with_suffix('.lock').write_text("recorded lock {}".format(i))
+            prefix = workspace / "store" / str(i) / "lib"
+            prefix.parent.mkdir(parents=True)
+            prefix.write_text("installed {}".format(i))
+    for path in workspace.rglob('*'):
+        if path.is_file() and str(path.relative_to(workspace)) not in selected:
+            before[path] = (path.read_bytes(), path.stat().st_mode, path.stat().st_mtime_ns)
+    dry = REFRESH.refresh_control_files(blueprint_path=blueprint, staged_workspace=staged,
+                                       workspace=workspace, scope="startup", dry_run=True)
+    assert set(map(str, dry)) == set(selected)
+    REFRESH.refresh_control_files(blueprint_path=blueprint, staged_workspace=staged,
+                                  workspace=workspace, scope="startup")
+    for path, expected in before.items():
+        assert (path.read_bytes(), path.stat().st_mode, path.stat().st_mtime_ns) == expected
+    for name in selected:
+        assert (workspace / name).read_text() == (staged / name).read_text()
+    # A stale/wrong values file must not retarget the new launcher even though
+    # startup scope leaves the old config.yaml byte-for-byte intact.
+    (staged / "cse-build").write_text((staged / "cse-build").read_text().replace(
+        "/recorded/INSTALL_TREE_ROOT", "/different/store"))
+    with pytest.raises(REFRESH.RefreshError, match="recorded roots"):
+        REFRESH.refresh_control_files(blueprint_path=blueprint, staged_workspace=staged,
+                                      workspace=workspace, scope="startup", dry_run=True)
+
+
+def test_refresh_rejects_active_finite_operation(tmp_path):
+    import fcntl
+    lock = tmp_path / ".cse-maintenance.lock"
+    with lock.open("w") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        for dry_run in (True, False):
+            with pytest.raises(REFRESH.RefreshError, match="finite workspace operation"):
+                with REFRESH._refresh_access(tmp_path, dry_run):
+                    pytest.fail("refresh entered while a build held the lock")
+    assert not (tmp_path / ".cse-refresh.lock").exists()
+
+
+def test_refresh_lock_blocks_new_finite_operation(tmp_path):
+    import subprocess
+    import sys
+    helper = SCRIPT_PATH.parents[1] / "templates/scripts/workspace-build.py"
+    with REFRESH._refresh_access(tmp_path, False):
+        result = subprocess.run([sys.executable, str(helper), "guard", "--workspace", str(tmp_path),
+                                 "--", sys.executable, "-c", "pass"], text=True, capture_output=True)
+        assert result.returncode != 0
+        assert "finite workspace operation" in result.stderr

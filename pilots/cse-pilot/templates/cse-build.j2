@@ -3,6 +3,9 @@
 
 set -euo pipefail
 
+# This also applies to the finite-operation guard before Spack is selected.
+export PYTHONDONTWRITEBYTECODE=1
+
 CSE_WORKSPACE_ROOT="$(
   cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P
 )"
@@ -21,6 +24,7 @@ readonly CSE_RECORDED_INITIAL_SPACK_ROOT={{ values.spack.initial_root | yaml_sca
 
 ORIGINAL_ARGS=("$@")
 ACTION="tmux"
+export CSE_PERMISSION_JOBS="${CSE_PERMISSION_JOBS:-4}"
 REQUESTED_SPACK_MODE="auto"
 REQUESTED_SURFACE="all"
 REQUESTED_ENVIRONMENT=""
@@ -35,6 +39,7 @@ usage() {
 Usage: ./cse-build [login|compute] [ACTION]
                    [--spack-mode auto|shared|local]
                    [--surface all|shared|platform]
+                   [--permission-jobs 1..32]
                    [--environment COMPILER/LANE] [--reconcretize]
 
 Node context:
@@ -49,6 +54,8 @@ context, so commands inside it do not need to repeat login or compute.
 Actions:
   tmux        Create or reattach the release build session (default).
   shell       Enter a prepared interactive build shell without tmux.
+  permissions Repair owned generated files and verify a quiescent handoff.
+              Workers use disjoint subtrees (default 4; --permission-jobs 1..32).
   status      Show lockfile and installation status.
   concretize  Create missing locks. With --environment and --reconcretize,
               replace only that environment's lock, retaining a recovery record.
@@ -108,7 +115,7 @@ while [ "$#" -gt 0 ]; do
       CSE_NODE_CONTEXT="$1"
       CONTEXT_SET=1
       ;;
-    tmux|shell|status|concretize|resume|verify|fetch|install|modules|publish-modules)
+    tmux|shell|permissions|status|concretize|resume|verify|fetch|install|modules|publish-modules)
       [ "$ACTION_SET" -eq 0 ] || fail "only one action may be selected"
       ACTION="$1"
       ACTION_SET=1
@@ -120,6 +127,14 @@ while [ "$#" -gt 0 ]; do
       shift
       OPERATOR_ARGS=("$@")
       break
+      ;;
+    --permission-jobs)
+      shift
+      [ "$#" -gt 0 ] || fail "--permission-jobs requires a count from 1 to 32"
+      CSE_PERMISSION_JOBS="$1"
+      ;;
+    --permission-jobs=*)
+      CSE_PERMISSION_JOBS="${1#*=}"
       ;;
     --spack-mode)
       shift
@@ -154,6 +169,11 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+
+case "$CSE_PERMISSION_JOBS" in
+  [1-9]|[12][0-9]|3[0-2]) ;;
+  *) fail "--permission-jobs / CSE_PERMISSION_JOBS must be between 1 and 32" ;;
+esac
 
 case "$CSE_NODE_CONTEXT" in
   login|compute) ;;
@@ -196,12 +216,16 @@ fi
 
 if [ "$CSE_RECORDED_ROLE" != build ]; then
   case "$ACTION" in
-    concretize|resume|fetch|install|overlay)
+    permissions|concretize|resume|fetch|install|overlay)
       fail "$ACTION is disabled for a publication workspace; use the cache-only \
 publication procedure"
       ;;
   esac
 fi
+
+{% if values.workspace.role != 'build' or values.permissions.write != 'group' %}
+[ "$ACTION" != permissions ] || fail "permissions requires a restricted group build workspace"
+{% endif %}
 
 case "$ACTION" in
   shell|tmux) ;;
@@ -293,7 +317,6 @@ fi
 
 export SPACK_ROOT
 export SPACK_DISABLE_LOCAL_CONFIG=true
-export PYTHONDONTWRITEBYTECODE=1
 
 prepare_shared_parent() {
   local parent tools_root
@@ -349,6 +372,14 @@ verify_spack() {
     "${CSE_RECORDED_SPACK_TAG}^{commit}")" = \
     "$CSE_RECORDED_SPACK_COMMIT" ] || fail \
     "Spack tag does not resolve to the workspace commit"
+  case "$ACTION" in
+    shell|tmux)
+      if [ "$SELECTED_SPACK_MODE" = shared ] && [ -w "$CSE_SPACK_CANONICAL_ROOT" ]; then
+        fail "shared Spack checkout root is writable: $SPACK_ROOT"
+      fi
+      return 0
+      ;;
+  esac
   [ -z "$(GIT_OPTIONAL_LOCKS=0 git -C "$SPACK_ROOT" \
     status --porcelain --untracked-files=all)" ] || fail "Spack checkout is dirty"
   [ -z "$(git -C "$SPACK_ROOT" \
@@ -404,17 +435,26 @@ grep -Fxq '  misc_cache: ${SPACK_MISC_CACHE_PATH}' \
 {% if values.workspace.role == 'build' and values.permissions.write == 'group' %}
 source "$CSE_WORKSPACE_ROOT/env/share-generated-permissions.sh"
 cse_normalize_shared_content_on_exit() {
-  local status=$?
+  local status=$? permission_mode=repair
   trap - EXIT
-  if ! cse_normalize_shared_generated_content "$CSE_RECORDED_GROUP"; then
-    printf 'cse-build: could not normalize shared generated content\n' >&2
+  case "$ACTION" in status|concretize|verify) permission_mode=handoff ;; esac
+  if ! cse_shared_permissions "$permission_mode" "$CSE_RECORDED_GROUP"; then
+    printf 'cse-build: could not normalize shared generated content; stop writers and run permissions as the owning builder\n' >&2
     [ "$status" -ne 0 ] || status=2
   fi
   exit "$status"
 }
-cse_normalize_shared_generated_content "$CSE_RECORDED_GROUP" || fail \
-  "could not normalize shared generated content"
-trap cse_normalize_shared_content_on_exit EXIT
+cse_prepare_shared_generated_roots "$CSE_RECORDED_GROUP" || fail \
+  "could not prepare shared generated roots; run permissions as the owning builder"
+case "$ACTION" in
+  permissions)
+    cse_handoff_shared_generated_content "$CSE_RECORDED_GROUP" || fail \
+      "shared generated content is not ready for builder handoff"
+    exit 0
+    ;;
+  shell|tmux) ;;  # Explicit handoff follows manual work in these shells.
+  *) trap cse_normalize_shared_content_on_exit EXIT ;;
+esac
 {% endif %}
 
 source "$CSE_WORKSPACE_ROOT/env/prepare-module-state.sh"
@@ -743,18 +783,15 @@ publish_presentation_modules() {
   note "register only this entrance root; any older site MODULEPATH registration is unchanged"
 }
 
-verify_workspace_inputs
-verify_scopes
-{% if values.workspace.role == 'build' and values.permissions.write == 'group' %}
+# Full validation belongs to finite work. Interactive entry remains bounded by
+# declared configuration and roots rather than the generated file count.
 case "$ACTION" in
-  status|concretize|verify)
-    cse_normalize_shared_generated_content "$CSE_RECORDED_GROUP" || fail \
-      "could not normalize shared generated content after preflight"
-    cse_verify_shared_generated_content "$CSE_RECORDED_GROUP" || fail \
-      "shared generated content is not ready for builder handoff"
+  shell|tmux) ;;
+  *)
+    verify_workspace_inputs
+    verify_scopes
     ;;
 esac
-{% endif %}
 
 case "$ACTION" in
   tmux)

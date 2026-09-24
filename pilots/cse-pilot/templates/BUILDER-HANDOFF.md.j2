@@ -159,14 +159,19 @@ disjoint. The source cache and package store remain shared. Spack's mutable
 misc/concretization cache is partitioned by builder, resolved overlay repository
 paths, and reviewed overlay inventory bytes below the shared restricted cache
 root. A changed candidate gets a separate partition; old cache partitions are
-retained. On entry and exit, `cse-build` enforces the restricted handoff
-contract on owner-created workspace files, source and misc cache content,
-views, modules, and file-backed build-cache content: directories are `2770`,
-ordinary files are `0660`, executable files are `0770`, the recorded CSE group
-is assigned, and no access is granted to others. `status`, `concretize`, and
-`verify` additionally verify all completed shared entries; other actions avoid
-full-tree checks that would misclassify a different builder's still-running
-parallel write as a finished handoff. The package install tree uses
+retained. Interactive login checks the declared roots without walking generated
+trees. Finite `cse-build` commands repair owner-created shared output on exit:
+directories are `2770` (or `0770` where setgid is unavailable), ordinary files
+`0660`, executable files `0770`, with the recorded group and no other access.
+`status`, `concretize`, and `verify` also verify foreign-owned entries at exit.
+After manual commands inside a prepared shell, stop writers and run
+`./cse-build login permissions` to repair and verify the handoff. Shell entry
+and exit do not do this recursive work. Repair uses one traversal, skips
+unchanged entries, and splits disjoint subtrees across four workers by default.
+Use `--permission-jobs 16` or `--permission-jobs 32` only after measuring on the
+site; extra processes can increase Lustre metadata contention. `CSE_PERMISSION_JOBS`
+sets the inherited default; this is independent of `BUILD_JOBS`. The package
+install tree uses
 the matching native Spack `packages:all:permissions` policy; the wrapper checks
 its root but does not recursively rewrite installed prefixes. The bootstrap
 store, user cache, and GPG home remain private to their builder. Run login concretization
@@ -177,11 +182,21 @@ together. `concretize` and `verify` remain
 whole-workspace gates and do not accept `--surface`.
 
 Every builder must launch through `cse-build` or a prepared shell created by
-it. Before handing work to another builder, exit the originating builder's
-prepared shell and run `./cse-build login status`; the exit/entry hooks then
-normalize and verify the shared generated content. A process killed with
-`SIGKILL` cannot run an exit hook, so the originating owner or a filesystem
-administrator must repair any reported path before another builder resumes.
+it. Before handing work to another builder, stop writers, run
+`./cse-build login permissions` as the originating owner, and run
+`./cse-build login status` from both accounts. This also repairs owner-created
+`0600`/`0700` files left by interrupted work; bad foreign-owned entries require
+their owner or a filesystem administrator. The finite-operation lock protects
+commands in this workspace, but does not track manual commands in existing
+shells or other workspaces writing shared caches.
+
+Startup controls may be refreshed before, during, or after package installation,
+between active commands. The source-side `refresh-workspace-controls.py
+--scope startup` updates only startup controls and this guide, preserving
+configuration (including `padded_length`), locks and installed packages. Stop
+writers and exit old prepared shells before refresh, then start a new session.
+Full Spack checkout, workspace-input and scope verification runs on finite
+Spack commands; simply opening a shell is not a completed handoff check.
 
 The first login concretization for a builder may install Clingo support and
 helper packages below the per-builder Spack bootstrap store. This is Spack

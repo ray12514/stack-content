@@ -273,8 +273,11 @@ views, modules, and file-backed build cache.
 Do not point `BROKEN_ROOT` at the restricted trial root, release root, or Spack
 install tree, and do not recursively apply `660` to a directory tree. After the
 one-time traversal repair and controls refresh, every builder must enter through
-the refreshed `cse-build`; it normalizes that builder's generated content on
-entry and exit and verifies the complete handoff surfaces with `status`.
+the refreshed `cse-build`; finite commands repair that builder's generated
+content on exit. After manual shell work, stop writers and run `./cse-build
+login permissions`; `status` verifies the complete handoff surfaces. Interactive
+entry/exit does not recursively repair files. See the [startup update
+procedure](../../pilots/cse-pilot/STARTUP-PERMISSIONS.md).
 
 Use this reviewed Step 7 selection:
 
