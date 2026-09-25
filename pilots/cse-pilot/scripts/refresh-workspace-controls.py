@@ -24,6 +24,29 @@ from typing import Any
 import yaml
 
 
+STARTUP_CONTROL_FILES = tuple(Path(name) for name in (
+    "cse-build", "env/share-generated-permissions.sh", "env/workspace-shell.rc",
+    "scripts/workspace-permissions.py", "BUILDER-HANDOFF.md",
+))
+# These are the inputs consumed by the startup templates, not the full build
+# blueprint. In particular, refreshing controls must not resolve a repository
+# tag or fabricate a package commit just to render an unused repos.yaml.
+STARTUP_REQUIRED_VALUES = (
+    "workspace.role", "system.name", "release",
+    "permissions.group", "permissions.read", "permissions.write",
+    "spack.source", "spack.version", "spack.tag", "spack.commit",
+    "spack.default_mode", "spack.shared_root", "spack.initial_root",
+    "paths.install_tree", "paths.source_cache", "paths.misc_cache",
+    "paths.views_root", "paths.modules_root", "buildcache.url",
+    "shared.compiler.name", "shared.compiler.version",
+    "shared.compiler.public_name", "shared.compiler.source",
+    "shared.mpi.name", "shared.mpi.version", "shared.mpi.source",
+    "platform.compiler.name", "platform.compiler.version",
+    "platform.compiler.public_name", "platform.compiler.source",
+    "platform.mpi.name", "platform.mpi.version", "platform.mpi.source",
+)
+
+
 class RefreshError(ValueError):
     """Raised when a control-only refresh cannot be performed safely."""
 
@@ -745,6 +768,50 @@ def _startup_bindings(launcher: Path) -> dict[str, str]:
     return bindings
 
 
+def _stage_startup_blueprint(blueprint_dir: Path, destination: Path) -> Path:
+    """Give Composer only the startup templates and their value requirements.
+
+    The derived blueprint and its manifest live in disposable staging. Neither
+    the recorded values nor the original blueprint's full-render contract is
+    changed, and no build configuration or recipe is rendered or promoted.
+    """
+    blueprint = _load_mapping(blueprint_dir / "blueprint.yaml", "blueprint")
+    files = _control_files(blueprint)
+    _validate_paths(files, _control_trees(blueprint))
+    if any(path not in files for path in STARTUP_CONTROL_FILES):
+        raise RefreshError("blueprint does not declare the complete startup control set")
+    template_root = _safe_path(
+        blueprint_dir, Path(str(blueprint.get("template_root") or "."))
+    )
+    for relative in STARTUP_CONTROL_FILES:
+        source = _safe_path(template_root, Path(str(relative) + ".j2"))
+        if not source.is_file():
+            source = _safe_path(template_root, relative)
+        if not source.is_file():
+            raise RefreshError(f"startup template is missing: {relative}")
+        target = destination / "templates" / source.relative_to(template_root)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+    blueprint.update(
+        template_root="templates",
+        snapshot_catalog=False,
+        required_values=list(STARTUP_REQUIRED_VALUES),
+        allowed_values={
+            key: value
+            for key, value in _mapping(
+                blueprint.get("allowed_values", {}), "blueprint.allowed_values"
+            ).items()
+            if key in STARTUP_REQUIRED_VALUES
+        },
+        catalog_scope_values=[],
+        data_files={},
+    )
+    (destination / "blueprint.yaml").write_text(
+        yaml.safe_dump(blueprint, sort_keys=False), encoding="utf-8"
+    )
+    return destination
+
+
 def _refresh_control_files(
     *,
     blueprint_path: Path,
@@ -767,10 +834,7 @@ def _refresh_control_files(
         trees if scope != "controls" else []
     )
     if scope == "startup":
-        selected = [Path(name) for name in (
-            "cse-build", "env/share-generated-permissions.sh", "env/workspace-shell.rc",
-            "scripts/workspace-permissions.py", "BUILDER-HANDOFF.md",
-        )]
+        selected = list(STARTUP_CONTROL_FILES)
         if any(path not in files for path in selected):
             raise RefreshError("blueprint does not declare the complete startup control set")
     existing = _workspace_identity(
@@ -1202,13 +1266,18 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         staged_workspace = staging_parent / "workspace"
+        render_blueprint = (
+            _stage_startup_blueprint(blueprint_dir, staging_parent / "blueprint")
+            if args.scope == "startup"
+            else blueprint_dir
+        )
 
         command = [
             sys.executable,
             str(composer),
             "init-workspace",
             "--blueprint",
-            str(blueprint_dir),
+            str(render_blueprint),
             "--catalog",
             str(catalog),
             "--values",

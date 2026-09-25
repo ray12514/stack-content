@@ -274,6 +274,12 @@ workspace's tag resolution. Adding it to a render-only copy does not adopt that
 pin in the active workspace. Do not rerun `create-build-values.py` over the
 recorded file or regenerate values from current discovery for this maintenance.
 
+For the startup performance fix alone, use the complete
+[startup refresh procedure](STARTUP-PERMISSIONS.md#copy-and-paste-on-each-system)
+with `--scope startup` and the original values. That scope renders only startup
+controls and does not need `package_repo.commit` or a prepared values copy. It
+preserves the active repository configuration, including an existing tag pin.
+
 ### Preview and apply compiler entrance/lane presentation
 
 Use the tool and values selections from steps 1–2:

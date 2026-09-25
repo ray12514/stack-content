@@ -43,6 +43,13 @@ run in a subshell so an error stops the update without closing your login shell.
 Use it once per workspace/system with writers stopped. The preparation tools
 and original values must already be present from this trial's setup.
 
+If a previous attempt stopped with `missing-value at values.package_repo.commit`,
+rerun this complete block. It fetches the fix before retrying. Startup refresh
+now renders only the five startup controls and does not require a package-repo
+commit. Keep your recorded values and repository pin as they are; do not insert
+the example commit or change your install tree. That failed validation occurred
+in temporary staging, before any workspace controls were replaced.
+
 ```bash
 (
   set -e
@@ -155,7 +162,11 @@ In Bash, preview first:
 
 This selects exactly `cse-build`, `env/share-generated-permissions.sh`,
 `env/workspace-shell.rc`, `scripts/workspace-permissions.py`, and
-`BUILDER-HANDOFF.md`. It checks the existing helper dependencies and refuses a
+`BUILDER-HANDOFF.md`. Only those templates and their startup input requirements
+are passed to Composer in temporary staging. The full workspace blueprint still
+requires `package_repo.commit` when rendering repository configuration; startup
+refresh neither renders that configuration nor resolves an existing tag. It
+checks the existing helper dependencies and refuses a
 change to recorded launcher roots or runtime identity. It leaves **all config
 files, install-tree padding, environment YAML, locks, catalog, package overlays,
 views, modules, caches and installed packages unchanged**. It retains a rollback
