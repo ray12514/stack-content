@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -26,13 +27,19 @@ import yaml
 
 STARTUP_CONTROL_FILES = tuple(Path(name) for name in (
     "cse-build", "env/share-generated-permissions.sh", "env/workspace-shell.rc",
+    "env/setup-build-env.sh", "scripts/verify-overlay-inputs.py",
+    "scripts/verify-workspace-inputs.py", "scripts/workspace-build.py",
+    "scripts/workspace-overlay.py", "scripts/overlay-recovery.py",
+    "scripts/module-preview.py",
     "scripts/workspace-permissions.py", "BUILDER-HANDOFF.md",
 ))
+STARTUP_INVENTORY = Path("package-repos/overlay-inventory.json")
+STARTUP_CONFIG = Path("configs/common/config.yaml")
 # These are the inputs consumed by the startup templates, not the full build
 # blueprint. In particular, refreshing controls must not resolve a repository
 # tag or fabricate a package commit just to render an unused repos.yaml.
 STARTUP_REQUIRED_VALUES = (
-    "workspace.role", "system.name", "release",
+    "workspace.role", "system.name", "release", "architecture.target", "build_jobs",
     "permissions.group", "permissions.read", "permissions.write",
     "spack.source", "spack.version", "spack.tag", "spack.commit",
     "spack.default_mode", "spack.shared_root", "spack.initial_root",
@@ -374,6 +381,10 @@ def _validate_transaction_paths(paths: list[Path], policy: str) -> None:
             [p for p in paths if p not in (Path("modulefiles"), Path("presentation"))],
             [p for p in paths if p in (Path("modulefiles"), Path("presentation"))],
         )
+    elif policy == "startup":
+        allowed = set(STARTUP_CONTROL_FILES) | {STARTUP_INVENTORY, STARTUP_CONFIG}
+        if not paths or len(set(paths)) != len(paths) or not set(paths).issubset(allowed):
+            raise RefreshError("startup refresh may change only its runtime controls, inventory, and cache selector")
     elif policy == "module-policy":
         environments, modules = set(), set()
         for path in paths:
@@ -442,16 +453,24 @@ def _configuration_fingerprint(path: Path, workspace: Path, ignored: set[str]) -
 
 
 def _input_guards(
-    workspace: Path, module_policy_paths: list[str] | None = None
+    workspace: Path, module_policy_paths: list[str] | None = None,
+    startup_config: list[Any] | None = None,
 ) -> dict[str, Any]:
     paths: dict[str, Any] = {}
+    ignored = set(module_policy_paths or [])
+    if startup_config is not None:
+        ignored.add(str(STARTUP_CONFIG))
     for relative in (
         Path("workspace-manifest.yaml"),
         Path("catalog"),
         Path("configs/common"),
         Path("configs/surfaces"),
     ):
-        paths[str(relative)] = _fingerprint(_safe_path(workspace, relative))
+        path = _safe_path(workspace, relative)
+        if relative == Path("configs/common") and startup_config is not None:
+            paths[str(relative)] = _configuration_fingerprint(path, workspace, ignored)
+        else:
+            paths[str(relative)] = _fingerprint(path)
     repositories = _safe_path(workspace, Path("package-repos"))
     if repositories.exists():
         for child in sorted(repositories.iterdir()):
@@ -464,14 +483,14 @@ def _input_guards(
         environments[str(relative)] = _without_view(_environment_document(path))
         lock = relative.with_name("spack.lock")
         paths[str(lock)] = _fingerprint(_safe_path(workspace, lock))
-    return {
+    result = {
         "paths": paths,
         "environments": environments,
         "module_policy_paths": sorted(module_policy_paths or []),
         "configuration": _configuration_fingerprint(
             _safe_path(workspace, Path("configs")),
             workspace,
-            set(module_policy_paths or []),
+            ignored,
         ),
         "repository_entries": sorted(
             p.name for p in repositories.iterdir() if p.name != "overlay-inventory.json"
@@ -479,6 +498,9 @@ def _input_guards(
         if repositories.exists()
         else None,
     }
+    if startup_config is not None:
+        result["startup_config"] = startup_config
+    return result
 
 
 def _check_guards(
@@ -486,7 +508,12 @@ def _check_guards(
     expected: dict[str, Any],
     missing_environments: set[str] | None = None,
 ) -> None:
-    actual = _input_guards(workspace, expected.get("module_policy_paths"))
+    startup_config = expected.get("startup_config")
+    if startup_config is not None and _fingerprint(
+        _safe_path(workspace, STARTUP_CONFIG)
+    ) not in startup_config:
+        raise RefreshError("workspace cache configuration changed during startup refresh")
+    actual = _input_guards(workspace, expected.get("module_policy_paths"), startup_config)
     # Earlier records predate per-environment configuration fingerprints.
     if "configuration" not in expected:
         actual.pop("configuration")
@@ -506,6 +533,13 @@ def _check_guards(
 
 
 def _validate_policy_payload(entries, policy, guards) -> None:
+    if policy == "startup":
+        for relative, source in entries:
+            if relative == STARTUP_CONFIG and (
+                source is None or _fingerprint(source) not in guards.get("startup_config", [])
+            ):
+                raise RefreshError("startup refresh cache selector does not match the guarded configuration")
+        return
     if policy != "module-policy":
         return
     for relative, source in entries:
@@ -768,12 +802,36 @@ def _startup_bindings(launcher: Path) -> dict[str, str]:
     return bindings
 
 
+def _setup_bindings(path: Path) -> dict[str, str]:
+    names = {
+        "CSE_GROUP", "CSE_CPU_TARGET", "CSE_SYSTEM_NAME", "CSE_TRIAL_RELEASE",
+        "SHARED_COMPILER_NAME", "SHARED_MPI_NAME", "PLATFORM_COMPILER_NAME",
+        "PLATFORM_MPI_NAME", "BUILD_JOBS", "CSE_SPACK_SOURCE", "CSE_SPACK_VERSION",
+        "CSE_SPACK_TAG", "CSE_SPACK_COMMIT", "CSE_SPACK_DEFAULT_MODE",
+        "CSE_SPACK_SHARED_ROOT", "CSE_SPACK_INITIAL_ROOT",
+    }
+    bindings = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = re.fullmatch(r"export ([A-Z_]+)=(.+)", line)
+        if match and match[1] in names:
+            try:
+                tokens = shlex.split(match[2])
+            except ValueError as error:
+                raise RefreshError(f"invalid recorded setup assignment in {path}") from error
+            if len(tokens) != 1 or match[1] in bindings:
+                raise RefreshError(f"ambiguous recorded setup assignment in {path}")
+            bindings[match[1]] = tokens[0]
+    if set(bindings) != names:
+        raise RefreshError(f"cannot verify recorded setup identity in {path}")
+    return bindings
+
+
 def _stage_startup_blueprint(blueprint_dir: Path, destination: Path) -> Path:
     """Give Composer only the startup templates and their value requirements.
 
     The derived blueprint and its manifest live in disposable staging. Neither
     the recorded values nor the original blueprint's full-render contract is
-    changed, and no build configuration or recipe is rendered or promoted.
+    changed. This render does not produce repository or environment configuration.
     """
     blueprint = _load_mapping(blueprint_dir / "blueprint.yaml", "blueprint")
     files = _control_files(blueprint)
@@ -810,6 +868,66 @@ def _stage_startup_blueprint(blueprint_dir: Path, destination: Path) -> Path:
         yaml.safe_dump(blueprint, sort_keys=False), encoding="utf-8"
     )
     return destination
+
+
+def _prepare_startup_inputs(workspace: Path, staged: Path) -> tuple[list[Path], dict[str, Any]]:
+    """Complete the runtime bundle from existing inputs, never newer recipes."""
+    guards = _input_guards(workspace)
+    selected: list[Path] = []
+    inventory = _safe_path(workspace, STARTUP_INVENTORY)
+    helper = _safe_path(staged, Path("scripts/verify-overlay-inputs.py"))
+    command = [sys.executable, str(helper), "--root", str(workspace / "package-repos")]
+    if inventory.exists():
+        command.append("--check")
+    else:
+        candidate = staged / STARTUP_INVENTORY
+        candidate.parent.mkdir(parents=True, exist_ok=True)
+        command.extend(("--candidate", str(candidate)))
+        selected.append(STARTUP_INVENTORY)
+    try:
+        result = subprocess.run(command, text=True, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, timeout=60)
+    except subprocess.TimeoutExpired as error:
+        raise RefreshError("startup overlay inventory preparation timed out") from error
+    if result.returncode:
+        raise RefreshError("existing workspace overlay inputs are invalid: " + result.stdout.strip())
+    if STARTUP_INVENTORY in selected:
+        shutil.copymode(workspace / "workspace-manifest.yaml", staged / STARTUP_INVENTORY)
+
+    config = _safe_path(workspace, STARTUP_CONFIG)
+    original = config.read_bytes().decode("utf-8")
+    selector = "  misc_cache: ${SPACK_MISC_CACHE_PATH}"
+    if selector not in original.splitlines():
+        document = _load_mapping(config, "workspace configuration")
+        settings = _mapping(document.get("config"), "workspace config")
+        root = yaml.safe_load(_startup_bindings(workspace / "cse-build")["CSE_SHARED_MISC_CACHE_ROOT"])
+        if settings.get("misc_cache") not in (root, "${SPACK_MISC_CACHE_PATH}"):
+            raise RefreshError("workspace misc_cache differs from the recorded launcher root")
+        lines = original.splitlines(keepends=True)
+        indexes = [i for i, line in enumerate(lines) if line.startswith("  misc_cache:")]
+        if len(indexes) != 1:
+            raise RefreshError("workspace configuration must contain one misc_cache scalar")
+        index = indexes[0]
+        ending = ""
+        if lines[index].endswith("\n"):
+            ending = "\r\n" if lines[index].endswith("\r\n") else "\n"
+        lines[index] = selector + ending
+        rendered = "".join(lines)
+        expected = copy.deepcopy(document)
+        expected["config"]["misc_cache"] = "${SPACK_MISC_CACHE_PATH}"
+        if yaml.safe_load(rendered) != expected:
+            raise RefreshError("startup cache selector would change other configuration")
+        candidate = staged / STARTUP_CONFIG
+        candidate.parent.mkdir(parents=True, exist_ok=True)
+        candidate.write_text(rendered, encoding="utf-8")
+        shutil.copymode(config, candidate)
+        selected.append(STARTUP_CONFIG)
+    _check_guards(workspace, guards)
+    if STARTUP_CONFIG in selected:
+        guards = _input_guards(workspace, startup_config=[
+            _fingerprint(config), _fingerprint(staged / STARTUP_CONFIG)
+        ])
+    return selected, guards
 
 
 def _refresh_control_files(
@@ -851,6 +969,15 @@ def _refresh_control_files(
         raise RefreshError(
             "staged controls do not match the existing blueprint, system, and release"
         )
+    guards = None
+    if scope == "startup":
+        if _startup_bindings(workspace / "cse-build") != _startup_bindings(staged_workspace / "cse-build"):
+            raise RefreshError("startup refresh would change recorded roots or runtime identity; use this workspace's recorded values")
+        setup = Path("env/setup-build-env.sh")
+        if _setup_bindings(_safe_path(workspace, setup)) != _setup_bindings(_safe_path(staged_workspace, setup)):
+            raise RefreshError("startup refresh would change recorded setup identity; use this workspace's recorded values")
+        additions, guards = _prepare_startup_inputs(workspace, staged_workspace)
+        selected.extend(additions)
     for relative in selected:
         source = _safe_path(staged_workspace, relative)
         destination = _safe_path(workspace, relative)
@@ -865,11 +992,10 @@ def _refresh_control_files(
             raise RefreshError(
                 f"existing control directory is missing: {relative.parent}"
             )
-    if scope == "startup" and _startup_bindings(workspace / "cse-build") != _startup_bindings(staged_workspace / "cse-build"):
-        raise RefreshError("startup refresh would change recorded roots or runtime identity; use this workspace's recorded values")
     dependencies = _mapping(
         blueprint.get("control_file_dependencies", {}), "control_file_dependencies"
     )
+    missing_dependencies = []
     for control, requirements in dependencies.items():
         if Path(control) not in selected:
             continue
@@ -886,13 +1012,19 @@ def _refresh_control_files(
             )
             required = _safe_path(source_root, path)
             if not required.is_file():
-                raise RefreshError(
-                    f"{control} requires {requirement}; explicit candidate preparation required before controls refresh"
-                )
+                missing_dependencies.append(f"{control} requires {requirement}")
+    if missing_dependencies:
+        detail = "; ".join(missing_dependencies)
+        if scope == "startup":
+            raise RefreshError("startup bundle is missing recorded workspace inputs: " + detail)
+        raise RefreshError(detail + "; explicit candidate preparation required before controls refresh")
     if not dry_run:
         _apply_transaction(
-            workspace, [(p, staged_workspace / p) for p in selected], existing, scope
+            workspace, [(p, staged_workspace / p) for p in selected], existing, scope,
+            path_policy="startup" if scope == "startup" else "controls", guards=guards,
         )
+    elif guards is not None:
+        _check_guards(workspace, guards)
     return selected
 
 
@@ -956,7 +1088,7 @@ def _restore_control_files(
     if guards is not None:
         _check_guards(workspace, guards, missing_environments)
     if recover and record["status"] == "preparing" and not raw_entries:
-        if policy not in ("controls", "module-policy", "overlay-admission"):
+        if policy not in ("controls", "module-policy", "overlay-admission", "startup"):
             raise RefreshError(f"unsupported transaction path policy: {policy}")
         if not dry_run:
             record["status"] = "rolled-back"

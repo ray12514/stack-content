@@ -573,8 +573,7 @@ verify_scopes() {
 }
 
 verify_workspace_inputs() {
-  spack python "$CSE_WORKSPACE_ROOT/scripts/verify-lockfiles.py" \
-    --workspace-only
+  spack python "$CSE_WORKSPACE_ROOT/scripts/verify-workspace-inputs.py"
 }
 
 verify_locks() {

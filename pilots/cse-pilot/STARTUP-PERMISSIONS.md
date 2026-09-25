@@ -43,12 +43,12 @@ run in a subshell so an error stops the update without closing your login shell.
 Use it once per workspace/system with writers stopped. The preparation tools
 and original values must already be present from this trial's setup.
 
-If a previous attempt stopped with `missing-value at values.package_repo.commit`,
-rerun this complete block. It fetches the fix before retrying. Startup refresh
-now renders only the five startup controls and does not require a package-repo
-commit. Keep your recorded values and repository pin as they are; do not insert
-the example commit or change your install tree. That failed validation occurred
-in temporary staging, before any workspace controls were replaced.
+If a previous attempt stopped with `missing-value at values.package_repo.commit`
+or `cse-build requires scripts/verify-overlay-inputs.py`, rerun this complete
+block. It fetches the fix and installs the launcher with its runtime helpers in
+one update. No separate candidate-preparation step or package-repo commit is
+needed. Keep your recorded values and repository pin as they are. Those failed
+checks stopped before any workspace controls were replaced.
 
 ```bash
 (
@@ -122,10 +122,10 @@ in temporary staging, before any workspace controls were replaced.
 )
 ```
 
-A failed preview stops before replacing controls, including when an older
-workspace lacks required recovery/overlay helpers. A successful refresh
-preserves configuration, padding, environment YAML, locks and installed
-packages. Existing Composer and Inspector binaries need no update for this fix.
+A failed preview stops before replacing controls. The update supplies missing
+recovery/overlay helpers, preserves padding, environment YAML, locks and
+installed packages, and prepares the cache selector when necessary. Existing
+Composer and Inspector binaries need no update for this fix.
 
 If both builders own private-mode output, each owner must run `permissions`
 after writers stop; it reports any remaining foreign-owned paths instead of
@@ -160,23 +160,26 @@ In Bash, preview first:
   --scope startup --dry-run
 ```
 
-This selects exactly `cse-build`, `env/share-generated-permissions.sh`,
-`env/workspace-shell.rc`, `scripts/workspace-permissions.py`, and
-`BUILDER-HANDOFF.md`. Only those templates and their startup input requirements
-are passed to Composer in temporary staging. The full workspace blueprint still
-requires `package_repo.commit` when rendering repository configuration; startup
-refresh neither renders that configuration nor resolves an existing tag. It
-checks the existing helper dependencies and refuses a
-change to recorded launcher roots or runtime identity. It leaves **all config
-files, install-tree padding, environment YAML, locks, catalog, package overlays,
-views, modules, caches and installed packages unchanged**. It retains a rollback
-record in `.cse-control-refresh/` when applied.
+This stages `cse-build`, the shell setup/RC, permission helpers, the overlay
+verifier, workspace-input preflight, recovery/build/overlay/module-preview
+helpers, and `BUILDER-HANDOFF.md` together. Only their templates and input
+requirements are passed to Composer. Repository configuration is not rendered,
+and no tag is resolved or replaced with a different builtin commit.
 
-An older workspace may lack the recovery/overlay controls required by the new
-launcher. The preview identifies missing dependencies and stops before promotion.
-Use the existing [control and overlay admission procedure](CONTROL-REFRESH.md)
-first, retaining that workspace's values/locks; do not copy only the new launcher
-or use a broad refresh just to bypass a prerequisite failure.
+When `overlay-inventory.json` is absent, the update records the **existing local
+recipe bytes** for subsequent change detection. It does not copy newer recipes
+or claim that the captured bytes prove a past review. Existing inventories are
+checked and preserved; a mismatch remains an error. The workspace's original
+full lock verifier and its package policy remain intact. Status uses a separate
+input preflight so an older verifier cannot accidentally require all eight locks.
+
+If the old configuration uses a literal misc-cache path, the update changes only
+that line to `misc_cache: ${SPACK_MISC_CACHE_PATH}`. This selects a per-builder
+partition beneath the same recorded cache root. Every other configuration byte,
+including **install-tree root and padding**, stays intact, as do environment
+YAML, locks, catalog, recipes and installed packages. A single rollback record
+in `.cse-control-refresh/` covers the complete bundle, optional inventory and
+cache-selector change. The preview reports every selected file.
 
 After a successful preview, apply the same command without `--dry-run`:
 
@@ -203,7 +206,11 @@ The regression tests exercise real prepared-shell entry/exit, single-pass repair
 with 1/4/16/32 workers, executable preservation, symlink isolation, nested-root
 handling, protected install prefixes, and unchanged-entry repeats. Refresh tests
 cover empty, partially built and completed workspaces, preserving the bytes,
-modes and timestamps of config, environment YAML, locks and installed files.
+modes and timestamps of protected inputs. The real Composer CLI test also starts
+with missing runtime helpers, a literal cache path and an older full lock
+verifier, then runs permissions, status and shell entry through the updated
+launcher using a pinned Git fixture and a Spack command stub that executes the
+real Python helpers. It checks rollback and retention of existing recipe bytes.
 They also check mutual exclusion between refresh and guarded finite operations.
 Runtime helper syntax remains Python 3.6-compatible and uses only the standard
 library. Local macOS results do not predict Lustre latency; measure on an

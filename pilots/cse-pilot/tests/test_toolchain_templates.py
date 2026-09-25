@@ -924,7 +924,7 @@ class ToolchainTemplateTests(unittest.TestCase):
                 "# fake verifier\n",
                 encoding="utf-8",
             )
-            for helper in ('workspace-build.py', 'workspace-overlay.py', 'overlay-recovery.py', 'workspace-permissions.py'):
+            for helper in ('workspace-build.py', 'workspace-overlay.py', 'overlay-recovery.py', 'workspace-permissions.py', 'verify-workspace-inputs.py'):
                 shutil.copyfile(TEMPLATE_ROOT / 'scripts' / helper, workspace / 'scripts' / helper)
             copy_trial_package_overlay(workspace, "cce")
             cache_key = subprocess.check_output(

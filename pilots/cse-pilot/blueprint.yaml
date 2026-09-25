@@ -13,6 +13,8 @@ control_files:
   - env/prepare-module-state.sh
   - env/share-generated-permissions.sh
   - scripts/workspace-permissions.py
+  - scripts/verify-overlay-inputs.py
+  - scripts/verify-workspace-inputs.py
   - env/select-build-context.sh
   - env/setup-build-env.sh
   - env/workspace-shell.rc
@@ -25,6 +27,11 @@ control_files:
   - PACKAGE-OVERLAY-QUICKSTART.md
 control_file_dependencies:
   cse-build:
+    - env/setup-build-env.sh
+    - env/select-build-context.sh
+    - env/prepare-module-state.sh
+    - scripts/verify-lockfiles.py
+    - scripts/verify-workspace-inputs.py
     - env/share-generated-permissions.sh
     - env/workspace-shell.rc
     - scripts/workspace-permissions.py
@@ -51,6 +58,10 @@ control_file_dependencies:
     - scripts/verify-overlay-inputs.py
   scripts/module-preview.py:
     - scripts/workspace-build.py
+  scripts/verify-workspace-inputs.py:
+    - scripts/verify-overlay-inputs.py
+    - scripts/verify-lockfiles.py
+    - package-repos/overlay-inventory.json
   env/setup-build-env.sh:
     - scripts/verify-overlay-inputs.py
     - package-repos/overlay-inventory.json

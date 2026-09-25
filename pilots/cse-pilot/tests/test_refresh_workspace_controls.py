@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import stat
 from pathlib import Path
 
@@ -552,21 +553,30 @@ def test_startup_refresh_preserves_configuration_locks_and_installed_prefixes(tm
     data = yaml.safe_load(blueprint.read_text())
     workspace, staged = tmp_path / "workspace", tmp_path / "staged"
     selected = ["cse-build", "env/share-generated-permissions.sh", "env/workspace-shell.rc",
+                "env/setup-build-env.sh", "scripts/verify-overlay-inputs.py",
+                "scripts/verify-workspace-inputs.py", "scripts/workspace-build.py",
+                "scripts/workspace-overlay.py", "scripts/overlay-recovery.py", "scripts/module-preview.py",
                 "scripts/workspace-permissions.py", "BUILDER-HANDOFF.md"]
     for root in (workspace, staged):
         write_yaml(root / "workspace-manifest.yaml", manifest())
-        # Dependency contents need not be rendered to exercise refresh selection.
+        # Most dependency contents need not be rendered to exercise selection.
         for name in set(data["control_files"] + sum(data["control_file_dependencies"].values(), [])):
             target = root / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text("new" if root == staged else "old")
+    shutil.copytree(pilot / "templates/package-repos", workspace / "package-repos", dirs_exist_ok=True)
+    shutil.copy2(pilot / "templates/scripts/verify-overlay-inputs.py", staged / "scripts/verify-overlay-inputs.py")
+    from test_toolchain_templates import render_text
+    setup = render_text("env/setup-build-env.sh.j2", values=yaml.safe_load((pilot / "site-values.example.yaml").read_text()))
+    for root in (workspace, staged):
+        (root / "env/setup-build-env.sh").write_text(setup + ("# new\n" if root == staged else "# old\n"))
     assignments = "".join("export CSE_{}=\"/recorded/{}\"\n".format(name, name) for name in (
         "INSTALL_TREE_ROOT", "SHARED_SOURCE_CACHE_ROOT", "SHARED_MISC_CACHE_ROOT",
         "VIEWS_ROOT", "MODULES_ROOT", "BUILDCACHE_URL")) + 'readonly CSE_RECORDED_SPACK_COMMIT="pinned"\n'
     for root in (workspace, staged):
         (root / "cse-build").write_text(assignments + ("# new" if root == staged else "# old"))
     config = workspace / "configs/common/config.yaml"
-    config.write_text("config:\n  install_tree:\n    root: /recorded/store\n    padded_length: 128\n")
+    config.write_text("config:\n  install_tree:\n    root: /recorded/store\n    padded_length: 128\n  misc_cache: ${SPACK_MISC_CACHE_PATH}\n")
     before = {}
     for i in range(8):
         path = workspace / ("environments/lane{}/spack.yaml".format(i))

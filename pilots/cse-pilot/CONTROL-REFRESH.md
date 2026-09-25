@@ -2,8 +2,9 @@
 
 
 For slow interactive startup at **any build stage**, use the narrow
-[`--scope startup` procedure](STARTUP-PERMISSIONS.md). It preserves all Spack
-configuration, padding, environments, locks, views, modules and packages.
+[`--scope startup` procedure](STARTUP-PERMISSIONS.md). It supplies the complete
+launcher runtime while preserving padding, environments, locks, views, modules
+and packages; only the misc-cache selector is prepared when required.
 
 Updating the source checkout or preparation tool does not update a generated
 workspace. Use this procedure for a deliberate, scoped adoption on a real
@@ -276,9 +277,12 @@ recorded file or regenerate values from current discovery for this maintenance.
 
 For the startup performance fix alone, use the complete
 [startup refresh procedure](STARTUP-PERMISSIONS.md#copy-and-paste-on-each-system)
-with `--scope startup` and the original values. That scope renders only startup
-controls and does not need `package_repo.commit` or a prepared values copy. It
-preserves the active repository configuration, including an existing tag pin.
+with `--scope startup` and the original values. That scope supplies the complete
+startup runtime bundle and does not need `package_repo.commit` or a prepared
+values copy. It records existing local recipe bytes when an inventory is absent,
+and preserves the active repository configuration, including an existing tag
+pin. It also prepares only the misc-cache selector when required by the launcher;
+install-tree configuration and padding remain unchanged.
 
 ### Preview and apply compiler entrance/lane presentation
 
