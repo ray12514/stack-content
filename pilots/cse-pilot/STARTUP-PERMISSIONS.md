@@ -25,6 +25,105 @@ failures. A bad foreign-owned entry fails handoff with its path and owner UID.
 This budget is independent of `BUILD_JOBS`. More workers are not necessarily
 faster on Lustre. Four is a starting point, not a promised optimum.
 
+## Copy and paste on each system
+
+Let active builds finish and exit the old CSE shells, including their tmux
+shells, before applying the update. Detaching tmux does not exit its shell.
+From a fresh login prompt, enter Bash:
+
+```bash
+bash
+```
+
+Paste this complete block. It selects an existing saved session (asks which
+one when several exist), checks out and fast-forwards `codex/cse-fast-login`,
+previews the startup refresh, applies it only if the preview succeeds, repairs
+owned output, checks the handoff and opens the updated session. All commands
+run in a subshell so an error stops the update without closing your login shell.
+Use it once per workspace/system with writers stopped. The preparation tools
+and original values must already be present from this trial's setup.
+
+```bash
+(
+  set -e
+  set -o pipefail
+
+  if [ -n "${SPACK_ENV:-}" ]; then
+    printf 'Start from a fresh login shell with no active Spack environment.\n' >&2
+    exit 1
+  fi
+
+  shopt -s nullglob
+  cse_session_root="${WORK_ROOT:-$HOME/STACK_TESTING}/operator-sessions"
+  cse_sessions=("$cse_session_root"/*/*/activate.sh)
+  case ${#cse_sessions[@]} in
+    0)
+      read -r -p 'Full path to your existing activate.sh: ' cse_session
+      ;;
+    1)
+      cse_session="${cse_sessions[0]}"
+      ;;
+    *)
+      PS3='Select the system/trial to update: '
+      select cse_session in "${cse_sessions[@]}"; do
+        [ -n "$cse_session" ] && break
+      done
+      ;;
+  esac
+  test -r "$cse_session"
+  source "$cse_session"
+
+  printf '\nUpdating workspace: %s\nUsing values: %s\n' "$BUILD_WORKSPACE" "$BUILD_VALUES"
+  test -r "$BUILD_WORKSPACE/workspace-manifest.yaml"
+  test -r "$BUILD_VALUES"
+  test -x "$CSE_PYTHON"
+  test -r "$STACK_COMPOSER"
+  "$CSE_PYTHON" -c 'import yaml'
+
+  if ! git -C "$CONTENT" diff --quiet || ! git -C "$CONTENT" diff --cached --quiet; then
+    git -C "$CONTENT" status --short
+    printf 'Stopped: stack-content has tracked local edits; no refresh was applied.\n' >&2
+    exit 1
+  fi
+
+  git -C "$CONTENT" fetch origin \
+    refs/heads/codex/cse-fast-login:refs/remotes/origin/codex/cse-fast-login
+  if git -C "$CONTENT" show-ref --verify --quiet refs/heads/codex/cse-fast-login; then
+    git -C "$CONTENT" checkout codex/cse-fast-login
+  else
+    git -C "$CONTENT" checkout -b codex/cse-fast-login --track origin/codex/cse-fast-login
+  fi
+  git -C "$CONTENT" merge --ff-only origin/codex/cse-fast-login
+
+  cse_refresh=(
+    "$CSE_PYTHON" "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py"
+    --composer "$STACK_COMPOSER"
+    --blueprint "$CONTENT/pilots/cse-pilot"
+    --values "$BUILD_VALUES"
+    --workspace "$BUILD_WORKSPACE"
+    --scope startup
+  )
+  "${cse_refresh[@]}" --dry-run
+  "${cse_refresh[@]}"
+
+  cd "$BUILD_WORKSPACE"
+  export CSE_PERMISSION_JOBS=4
+  ./cse-build login permissions
+  ./cse-build login status
+  printf '\nStartup update complete. Opening the updated CSE session.\n'
+  exec ./cse-build login
+)
+```
+
+A failed preview stops before replacing controls, including when an older
+workspace lacks required recovery/overlay helpers. A successful refresh
+preserves configuration, padding, environment YAML, locks and installed
+packages. Existing Composer and Inspector binaries need no update for this fix.
+
+If both builders own private-mode output, each owner must run `permissions`
+after writers stop; it reports any remaining foreign-owned paths instead of
+changing another owner's files. The receiving builder then runs `status`.
+
 ## Update an existing workspace
 
 The same update applies before concretization, with partial locks/installations,
@@ -49,7 +148,7 @@ In Bash, preview first:
 ```bash
 "$CSE_PYTHON" "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
   --composer "$STACK_COMPOSER" \
-  --blueprint "$CONTENT/pilots/cse-pilot/blueprint.yaml" \
+  --blueprint "$CONTENT/pilots/cse-pilot" \
   --values "$BUILD_VALUES" --workspace "$BUILD_WORKSPACE" \
   --scope startup --dry-run
 ```
@@ -73,7 +172,7 @@ After a successful preview, apply the same command without `--dry-run`:
 ```bash
 "$CSE_PYTHON" "$CONTENT/pilots/cse-pilot/scripts/refresh-workspace-controls.py" \
   --composer "$STACK_COMPOSER" \
-  --blueprint "$CONTENT/pilots/cse-pilot/blueprint.yaml" \
+  --blueprint "$CONTENT/pilots/cse-pilot" \
   --values "$BUILD_VALUES" --workspace "$BUILD_WORKSPACE" \
   --scope startup
 cd "$BUILD_WORKSPACE"
