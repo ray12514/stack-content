@@ -53,6 +53,27 @@ def inventory_command(workspace, *arguments):
                            *map(str, arguments)], capture_output=True, text=True)
 
 
+def test_inspection_cache_is_separate_changes_with_recipe_and_does_not_admit(workspace):
+    admitted = inventory_command(workspace, "--cache-key")
+    assert admitted.returncode == 0, admitted.stderr
+    inventory = workspace / "package-repos/overlay-inventory.json"
+    before = inventory.read_bytes()
+    recipe = workspace / "package-repos/spack_repo/cse_trials/packages/cce/package.py"
+    recipe.write_text(recipe.read_text() + "\n# intentional recipe edit\n")
+    assert inventory_command(workspace, "--cache-key").returncode != 0
+    inspection = inventory_command(workspace, "--cache-key", "--allow-unverified")
+    assert inspection.returncode == 0, inspection.stderr
+    assert inspection.stdout.startswith("inspection-")
+    assert inspection.stdout != admitted.stdout
+    assert "overlay input changed" in inspection.stderr
+    assert inventory.read_bytes() == before
+    recipe.write_text(recipe.read_text() + "\n# second edit\n")
+    changed = inventory_command(workspace, "--cache-key", "--allow-unverified")
+    assert changed.returncode == 0, changed.stderr
+    assert changed.stdout != inspection.stdout
+    assert inventory_command(workspace, "--check", "--allow-unverified").returncode != 0
+
+
 @pytest.mark.parametrize("package", ["cce", "cmake", "dakota", "hdf5", "ncurses", "zlib"])
 def test_workspace_gate_detects_a_changed_recipe(workspace, package):
     current = verify(workspace)

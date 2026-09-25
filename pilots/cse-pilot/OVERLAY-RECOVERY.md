@@ -2,11 +2,11 @@
 
 **If your teammate already changed a package in an existing trial, start with
 [Inspect an existing correction with the installed tools](templates/PACKAGE-OVERLAY-QUICKSTART.md#inspect-an-existing-correction-with-the-installed-tools).**
-No tool update is required to enter the existing prepared shell, inspect the
-deployed recipe and Spack paths, explicitly reconcretize the affected environment,
-and retry it. That procedure includes the CCE Core/GSL example and preserves
-the completed GCC locks. Use the helper workflow below when those helpers are
-already available or you deliberately choose to adopt them.
+If entry instead stops at `could not select a cache for the reviewed overlay
+inputs`, use the complete [startup update and registration instructions](STARTUP-PERMISSIONS.md#copy-and-paste-on-each-system).
+They install the repair entry while preserving the intentional recipes. The
+inspection procedure includes the CCE Core/GSL example and preserves completed
+GCC locks. Use the helper workflow below when those helpers are available.
 
 The normal loop is **edit/apply the complete package correction → explicitly
 reconcretize the selected environment → resume that same environment**. Keep the
@@ -67,11 +67,30 @@ admission of those reviewed files; it does not add another approval prompt.
 next step, not the set of locks inspected. The namespace defaults to `cse_trials`;
 `--repository NAME` selects another already registered local API v2 repository.
 
-Do not edit a live package first and then ask the helper to accept unexplained
-inventory drift. Use `edit` or a separate complete package directory so the helper
-can retain and verify the previous recipe before changing it. Existing local fixes
-and support files must be carried into the correction. An existing inventory must
-match all current recipe bytes. For an older workspace without an inventory,
+For subsequent corrections, use `edit` or a separate complete package directory
+so the helper can retain and verify the previous recipe before changing it.
+If intentional edits or additions already exist in the live tree, register them
+explicitly together, naming every changed package:
+
+```bash
+(
+  set -e
+  ./cse-build login overlay reconcile --package netlib-lapack --package gsl --dry-run
+  ./cse-build login overlay reconcile --package netlib-lapack --package gsl
+)
+```
+
+Reconciliation validates complete current recipes and support files, rejects
+changes outside the selected package directories, and changes only the inventory.
+It reports packages already recorded rather than requiring them to change again.
+Because historical recipe bytes are unavailable, it conservatively flags all
+existing locks for later selected reconcretization. Its restore operation rolls
+back only the inventory; it cannot recreate recipe files edited beforehand.
+Interactive entry and this reconciliation action remain available with inventory
+drift through a separate inspection cache; finite build commands still check it.
+
+Existing local fixes and support files must be carried into the correction.
+For an older workspace without an inventory,
 explicit apply validates the complete existing tree and admits the corrected
 inventory, retaining the original absence for restoration.
 

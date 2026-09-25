@@ -81,10 +81,18 @@ def records(workspace):
                 or value.get("workspace") != str(workspace)):
             raise Error("Overlay journal identity mismatch: " + str(path))
         repository = value.get("repository", "cse_trials")
-        expected = "package-repos/spack_repo/" + repository + "/packages/" + value.get("module", "")
-        if (not re.fullmatch(r"[A-Za-z_]\w*", repository)
-                or not re.fullmatch(r"[A-Za-z_]\w*", value.get("module", ""))
-                or value.get("target") != expected):
+        if not re.fullmatch(r"[A-Za-z_]\w*", repository):
+            raise Error("Unsafe overlay journal repository: " + str(path))
+        if value.get("operation") == "reconcile":
+            packages = value.get("packages")
+            if (not isinstance(packages, dict) or not packages
+                    or any(not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name)
+                           or state not in ("new", "changed", "already-recorded")
+                           for name, state in packages.items())):
+                raise Error("Invalid overlay reconciliation record: " + str(path))
+        elif (not re.fullmatch(r"[A-Za-z_]\w*", value.get("module", ""))
+              or value.get("target") != "package-repos/spack_repo/" + repository
+              + "/packages/" + value.get("module", "")):
             raise Error("Unsafe overlay journal package path: " + str(path))
         result.append(value)
     return result
@@ -110,7 +118,7 @@ def fingerprint(path):
     return recovery.safe_files(path) if path.is_dir() else recovery.digest(path.read_bytes())
 
 
-def protected_inputs(workspace, target):
+def protected_inputs(workspace, target=None):
     result = recovery.inputs(workspace)
     for tree in ("modulefiles", "presentation"):
         path = workspace / tree
@@ -118,16 +126,16 @@ def protected_inputs(workspace, target):
             result.update((tree + "/" + name, value)
                           for name, value in recovery.safe_files(path).items())
     return {name: value for name, value in result.items()
-            if name != INVENTORY and not name.startswith(target + "/")}
+            if name != INVENTORY and (target is None or not name.startswith(target + "/"))}
 
 
-def validate_repository(workspace, repository=None):
+def validate_repository(workspace, repository=None, check_inventory=True):
     root = workspace / "package-repos"
     inventory = gate.snapshot(root)
     inventory_path = root / gate.INVENTORY
     if not inventory_path.exists() and any(item["status"] == "applied" for item in records(workspace)):
         raise Error("Reviewed inventory disappeared after overlay apply; restore the matching record")
-    if inventory_path.exists() or inventory_path.is_symlink():
+    if check_inventory and (inventory_path.exists() or inventory_path.is_symlink()):
         errors = gate.check(root)
         if errors:
             raise Error("Current overlay inventory failed: " + "; ".join(errors))
@@ -235,12 +243,17 @@ def new_record(workspace, prepared, status="preparing"):
     return record, directory
 
 
+def transaction_paths(record):
+    inventory = ("inventory", INVENTORY, "inventory_before", "inventory_after")
+    if record.get("operation") == "reconcile":
+        return (inventory,)
+    return (("package", record["target"], "package_before", "package_after"), inventory)
+
+
 def restore_bytes(workspace, record):
-    """Recover only the two exact transaction-owned paths, retaining new bytes."""
+    """Recover only the exact transaction-owned paths, retaining new bytes."""
     directory = workspace / ".cse-overlay" / record["id"]
-    for label, relative, old_key, new_key in (
-            ("package", record["target"], "package_before", "package_after"),
-            ("inventory", INVENTORY, "inventory_before", "inventory_after")):
+    for label, relative, old_key, new_key in transaction_paths(record):
         live = workspace / relative
         current, old, new = fingerprint(live), record[old_key], record[new_key]
         if current == old:
@@ -319,6 +332,97 @@ def apply_overlay(workspace, source, package=None, environment=None, dry_run=Fal
             return record
 
 
+def reconcile_overlay(workspace, packages, dry_run=False, repository="cse_trials"):
+    """Explicitly register named live edits without pretending to own prior bytes."""
+    workspace = safe_workspace(workspace)
+    if not packages or any(not re.fullmatch(r"[a-z0-9][a-z0-9-]*", name) for name in packages):
+        raise Error("reconcile requires explicit --package NAME selections")
+    with maintenance(workspace):
+        require_build_idle(workspace)
+        ready(workspace)
+        repo = validate_repository(workspace, repository, check_inventory=False)
+        inventory_path = workspace / INVENTORY
+        before = fingerprint(inventory_path)
+        if before is None:
+            raise Error("Missing overlay inventory; refresh startup controls before reconciliation")
+        old = gate.validate_inventory(json.loads(inventory_path.read_text(),
+                                                 object_pairs_hook=gate.unique_object))
+        current = gate.snapshot(workspace / "package-repos")
+
+        def identities(document):
+            return {item["path"]: (item["namespace"], item["api"])
+                    for item in document["repositories"]}
+
+        def files(document):
+            return {item["path"] + "/" + name: digest
+                    for item in document["repositories"] for name, digest in item["files"].items()}
+
+        if identities(old) != identities(current):
+            raise Error("Reconciliation cannot change repository identities")
+        expected, actual = files(old), files(current)
+        base = repo.relative_to(workspace / "package-repos").as_posix() + "/packages/"
+        prefixes = {name: base + package_module(name) + "/" for name in sorted(set(packages))}
+        changed = sorted(name for name in set(expected) | set(actual)
+                         if expected.get(name) != actual.get(name))
+        unrelated = [name for name in changed if not any(name.startswith(prefix) for prefix in prefixes.values())]
+        if unrelated:
+            raise Error("Changes outside selected packages: " + ", ".join(unrelated))
+        states = {}
+        for package, prefix in prefixes.items():
+            if prefix + "package.py" not in actual:
+                raise Error("Selected overlay recipe is missing: " + prefix + "package.py")
+            old_files = {name: digest for name, digest in expected.items() if name.startswith(prefix)}
+            new_files = {name: digest for name, digest in actual.items() if name.startswith(prefix)}
+            states[package] = "new" if not old_files else "changed" if old_files != new_files else "already-recorded"
+        prepared = {"operation": "reconcile", "repository": repository, "packages": states,
+                    "inventory_before": before, "protected_inputs": protected_inputs(workspace),
+                    "affected": [], "unchanged": [], "unlocked": [], "affected_lock_sha256": {},
+                    "resolved": {}, "changed_files": changed,
+                    "scope_reason": "historical recipe bytes unavailable; conservatively flag all existing locks"}
+        if not changed:
+            return dict(prepared, status="already-recorded")
+        for path in sorted((workspace / "environments").glob("*/*/spack.yaml")):
+            name = path.parent.relative_to(workspace / "environments").as_posix()
+            lock = fingerprint(path.with_name("spack.lock"))
+            prepared["unlocked" if lock is None else "affected"].append(name)
+            if lock is not None:
+                prepared["affected_lock_sha256"][name] = lock
+        data = recovery.json_bytes(current)
+        prepared["inventory_after"] = recovery.digest(data)
+        if dry_run:
+            return dict(prepared, status="dry-run")
+        record, directory = new_record(workspace, prepared)
+        try:
+            original = directory / "original"
+            original.mkdir()
+            shutil.copy2(str(inventory_path), str(original / "inventory"))
+            stage = directory / "inventory"
+            stage.write_bytes(data)
+            shutil.copymode(str(inventory_path), str(stage))
+            if (protected_inputs(workspace) != prepared["protected_inputs"]
+                    or fingerprint(inventory_path) != before
+                    or fingerprint(original / "inventory") != before):
+                raise Error("Workspace changed during overlay reconciliation")
+            record["status"] = "applying"
+            save(workspace, record)
+            os.replace(str(stage), str(inventory_path))
+            if (gate.check(workspace / "package-repos")
+                    or protected_inputs(workspace) != prepared["protected_inputs"]):
+                raise Error("Workspace changed during overlay reconciliation")
+            record["status"] = "applied"
+            save(workspace, record)
+        except BaseException:
+            try:
+                restore_bytes(workspace, record)
+                record["status"] = "restored"
+            except BaseException as rollback_error:
+                record["status"] = "restore_failed"
+                record["restore_error"] = str(rollback_error)
+            save(workspace, record)
+            raise
+        return record
+
+
 def restore_overlay(workspace, identifier):
     workspace = safe_workspace(workspace)
     with maintenance(workspace):
@@ -330,11 +434,12 @@ def restore_overlay(workspace, identifier):
         record = matches[0]
         if record["status"] in ("restored", "cancelled"):
             return record
-        if protected_inputs(workspace, record["target"]) != record["protected_inputs"]:
+        if protected_inputs(workspace, record.get("target")) != record["protected_inputs"]:
+            if record.get("operation") == "reconcile":
+                raise Error("Later workspace/lock changes prevent inventory-only restoration")
             raise Error("Later workspace/lock changes prevent recipe-only restoration; "
                         "apply the retained previous package as a new correction, then reconcretize the selected environment")
-        for relative, before, after in ((record["target"], "package_before", "package_after"),
-                                       (INVENTORY, "inventory_before", "inventory_after")):
+        for _, relative, before, after in transaction_paths(record):
             current = fingerprint(workspace / relative)
             allowed = (record[after],) if record["status"] == "applied" else (None, record[before], record[after])
             if current not in allowed:
@@ -492,6 +597,15 @@ def edit_overlay(workspace, package, environment, spack, editor=None, repository
 
 def print_record(record):
     print("Overlay " + record.get("id", "preview") + ": " + record["status"])
+    for package, state in sorted(record.get("packages", {}).items()):
+        print(package + ": " + state)
+    for path in record.get("changed_files", []):
+        print("inventory change: " + path)
+    if record.get("operation") == "reconcile":
+        print("Recipe files and locks are unchanged. Restore rolls back only inventory registration.")
+        if record.get("affected"):
+            print("Existing locks require selected reconcretization before another build; "
+                  "historical recipe bytes were unavailable for a narrower impact comparison.")
     for key in ("affected", "unchanged", "unlocked"):
         if key in record:
             print(key + ": " + (", ".join(record[key]) or "none"))
@@ -503,7 +617,7 @@ def print_record(record):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="action")
-    for name in ("apply", "edit", "restore", "status", "check", "resolved"):
+    for name in ("apply", "edit", "reconcile", "restore", "status", "check", "resolved"):
         command = commands.add_parser(name)
         command.add_argument("--workspace", type=Path, default=os.environ.get("CSE_BUILD_WORKSPACE"))
         if name in ("apply", "edit"):
@@ -512,6 +626,10 @@ def main():
             command.add_argument("--environment", required=name == "edit")
         if name == "apply":
             command.add_argument("--from", type=Path, dest="source", required=True)
+            command.add_argument("--dry-run", action="store_true")
+        if name == "reconcile":
+            command.add_argument("--repository", default="cse_trials")
+            command.add_argument("--package", action="append", required=True)
             command.add_argument("--dry-run", action="store_true")
         if name == "edit":
             default = str(Path(os.environ["SPACK_ROOT"]) / "bin/spack") if os.environ.get("SPACK_ROOT") else shutil.which("spack")
@@ -532,6 +650,8 @@ def main():
         elif args.action == "edit":
             print_record(edit_overlay(args.workspace, args.package, args.environment, args.spack,
                                       repository=args.repository))
+        elif args.action == "reconcile":
+            print_record(reconcile_overlay(args.workspace, args.package, args.dry_run, args.repository))
         elif args.action == "restore":
             print_record(restore_overlay(args.workspace, args.record))
         elif args.action == "status":

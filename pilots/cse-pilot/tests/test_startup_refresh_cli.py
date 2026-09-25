@@ -184,9 +184,12 @@ def test_startup_refresh_does_not_rebaseline_an_existing_inventory(tmp_path):
     recipe.write_text(recipe.read_text() + "\n# Unrecorded edit\n")
     before = snapshot([path for path in workspace.rglob("*") if path.is_file()])
     result = refresh(workspace, recorded, composer)
-    assert result.returncode != 0
+    assert result.returncode == 0, result.stdout + result.stderr
     assert "overlay input changed" in result.stderr
-    assert snapshot(before) == before
+    assert "keeping the existing overlay inventory unchanged" in result.stderr
+    protected = {path: state for path, state in before.items()
+                 if str(path.relative_to(workspace)) not in STARTUP_FILES}
+    assert snapshot(protected) == protected
 
 
 def runtime_fixture(tmp_path, request):
@@ -333,3 +336,87 @@ def test_startup_refresh_keeps_recorded_setup_identity(tmp_path, field, value):
     assert result.returncode != 0
     assert "startup refresh would change recorded setup identity" in result.stderr
     assert snapshot(before) == before
+
+
+@pytest.mark.parametrize("action", ["shell", "permissions", "login"])
+def test_overlay_drift_does_not_lock_out_inspection_or_permission_repair(tmp_path, request, action):
+    values, environment = runtime_fixture(tmp_path, request)
+    workspace, recorded, composer, values = make_workspace(tmp_path, values)
+    package = workspace / "package-repos/spack_repo/cse_trials/packages/netlib_lapack"
+    package.mkdir()
+    recipe = package / "package.py"
+    recipe.write_text("class NetlibLapack:\n    pass\n")
+    patch = package / "previous.patch"
+    patch.write_text("previous support file\n")
+    candidate = tmp_path / "recorded-inventory.json"
+    result = subprocess.run([sys.executable, str(workspace / "scripts/verify-overlay-inputs.py"),
+                             "--candidate", str(candidate)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    inventory = workspace / "package-repos/overlay-inventory.json"
+    inventory.write_bytes(candidate.read_bytes())
+    recipe.write_text(recipe.read_text() + "\n# Teammate's CCE recipe edit\n")
+    patch.unlink()
+    before = {path: path.read_bytes() for path in (inventory, recipe)}
+    command = ["bash", str(workspace / "cse-build"), "login"] + ([] if action == "login" else [action])
+    result = subprocess.run(command, env=dict(environment, TMUX="test-session"),
+                            input="printf 'CSE_INSPECTION_READY\\n'\nexit\n",
+                            capture_output=True, text=True, timeout=45)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "overlay input changed" in result.stderr
+    assert "overlay input missing" in result.stderr
+    if action != "permissions":
+        assert "CSE_INSPECTION_READY" in result.stdout
+    assert {path: path.read_bytes() for path in before} == before
+    result = subprocess.run(["bash", str(workspace / "cse-build"), "compute", "install"],
+                            env=dict(environment, CSE_OVERLAY_ALLOW_UNVERIFIED="1"),
+                            capture_output=True, text=True, timeout=45)
+    assert result.returncode != 0
+    assert "overlay input changed" in result.stderr
+
+
+@pytest.mark.parametrize("gsl_recorded", [False, True])
+def test_refresh_and_launcher_register_intentional_netlib_and_gsl_overlays(tmp_path, request, gsl_recorded):
+    values, environment = runtime_fixture(tmp_path, request)
+    workspace, recorded, composer, values = make_workspace(tmp_path, values)
+    tag_only_values(recorded, values)
+    packages = workspace / "package-repos/spack_repo/cse_trials/packages"
+    gsl = packages / "gsl/package.py"
+    gsl.parent.mkdir()
+    gsl.write_text("class Gsl:\n    pass\n")
+    inventory = workspace / "package-repos/overlay-inventory.json"
+    if gsl_recorded:
+        candidate = tmp_path / "with-gsl.json"
+        result = subprocess.run([sys.executable, str(workspace / "scripts/verify-overlay-inputs.py"),
+                                 "--candidate", str(candidate)], text=True, capture_output=True)
+        assert result.returncode == 0, result.stderr
+        inventory.write_bytes(candidate.read_bytes())
+    netlib = packages / "netlib_lapack/package.py"
+    netlib.parent.mkdir()
+    netlib.write_text("class NetlibLapack:\n    patch('cce.patch')\n")
+    (netlib.parent / "cce.patch").write_text("intentional CCE patch\n")
+    # The control refresh must deliver the repair command through the very drift
+    # that prevented entry. It may not silently adopt either recipe.
+    before = {path: path.read_bytes() for path in (inventory, gsl, netlib, netlib.parent / "cce.patch")}
+    result = refresh(workspace, recorded, composer)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert {path: path.read_bytes() for path in before} == before
+    base = ["bash", str(workspace / "cse-build"), "login"]
+    reconcile = base + ["overlay", "reconcile", "--package", "netlib-lapack", "--package", "gsl"]
+    result = subprocess.run(reconcile + ["--dry-run"], env=environment, capture_output=True, text=True, timeout=45)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "netlib-lapack: new" in result.stdout
+    assert ("gsl: already-recorded" if gsl_recorded else "gsl: new") in result.stdout
+    assert {path: path.read_bytes() for path in before} == before
+    assert not (workspace / ".cse-overlay").exists()
+    result = subprocess.run(reconcile, env=environment, capture_output=True, text=True, timeout=45)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert inventory.read_bytes() != before[inventory]
+    assert {path: path.read_bytes() for path in before if path != inventory} == {
+        path: state for path, state in before.items() if path != inventory}
+    result = subprocess.run(base + ["status"], env=environment, capture_output=True, text=True, timeout=45)
+    assert result.returncode == 0, result.stdout + result.stderr
+    record = next((workspace / ".cse-overlay").glob("*/record.json"))
+    result = subprocess.run(base + ["overlay", "restore", "--record", record.parent.name],
+                            env=environment, capture_output=True, text=True, timeout=45)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert {path: path.read_bytes() for path in before} == before

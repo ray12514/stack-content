@@ -20,8 +20,12 @@ export CSE_INSTALL_TREE_ROOT={{ values.paths.install_tree | yaml_scalar }}
 export CSE_SHARED_SOURCE_CACHE_ROOT={{ values.paths.source_cache | yaml_scalar }}
 export CSE_SHARED_MISC_CACHE_ROOT={{ values.paths.misc_cache | yaml_scalar }}
 : "${CSE_BUILD_WORKSPACE:?cse-build must select the workspace}"
+CSE_OVERLAY_CACHE_ARGS=(--cache-key)
+if [ "${CSE_OVERLAY_ALLOW_UNVERIFIED:-0}" = 1 ]; then
+  CSE_OVERLAY_CACHE_ARGS+=(--allow-unverified)
+fi
 CSE_OVERLAY_CACHE_KEY="$(python3 \
-  "$CSE_BUILD_WORKSPACE/scripts/verify-overlay-inputs.py" --cache-key)" || {
+  "$CSE_BUILD_WORKSPACE/scripts/verify-overlay-inputs.py" "${CSE_OVERLAY_CACHE_ARGS[@]}")" || {
   echo "could not select a cache for the reviewed overlay inputs" >&2
   return 2 2>/dev/null || exit 2
 }

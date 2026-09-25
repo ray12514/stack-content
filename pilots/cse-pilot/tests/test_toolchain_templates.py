@@ -1797,8 +1797,8 @@ class ToolchainTemplateTests(unittest.TestCase):
 
         self.assertIn("verify_workspace_inputs()", template)
         self.assertLess(
-            template.index("\n    verify_workspace_inputs\n"),
-            template.index("\n    verify_scopes\n"),
+            template.index("verify_workspace_inputs\n"),
+            template.index("verify_scopes\n"),
         )
 
     def test_cse_build_prepares_modules_before_activating_spack(self) -> None:

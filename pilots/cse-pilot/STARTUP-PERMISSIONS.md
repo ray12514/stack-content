@@ -37,8 +37,8 @@ bash
 
 Paste this complete block. It selects an existing saved session (asks which
 one when several exist), checks out and fast-forwards `codex/cse-fast-login`,
-previews the startup refresh, applies it only if the preview succeeds, repairs
-owned output, checks the handoff and opens the updated session. All commands
+previews the startup refresh, applies it only if the preview succeeds, and opens
+the updated session. Permission handoff remains a separate maintenance command. All commands
 run in a subshell so an error stops the update without closing your login shell.
 Use it once per workspace/system with writers stopped. The preparation tools
 and original values must already be present from this trial's setup.
@@ -49,6 +49,12 @@ block. It fetches the fix and installs the launcher with its runtime helpers in
 one update. No separate candidate-preparation step or package-repo commit is
 needed. Keep your recorded values and repository pin as they are. Those failed
 checks stopped before any workspace controls were replaced.
+
+For `overlay input changed`, `overlay input missing`, or `could not select a cache
+for the reviewed overlay inputs`, this block installs the repair entry while
+preserving the current recipe files and inventory. You can enter the shell even
+while that inventory is stale. If Netlib-LAPACK and GSL were intentionally added
+or edited, follow the registration block immediately below the update block.
 
 ```bash
 (
@@ -115,8 +121,6 @@ checks stopped before any workspace controls were replaced.
 
   cd "$BUILD_WORKSPACE"
   export CSE_PERMISSION_JOBS=4
-  ./cse-build login permissions
-  ./cse-build login status
   printf '\nStartup update complete. Opening the updated CSE session.\n'
   exec ./cse-build login
 )
@@ -130,6 +134,46 @@ Composer and Inspector binaries need no update for this fix.
 If both builders own private-mode output, each owner must run `permissions`
 after writers stop; it reports any remaining foreign-owned paths instead of
 changing another owner's files. The receiving builder then runs `status`.
+
+## Register the intentional Netlib-LAPACK and GSL overlays
+
+After the update block opens the prepared shell, paste this complete block:
+
+```bash
+(
+  set -e
+  ./cse-build login overlay reconcile \
+    --package netlib-lapack --package gsl --dry-run
+  ./cse-build login overlay reconcile \
+    --package netlib-lapack --package gsl
+  ./cse-build login status
+)
+```
+
+The preview names the exact inventory changes and reports each package as `new`,
+`changed`, or `already-recorded`. This resolves both intentional changes in one
+inventory update, including the case where GSL was already recorded and therefore
+produced no error. If a named recipe is absent from the active workspace, or a
+recipe still references a missing patch, the command names that path and stops
+without registering anything. Changes outside the two named packages also stop
+registration. Supply the complete intended files or explicitly select the other
+intentional packages; do not invent placeholder patches.
+
+`changed`/`missing` compare files with the previous inventory; they do not by
+themselves diagnose a permissions failure. A new recipe normally appears as
+`unrecorded`. No GSL error alone does not prove which GSL recipe Spack selects.
+
+Registration preserves recipe bytes, install-tree padding, installed packages,
+and every existing lock. Because the old inventory contains hashes without the
+old recipe contents, it conservatively flags existing locks for selected
+reconcretization before a future build. It does not reconcretize completed GCC
+environments. Use the [selected CCE recovery commands](OVERLAY-RECOVERY.md#2-reconcretize-only-the-environment-being-repaired)
+before resuming the environment you are repairing. `overlay restore --record ID`
+undoes only this registration; it cannot undo recipe edits made beforehand.
+
+Until registration succeeds, interactive entry and `permissions` use a separate
+inspection cache. Run build work through `cse-build`; raw Spack commands typed
+inside that shell do not run the launcher's preflight checks.
 
 ## Update an existing workspace
 
@@ -169,7 +213,8 @@ and no tag is resolved or replaced with a different builtin commit.
 When `overlay-inventory.json` is absent, the update records the **existing local
 recipe bytes** for subsequent change detection. It does not copy newer recipes
 or claim that the captured bytes prove a past review. Existing inventories are
-checked and preserved; a mismatch remains an error. The workspace's original
+checked and preserved; a mismatch is reported without blocking delivery of repair
+controls and still blocks finite build work until explicit registration. The workspace's original
 full lock verifier and its package policy remain intact. Status uses a separate
 input preflight so an older verifier cannot accidentally require all eight locks.
 

@@ -355,6 +355,30 @@ workspace's complete package directory and inventory with a retained undo record
 editing with the same backup and validation. Both report potentially affected
 locks; neither solves them automatically.
 
+If your teammate has already added or edited the live Netlib-LAPACK and GSL
+overlays, register both in one inventory update:
+
+```bash
+(
+  set -e
+  ./cse-build login overlay reconcile --package netlib-lapack --package gsl --dry-run
+  ./cse-build login overlay reconcile --package netlib-lapack --package gsl
+)
+```
+
+This reports each package as new, changed, or already recorded, preserves its
+current files, and rejects unselected changes or missing referenced patches.
+The old inventory contains hashes, not the old recipe bytes, so existing locks
+are conservatively flagged for selected reconcretization before another build.
+No lock or installation changes during registration. Its `overlay restore`
+operation restores only the old inventory, not recipe edits made beforehand.
+
+Interactive entry, `permissions`, and overlay reconciliation/status/restore
+remain available when inventory checks fail, using an inspection cache.
+Run builds through `cse-build`; raw Spack commands inside an inspection shell
+do not run these launcher checks. Re-enter after registration to select the
+verified cache for subsequent manual inspection.
+
 ```bash
 ./cse-build login concretize --environment cce/common --reconcretize
 ./cse-build compute resume --environment cce/common

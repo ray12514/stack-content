@@ -57,6 +57,85 @@ def admit(root):
     (root / overlay.INVENTORY).write_bytes(overlay.recovery.json_bytes(overlay.gate.snapshot(root / "package-repos")))
 
 
+def test_reconcile_registers_new_netlib_and_reports_already_recorded_gsl(workspace):
+    root, _ = workspace
+    packages = root / "package-repos/spack_repo/cse_trials/packages"
+    write(packages / "gsl/package.py", "class Gsl:\n    pass\n")
+    admit(root)
+    old_inventory = (root / overlay.INVENTORY).read_bytes()
+    write(packages / "netlib_lapack/package.py", "class NetlibLapack:\n    patch('cce.patch')\n")
+    write(packages / "netlib_lapack/cce.patch", "intentional CCE correction\n")
+    before = fingerprints(root)
+    preview = overlay.reconcile_overlay(root, ["netlib-lapack", "gsl"], dry_run=True)
+    assert preview["packages"] == {"netlib-lapack": "new", "gsl": "already-recorded"}
+    assert fingerprints(root) == before
+    assert not (root / ".cse-overlay").exists()
+    record = overlay.reconcile_overlay(root, ["netlib-lapack", "gsl"])
+    assert record["status"] == "applied"
+    assert record["affected"] == ["cce/common", "cce/serial", "gcc/core"]
+    assert record["unlocked"] == ["cce/unlocked"]
+    assert overlay.gate.check(root / "package-repos") == []
+    assert {name: state for name, state in fingerprints(root).items() if name != overlay.INVENTORY} == {
+        name: state for name, state in before.items() if name != overlay.INVENTORY}
+    with pytest.raises(overlay.Error, match="explicit selected reconcretization"):
+        overlay.check_workspace(root, ["cce/common"])
+    assert overlay.reconcile_overlay(root, ["netlib-lapack", "gsl"])["status"] == "already-recorded"
+    assert len(overlay.records(root)) == 1
+    overlay.restore_overlay(root, record["id"])
+    assert (root / overlay.INVENTORY).read_bytes() == old_inventory
+    assert fingerprints(root) == before
+    assert overlay.gate.check(root / "package-repos")
+
+
+def test_reconcile_accepts_changed_recipe_and_removed_unreferenced_file(workspace):
+    root, source = workspace
+    admit(root)
+    target = root / "package-repos/spack_repo/cse_trials/packages/tiny"
+    (target / "package.py").write_text("class Tiny:\n    corrected = True\n")
+    (target / "old.patch").unlink()
+    record = overlay.reconcile_overlay(root, ["tiny"])
+    assert record["packages"] == {"tiny": "changed"}
+    overlay.mark_resolved(root, "cce/common")
+    assert overlay.check_workspace(root, ["cce/common"]) == []
+    with pytest.raises(overlay.Error, match="explicit selected reconcretization"):
+        overlay.check_workspace(root, ["cce/serial"])
+    (target / "package.py").write_text("# a later edit\n")
+    with pytest.raises(overlay.Error, match="Later workspace/lock changes"):
+        overlay.restore_overlay(root, record["id"])
+
+
+def test_reconcile_failed_verification_restores_only_inventory(workspace, monkeypatch):
+    root, _ = workspace
+    admit(root)
+    recipe = root / "package-repos/spack_repo/cse_trials/packages/tiny/package.py"
+    recipe.write_text("class Tiny:\n    correction = True\n")
+    before = fingerprints(root)
+    monkeypatch.setattr(overlay.gate, "check", lambda root: ["simulated concurrent change"])
+    with pytest.raises(overlay.Error, match="changed during overlay reconciliation"):
+        overlay.reconcile_overlay(root, ["tiny"])
+    assert fingerprints(root) == before
+    assert overlay.records(root)[0]["status"] == "restored"
+
+
+@pytest.mark.parametrize("problem", ["other-package", "repo-identity", "missing-patch", "absent-package"])
+def test_reconcile_rejects_unselected_changes_or_incomplete_inputs(workspace, problem):
+    root, _ = workspace
+    repo = root / "package-repos/spack_repo/cse_trials"
+    admit(root)
+    write(repo / "packages/netlib_lapack/package.py", "class NetlibLapack:\n    pass\n")
+    if problem == "other-package":
+        write(repo / "packages/tiny/package.py", "# unrelated edit\n")
+    elif problem == "repo-identity":
+        write(repo / "repo.yaml", "repo:\n  namespace: different\n  api: v2.0\n")
+    elif problem == "missing-patch":
+        write(repo / "packages/netlib_lapack/package.py", "patch('missing.patch')\n")
+    before = fingerprints(root)
+    with pytest.raises((overlay.Error, ValueError)):
+        overlay.reconcile_overlay(root, ["netlib-lapack"] + (["gsl"] if problem == "absent-package" else []))
+    assert fingerprints(root) == before
+    assert not (root / ".cse-overlay").exists()
+
+
 def test_apply_changes_only_whole_recipe_and_inventory_and_restore_recovers_original(workspace):
     root, source = workspace
     admit(root)

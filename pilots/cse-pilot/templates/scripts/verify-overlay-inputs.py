@@ -207,7 +207,11 @@ def main():
                       help="write a new inventory outside the input tree for manual review")
     mode.add_argument("--cache-key", action="store_true",
                       help="verify inputs and print a cache key for resolved repo paths and reviewed inventory")
+    parser.add_argument("--allow-unverified", action="store_true",
+                        help="allow an isolated inspection cache when inventory checks fail")
     args = parser.parse_args()
+    if args.allow_unverified and not args.cache_key:
+        parser.error("--allow-unverified requires --cache-key")
     if args.candidate is not None:
         try:
             try:
@@ -229,8 +233,21 @@ def main():
         return 0
     errors = check(args.root)
     for error in errors:
-        print("ERROR: " + error, file=sys.stderr)
+        print(("WARNING: " if args.allow_unverified else "ERROR: ") + error, file=sys.stderr)
     if errors:
+        if args.allow_unverified:
+            # This cache never shares the verified inventory namespace. Include
+            # current bytes so successive intentional edits cannot reuse metadata.
+            try:
+                state = {"root": str(args.root.resolve()), "files": scan_files(args.root)}
+            except (OSError, ValueError):
+                state = {"root": str(args.root.resolve()), "errors": errors}
+            key = hashlib.sha256(json.dumps(state, sort_keys=True).encode("utf-8")).hexdigest()
+            print("Inspection cache selected; register intentional changes with "
+                  "cse-build login overlay reconcile --package NAME. "
+                  "cse-build work commands still require a matching inventory.", file=sys.stderr)
+            print("inspection-" + key)
+            return 0
         return 1
     if args.cache_key:
         try:

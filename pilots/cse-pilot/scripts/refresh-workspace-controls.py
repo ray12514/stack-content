@@ -890,7 +890,11 @@ def _prepare_startup_inputs(workspace: Path, staged: Path) -> tuple[list[Path], 
     except subprocess.TimeoutExpired as error:
         raise RefreshError("startup overlay inventory preparation timed out") from error
     if result.returncode:
-        raise RefreshError("existing workspace overlay inputs are invalid: " + result.stdout.strip())
+        if not inventory.exists():
+            raise RefreshError("existing workspace overlay inputs are invalid: " + result.stdout.strip())
+        print("WARNING: keeping the existing overlay inventory unchanged while updating "
+              "repair controls. Register intentional recipe changes separately.\n"
+              + result.stdout.strip(), file=sys.stderr)
     if STARTUP_INVENTORY in selected:
         shutil.copymode(workspace / "workspace-manifest.yaml", staged / STARTUP_INVENTORY)
 

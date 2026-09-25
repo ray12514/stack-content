@@ -68,7 +68,7 @@ Actions:
   module-preview [OPTIONS]
               Check module prerequisites or generate an isolated presentation
               from installed locks. Pass --check-only or --output NEW_DIRECTORY.
-  overlay [apply|edit|status|restore] [OPTIONS]
+  overlay [apply|edit|reconcile|status|restore] [OPTIONS]
               Correct package recipes in this workspace, retain backups, and
               report affected locks. See overlay --help.
   publish-modules
@@ -413,8 +413,23 @@ export CSE_BUILD_WORKSPACE="$CSE_WORKSPACE_ROOT"
 export CSE_INSTALL_TREE_ROOT={{ values.paths.install_tree | yaml_scalar }}
 export CSE_SHARED_SOURCE_CACHE_ROOT={{ values.paths.source_cache | yaml_scalar }}
 export CSE_SHARED_MISC_CACHE_ROOT={{ values.paths.misc_cache | yaml_scalar }}
+# Recompute this policy on every invocation, including commands started inside
+# an inspection shell. An inherited setting must not bypass finite preflight.
+export CSE_OVERLAY_ALLOW_UNVERIFIED=0
+case "$ACTION" in
+  shell|tmux|permissions) CSE_OVERLAY_ALLOW_UNVERIFIED=1 ;;
+  overlay)
+    case "${OPERATOR_ARGS[0]:-}" in
+      reconcile|status|restore|--help|-h) CSE_OVERLAY_ALLOW_UNVERIFIED=1 ;;
+    esac
+    ;;
+esac
+CSE_OVERLAY_CACHE_ARGS=(--cache-key)
+if [ "$CSE_OVERLAY_ALLOW_UNVERIFIED" = 1 ]; then
+  CSE_OVERLAY_CACHE_ARGS+=(--allow-unverified)
+fi
 CSE_OVERLAY_CACHE_KEY="$(python3 \
-  "$CSE_BUILD_WORKSPACE/scripts/verify-overlay-inputs.py" --cache-key)" || fail \
+  "$CSE_BUILD_WORKSPACE/scripts/verify-overlay-inputs.py" "${CSE_OVERLAY_CACHE_ARGS[@]}")" || fail \
   "could not select a cache for the reviewed overlay inputs"
 export SPACK_MISC_CACHE_PATH="$CSE_SHARED_MISC_CACHE_ROOT/$USER-overlay-$CSE_OVERLAY_CACHE_KEY"
 export CSE_VIEWS_ROOT={{ values.paths.views_root | yaml_scalar }}
@@ -786,6 +801,12 @@ publish_presentation_modules() {
 # declared configuration and roots rather than the generated file count.
 case "$ACTION" in
   shell|tmux) ;;
+  overlay)
+    if [ "$CSE_OVERLAY_ALLOW_UNVERIFIED" != 1 ]; then
+      verify_workspace_inputs
+    fi
+    verify_scopes
+    ;;
   *)
     verify_workspace_inputs
     verify_scopes
